@@ -1,0 +1,264 @@
+// app/(main)/(tabs)/profile.tsx
+import { useAuth } from '@/context/Authcontext';
+import { useTheme } from '@/context/Themecontext';
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React from 'react';
+import { Alert, Image, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+
+const InfoRow = ({
+  label,
+  value,
+  verified,
+}: {
+  label: string;
+  value?: string;
+  verified?: boolean;
+}) => (
+  <View className="flex-row items-center justify-between py-3 border-b border-gray-100">
+    <Text className="text-sm font-medium text-gray-500 w-36">{label}</Text>
+    <View className="flex-1 flex-row items-center justify-end gap-2">
+      <Text className="text-sm text-gray-900 text-right flex-shrink">{value || 'Chưa cập nhật'}</Text>
+      {verified && (
+        <View className="bg-green-100 px-2 py-0.5 rounded ml-2">
+          <Text className="text-green-700 text-xs font-medium">Đã xác thực</Text>
+        </View>
+      )}
+    </View>
+  </View>
+);
+
+export default function ProfileScreen() {
+  const router = useRouter();
+  const { user, logout } = useAuth();
+  const { isDark } = useTheme();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Đăng xuất',
+      'Bạn có chắc chắn muốn đăng xuất?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đăng xuất',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ]
+    );
+  };
+
+  const hasPhone = !!user?.phone;
+  const hasEmail = !!user?.email;
+  const hasPassword = user?.accountType !== 'google_only';
+  const isGoogleUser = !!user?.googleId;
+
+  const menuItems = [
+    {
+      icon: 'lock',
+      title: hasPassword ? 'Đổi mật khẩu' : 'Thiết lập mật khẩu',
+      onPress: () => router.push(hasPassword ? '/profile/change-password' : '/profile/set-password'),
+    },
+    {
+      icon: 'phone',
+      title: hasPhone ? 'Đổi số điện thoại' : 'Liên kết số điện thoại',
+      onPress: () => router.push(hasPhone ? '/profile/change-phone' : '/profile/link-phone'),
+    },
+    {
+      icon: 'mail',
+      title: hasEmail ? 'Đổi email' : 'Liên kết email',
+      onPress: () => router.push(hasEmail ? '/profile/change-email' : '/profile/link-email'),
+    },
+    {
+      icon: 'shield',
+      title: user?.is2FAEnabled ? 'Tắt xác thực 2 bước' : 'Bật xác thực 2 bước',
+      onPress: () => router.push('/profile/two-factor'),
+    },
+    {
+      icon: 'smartphone',
+      title: 'Quản lý phiên đăng nhập',
+      onPress: () => router.push('/profile/sessions'),
+    },
+    {
+      icon: 'trash-2',
+      title: 'Xóa tài khoản',
+      onPress: () => router.push('/profile/delete-account'),
+      danger: true,
+    },
+  ];
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Chưa cập nhật';
+    return new Date(dateString).toLocaleDateString('vi-VN');
+  };
+
+  const formatGender = (gender?: string) => {
+    if (gender === 'MALE') return 'Nam';
+    if (gender === 'FEMALE') return 'Nữ';
+    if (gender === 'OTHER') return 'Khác';
+    return 'Chưa cập nhật';
+  };
+
+  return (
+    <SafeAreaView className="flex-1 bg-gray-50">
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        {/* Cover + Avatar */}
+        <View>
+          <View className="h-36 relative">
+            {user?.coverUrl ? (
+              <Image source={{ uri: user.coverUrl }} className="w-full h-full" resizeMode="cover" />
+            ) : (
+              <View className="w-full h-full bg-blue-500" />
+            )}
+          </View>
+
+          {/* Avatar row */}
+          <View className="px-6 pb-4 bg-white">
+            <View className="flex-row items-end justify-between -mt-12">
+              <View className="relative">
+                <View className="w-24 h-24 rounded-full border-4 border-white shadow overflow-hidden bg-gray-100">
+                  {user?.avatarUrl ? (
+                    <Image source={{ uri: user.avatarUrl }} className="w-full h-full" resizeMode="cover" />
+                  ) : (
+                    <View className="w-full h-full bg-blue-500 justify-center items-center">
+                      <Text className="text-white text-3xl font-bold">
+                        {user?.fullName?.charAt(0)?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => router.push('/profile/edit')}
+                className="flex-row items-center gap-1 bg-blue-600 px-4 py-2 rounded-xl mt-2"
+              >
+                <Feather name="edit-2" size={14} color="#fff" />
+                <Text className="text-white text-sm font-semibold ml-1">Chỉnh sửa</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View className="mt-3">
+              <View className="flex-row items-center gap-2 flex-wrap">
+                <Text className="text-xl font-bold text-gray-900">
+                  {user?.fullName || 'Người dùng'}
+                </Text>
+                {user?.is2FAEnabled && (
+                  <View className="flex-row items-center bg-green-100 px-2 py-0.5 rounded">
+                    <Feather name="shield" size={11} color="#16a34a" />
+                    <Text className="text-green-700 text-xs font-medium ml-1">2FA</Text>
+                  </View>
+                )}
+                {isGoogleUser && (
+                  <View className="flex-row items-center bg-blue-100 px-2 py-0.5 rounded">
+                    <Feather name="globe" size={11} color="#3b82f6" />
+                    <Text className="text-blue-600 text-xs font-medium ml-1">Google</Text>
+                  </View>
+                )}
+              </View>
+
+              {user?.bio ? (
+                <Text className="text-sm text-gray-600 mt-1">{user.bio}</Text>
+              ) : null}
+
+              <View className="flex-row items-center gap-1 mt-2">
+                <Feather name="calendar" size={13} color="#9ca3af" />
+                <Text className="text-xs text-gray-500 ml-1">
+                  Tham gia {formatDate(user?.createdAt)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ✅ QR Scan Button — chỉ user đăng nhập mới thấy */}
+        <TouchableOpacity
+          onPress={() => router.push('/(main)/qr-scan')}
+          className="mx-4 mt-4 bg-blue-600 rounded-2xl py-4 flex-row items-center justify-center gap-3"
+        >
+          <Feather name="maximize" size={22} color="#fff" />
+          <View>
+            <Text className="text-white font-bold text-base">Quét mã QR</Text>
+            <Text className="text-blue-200 text-xs">Đăng nhập web bằng điện thoại</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Personal Info Card */}
+        <View className="mx-4 mt-4 bg-white rounded-2xl shadow-sm overflow-hidden">
+          <View className="px-4 pt-4 pb-2">
+            <Text className="text-base font-bold text-gray-900">Thông tin cá nhân</Text>
+          </View>
+          <View className="px-4 pb-2">
+            <InfoRow label="Họ và tên" value={user?.fullName} />
+            <InfoRow label="Số điện thoại" value={user?.phone} verified={user?.isPhoneVerified} />
+            <InfoRow label="Email" value={user?.email} verified={user?.isEmailVerified} />
+            <InfoRow label="Giới thiệu" value={user?.bio} />
+            <InfoRow
+              label="Ngày sinh"
+              value={user?.dateOfBirth ? formatDate(user.dateOfBirth) : undefined}
+            />
+            <InfoRow label="Giới tính" value={formatGender(user?.gender)} />
+            <InfoRow label="Ngày tham gia" value={formatDate(user?.createdAt)} />
+            {user?.lastLoginAt && (
+              <InfoRow
+                label="Đăng nhập gần nhất"
+                value={new Date(user.lastLoginAt).toLocaleString('vi-VN')}
+              />
+            )}
+          </View>
+        </View>
+
+        {/* Security & Account Card */}
+        <View className="mx-4 mt-4 bg-white rounded-2xl shadow-sm overflow-hidden">
+          <View className="px-4 pt-4 pb-2">
+            <Text className="text-base font-bold text-gray-900">Bảo mật & Tài khoản</Text>
+          </View>
+          <View className="px-4 pb-2">
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                onPress={item.onPress}
+                className={`flex-row items-center py-3 ${index < menuItems.length - 1 ? 'border-b border-gray-100' : ''
+                  }`}
+              >
+                <View
+                  className={`w-9 h-9 rounded-full justify-center items-center ${item.danger ? 'bg-red-100' : 'bg-gray-100'
+                    }`}
+                >
+                  <Feather
+                    name={item.icon as any}
+                    size={18}
+                    color={item.danger ? '#ef4444' : '#374151'}
+                  />
+                </View>
+                <Text
+                  className={`flex-1 text-sm ml-3 ${item.danger ? 'text-red-600' : 'text-gray-900'
+                    }`}
+                >
+                  {item.title}
+                </Text>
+                <Feather name="chevron-right" size={18} color="#9ca3af" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Logout */}
+        <View className="mx-4 mt-4 mb-8">
+          <TouchableOpacity
+            onPress={handleLogout}
+            className="bg-red-50 border border-red-200 rounded-xl py-4 flex-row items-center justify-center"
+          >
+            <Feather name="log-out" size={20} color="#dc2626" />
+            <Text className="text-red-600 font-semibold ml-2">Đăng xuất</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
