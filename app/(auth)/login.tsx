@@ -1,4 +1,3 @@
-// app/(auth)/login.tsx
 import GoogleIcon from '@/components/auth/GoogleIcon';
 import LoginOptionButton from '@/components/auth/LoginOptionButton';
 import PhoneInput from '@/components/auth/PhoneInput';
