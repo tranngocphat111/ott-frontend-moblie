@@ -14,7 +14,7 @@ import { UserCircle2, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '@/context/Authcontext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChatApi } from '@/services/api';
-import type { ChatServiceUser } from '@/services/api/chat.api';
+import type { ChatServiceUser } from '@/services/api/chat';
 
 const DemoUserSelector: React.FC = () => {
   const router = useRouter();
