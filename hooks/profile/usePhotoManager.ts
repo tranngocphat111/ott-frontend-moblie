@@ -1,26 +1,24 @@
 import { useState, useCallback } from 'react';
+import { Alert } from 'react-native';
 import {
   getAllPhotos,
-  deletePhoto,
+  fullUploadFlow,
   setActiveFromGallery,
+  deletePhoto,
   removeActiveAvatar,
   removeActiveCover,
-  fullUploadFlow,
-} from '../services/api/photo.api';
-import { PhotoType } from '../types/enums/photo.enum';
-import type { PhotoListResponse, UserPhotoResponse } from '../types/response/photo.response';
-import type { UserProfileResponse } from '../types/response/user.response';
-import { useToast } from '../contexts/ToastContext'; 
-import { getErrorMessage } from '../utils/messageMapping'; 
+} from '@/services/api/photo.api';
+import { PhotoType } from '@/types/enums/photo.enum';
+import type { PhotoListResponse, UserPhotoResponse } from '@/types/response/photo.response';
+import type { UserProfileResponse } from '@/types';
 
 interface UsePhotoManagerReturn {
   photos: PhotoListResponse | null;
   loading: boolean;
   uploadProgress: number | null;
   error: string | null;
-
   fetchPhotos: () => Promise<void>;
-  uploadPhoto: (file: File, type: PhotoType) => Promise<UserProfileResponse | null>;
+  uploadPhoto: (uri: string, mimeType: string, type: PhotoType) => Promise<UserProfileResponse | null>;
   setActive: (photoId: string) => Promise<string | null>;
   removePhoto: (photoId: string) => Promise<void>;
   removeActive: (type: PhotoType) => Promise<UserProfileResponse | null>;
@@ -33,18 +31,7 @@ export const usePhotoManager = (): UsePhotoManagerReturn => {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { showToast } = useToast();
-
   const clearError = useCallback(() => setError(null), []);
-
-  /**
-   * Helper xử lý hiển thị lỗi tập trung
-   */
-  const handleCatchError = useCallback((e: any, defaultMsg: string) => {
-    const msg = getErrorMessage(e) || defaultMsg;
-    setError(msg);
-    showToast(msg, 'error', 'Lỗi');
-  }, [showToast]);
 
   const fetchPhotos = useCallback(async () => {
     setLoading(true);
@@ -53,29 +40,33 @@ export const usePhotoManager = (): UsePhotoManagerReturn => {
       const data = await getAllPhotos();
       setPhotos(data);
     } catch (e: any) {
-      handleCatchError(e, 'Không tải được danh sách ảnh');
+      const msg = e?.message || 'Không tải được danh sách ảnh';
+      setError(msg);
+      Alert.alert('Lỗi', msg);
     } finally {
       setLoading(false);
     }
-  }, [handleCatchError]);
+  }, []);
 
   const uploadPhoto = useCallback(
-    async (file: File, type: PhotoType): Promise<UserProfileResponse | null> => {
+    async (uri: string, mimeType: string, type: PhotoType): Promise<UserProfileResponse | null> => {
       setError(null);
       setUploadProgress(0);
       try {
-        const { profile } = await fullUploadFlow(file, type, setUploadProgress);
+        const { profile } = await fullUploadFlow(uri, mimeType, type, setUploadProgress);
         await fetchPhotos();
-        showToast('Tải ảnh lên thành công', 'success');
+        Alert.alert('Thành công', 'Tải ảnh lên thành công');
         return profile;
       } catch (e: any) {
-        handleCatchError(e, 'Upload ảnh thất bại');
+        const msg = e?.message || 'Upload ảnh thất bại';
+        setError(msg);
+        Alert.alert('Lỗi', msg);
         return null;
       } finally {
         setUploadProgress(null);
       }
     },
-    [fetchPhotos, handleCatchError, showToast]
+    [fetchPhotos]
   );
 
   const setActive = useCallback(
@@ -83,15 +74,13 @@ export const usePhotoManager = (): UsePhotoManagerReturn => {
       setError(null);
       try {
         const res = await setActiveFromGallery(photoId);
-        
-        // Optimistic Update: Cập nhật UI ngay lập tức
+
+        // Optimistic update giống web
         setPhotos((prev) => {
           if (!prev) return prev;
+          const isAvatar = prev.avatars.some((p) => p.id === photoId);
           const updateList = (list: UserPhotoResponse[]) =>
             list.map((p) => ({ ...p, isActive: p.id === photoId }));
-          
-          const isAvatar = prev.avatars.some((p) => p.id === photoId);
-          
           return isAvatar
             ? {
                 ...prev,
@@ -105,22 +94,23 @@ export const usePhotoManager = (): UsePhotoManagerReturn => {
               };
         });
 
-        showToast('Đã thay đổi ảnh đại diện/bìa', 'success');
-        return res.url; 
+        return res.url;
       } catch (e: any) {
-        handleCatchError(e, 'Không thể đặt ảnh làm mặc định');
-        await fetchPhotos(); // Rollback dữ liệu nếu lỗi
+        const msg = e?.message || 'Không thể đặt ảnh làm mặc định';
+        setError(msg);
+        Alert.alert('Lỗi', msg);
+        await fetchPhotos(); // rollback
         return null;
       }
     },
-    [fetchPhotos, handleCatchError, showToast]
+    [fetchPhotos]
   );
 
   const removePhoto = useCallback(
     async (photoId: string): Promise<void> => {
       setError(null);
-      // Xóa tạm thời ở UI để tăng trải nghiệm người dùng
       const oldPhotos = photos;
+      // Optimistic remove
       setPhotos((prev) => {
         if (!prev) return prev;
         return {
@@ -129,17 +119,17 @@ export const usePhotoManager = (): UsePhotoManagerReturn => {
           covers: prev.covers.filter((p) => p.id !== photoId),
         };
       });
-
       try {
         await deletePhoto(photoId);
-        showToast('Đã xóa ảnh thành công', 'success');
-        await fetchPhotos(); 
+        await fetchPhotos();
       } catch (e: any) {
-        handleCatchError(e, 'Xóa ảnh thất bại');
-        setPhotos(oldPhotos); // Trả lại data cũ nếu xóa lỗi
+        const msg = e?.message || 'Xóa ảnh thất bại';
+        setError(msg);
+        Alert.alert('Lỗi', msg);
+        setPhotos(oldPhotos); // rollback
       }
     },
-    [fetchPhotos, handleCatchError, showToast, photos]
+    [fetchPhotos, photos]
   );
 
   const removeActive = useCallback(
@@ -148,16 +138,16 @@ export const usePhotoManager = (): UsePhotoManagerReturn => {
       try {
         const profile =
           type === PhotoType.AVATAR ? await removeActiveAvatar() : await removeActiveCover();
-        
         await fetchPhotos();
-        showToast('Đã gỡ ảnh hiện tại', 'info');
         return profile;
       } catch (e: any) {
-        handleCatchError(e, 'Không thể gỡ ảnh đang sử dụng');
+        const msg = e?.message || 'Không thể gỡ ảnh đang sử dụng';
+        setError(msg);
+        Alert.alert('Lỗi', msg);
         return null;
       }
     },
-    [fetchPhotos, handleCatchError, showToast]
+    [fetchPhotos]
   );
 
   return {

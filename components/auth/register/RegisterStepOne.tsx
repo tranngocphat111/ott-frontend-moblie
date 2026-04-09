@@ -1,4 +1,3 @@
-// components/auth/register/RegisterStepOne.tsx
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import {

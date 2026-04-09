@@ -1,4 +1,3 @@
-// app/(main)/(tabs)/profile.tsx
 import { useAuth } from '@/contexts/Authcontext';
 import { useTheme } from '@/contexts/Themecontext';
 import { Feather } from '@expo/vector-icons';
@@ -50,7 +49,7 @@ export default function ProfileScreen() {
 
   const hasPhone = !!user?.phone;
   const hasEmail = !!user?.email;
-  const hasPassword = user?.accountType !== 'google_only';
+  const hasPassword = user?.hasPassword;
   const isGoogleUser = !!user?.googleId;
 
   const menuItems = [

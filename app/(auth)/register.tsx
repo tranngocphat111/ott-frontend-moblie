@@ -1,4 +1,3 @@
-// app/(auth)/register.tsx
 import RegisterStepOne from '@/components/auth/register/RegisterStepOne';
 import RegisterStepTwo from '@/components/auth/register/RegisterStepTwo';
 import { useRegister } from '@/hooks/auth/useRegister';

@@ -76,6 +76,7 @@ export const authApi = {
       ...data,
       ...deviceInfo,
     };
+    console.log('verify2FAOtp payload:', JSON.stringify(payload));
     return apiClient.post(API_ENDPOINTS.AUTH.VERIFY_2FA, payload);
   },
 

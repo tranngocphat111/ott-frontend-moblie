@@ -1,4 +1,3 @@
-// hooks/auth/useRegister.ts
 import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
 import { userApi } from '@/services/api/user.api';
@@ -35,9 +34,11 @@ export const useRegister = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
+  const PHONE_REGEX = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/;
+
   const validatePhone = (v: string) => {
     if (!v) return 'Vui lòng nhập số điện thoại';
-    if (!/^(0|\+84)[0-9]{9,10}$/.test(v)) return 'Số điện thoại không hợp lệ';
+    if (!PHONE_REGEX.test(v)) return 'Số điện thoại không hợp lệ';
   };
   const validateEmail = (v: string) => {
     if (!v) return 'Vui lòng nhập email';
@@ -71,7 +72,6 @@ export const useRegister = () => {
     }, 1000);
   };
 
-  // Bước 1: Validate tất cả fields rồi gửi OTP
   const requestOtp = async (
     phone: string,
     email: string,
@@ -119,7 +119,6 @@ export const useRegister = () => {
     }
   };
 
-  // Gửi lại OTP
   const resendOtp = async (
     phone: string,
     email: string,
@@ -131,7 +130,6 @@ export const useRegister = () => {
     return requestOtp(phone, email, fullName, password, confirmPassword);
   };
 
-  // Bước 2: Xác thực OTP → đăng ký → auto đăng nhập
   const register = async (data: RegisterData): Promise<boolean> => {
     setIsLoading(true);
     setErrors({});
@@ -157,7 +155,6 @@ export const useRegister = () => {
         return false;
       }
 
-      // Auto login sau khi đăng ký thành công
       try {
         const loginResponse = await authApi.localLogin({
           phone: data.phone,
@@ -170,7 +167,7 @@ export const useRegister = () => {
           return true;
         }
       } catch {
-        // fallback về login nếu auto login lỗi
+
       }
 
       router.replace('/(auth)/login');

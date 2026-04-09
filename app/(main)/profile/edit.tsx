@@ -1,11 +1,13 @@
-// app/(main)/profile/edit.tsx
 import TextInputField from '@/components/auth/TextInputField';
 import PrimaryButton from '@/components/common/PrimaryButton';
+import { PhotoPickerModal } from '@/components/profile/PhotoPickerModal';
 import { useAuth } from '@/contexts/Authcontext';
+import { usePhotoManager } from '@/hooks/profile/usePhotoManager';
 import { useProfile } from '@/hooks/profile/useProfile';
+import type { UserProfileResponse } from '@/types';
+import { PhotoType } from '@/types/enums/photo.enum';
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
@@ -31,29 +33,38 @@ const GENDER_OPTIONS: { label: string; value: Gender }[] = [
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, updateProfile: updateAuthProfile } = useAuth();
   const { updateProfile, isLoading, errors } = useProfile();
 
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [bio, setBio] = useState(user?.bio || '');
-  const [avatarUri, setAvatarUri] = useState(user?.avatarUrl || '');
   const [gender, setGender] = useState<Gender>((user?.gender as Gender) || 'OTHER');
   const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>(
     user?.dateOfBirth ? new Date(user.dateOfBirth) : undefined
   );
-
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showGenderModal, setShowGenderModal] = useState(false);
+  const [modalType, setModalType] = useState<PhotoType | null>(null);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      setAvatarUri(result.assets[0].uri);
+  const {
+    photos, loading, uploadProgress, error,
+    fetchPhotos, uploadPhoto, setActive, removePhoto, removeActive,
+  } = usePhotoManager();
+
+  const openPhotoModal = (type: PhotoType) => {
+    setModalType(type);
+    fetchPhotos();
+  };
+
+  const handlePhotoSuccess = (profile: UserProfileResponse) => {
+    updateAuthProfile(profile);
+  };
+
+  const handleActiveChanged = (newUrl: string, type: PhotoType) => {
+    if (type === PhotoType.AVATAR) {
+      updateAuthProfile({ avatarUrl: newUrl });
+    } else {
+      updateAuthProfile({ coverUrl: newUrl });
     }
   };
 
@@ -64,10 +75,7 @@ export default function EditProfileScreen() {
       gender,
       dateOfBirth: dateOfBirth ? dateOfBirth.toISOString().split('T')[0] : undefined,
     });
-
-    if (success) {
-      router.back();
-    }
+    if (success) router.back();
   };
 
   const formatDate = (date?: Date) => {
@@ -81,6 +89,7 @@ export default function EditProfileScreen() {
     <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
 
+      {/* Header */}
       <View className="flex-row items-center justify-between px-6 py-4 border-b border-brand-200 bg-surface-raised">
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#694d31" />
@@ -98,23 +107,53 @@ export default function EditProfileScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="px-6 pt-6 pb-6">
-            <View className="items-center mb-8">
-              <TouchableOpacity onPress={pickImage} className="relative">
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} className="w-24 h-24 rounded-full" />
-                ) : (
-                  <View className="w-24 h-24 rounded-full bg-brand-100 justify-center items-center">
-                    <Feather name="user" size={40} color="#8b6642" />
-                  </View>
-                )}
-                <View className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-brand-600 justify-center items-center border-2 border-brand-50">
-                  <Feather name="camera" size={16} color="#fff" />
-                </View>
+          {/* ── Cover + Avatar ── */}
+          <View className="mb-6">
+            {/* Cover */}
+            <View className="h-36 relative">
+              {user?.coverUrl ? (
+                <Image source={{ uri: user.coverUrl }} className="w-full h-full" resizeMode="cover" />
+              ) : (
+                <View className="w-full h-full bg-brand-300" />
+              )}
+              <TouchableOpacity
+                onPress={() => openPhotoModal(PhotoType.COVER)}
+                className="absolute bottom-2 right-3 flex-row items-center bg-black/40 px-3 py-1.5 rounded-xl"
+              >
+                <Feather name="camera" size={13} color="white" />
+                <Text className="text-xs font-semibold text-white ml-1">Đổi ảnh bìa</Text>
               </TouchableOpacity>
-              <Text className="text-sm text-brand-600 mt-2">Nhấn để thay đổi ảnh đại diện</Text>
             </View>
 
+            {/* Avatar — đè lên cover */}
+            <View className="px-6">
+              <View className="relative self-start -mt-12">
+                <View className="w-24 h-24 rounded-full border-4 border-brand-50 overflow-hidden bg-brand-100">
+                  {user?.avatarUrl ? (
+                    <Image source={{ uri: user.avatarUrl }} className="w-full h-full" resizeMode="cover" />
+                  ) : (
+                    <View className="w-full h-full bg-brand-500 justify-center items-center">
+                      <Text className="text-white text-3xl font-bold">
+                        {user?.fullName?.charAt(0)?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity
+                  onPress={() => openPhotoModal(PhotoType.AVATAR)}
+                  className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-brand-600 justify-center items-center border-2 border-brand-50"
+                >
+                  <Feather name="camera" size={15} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <Text className="text-xs text-brand-400 mt-2">
+                Nhấn vào ảnh để thay đổi
+              </Text>
+            </View>
+          </View>
+
+          {/* ── Form ── */}
+          <View className="px-6 pb-8">
             <TextInputField
               label="Họ và tên"
               value={fullName}
@@ -190,6 +229,7 @@ export default function EditProfileScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* Date picker */}
       {showDatePicker && (
         <DateTimePicker
           value={dateOfBirth || new Date(2000, 0, 1)}
@@ -208,6 +248,7 @@ export default function EditProfileScreen() {
         />
       )}
 
+      {/* Gender modal */}
       <Modal visible={showGenderModal} transparent animationType="fade">
         <TouchableOpacity
           className="flex-1 bg-black/40 justify-end"
@@ -221,19 +262,11 @@ export default function EditProfileScreen() {
             {GENDER_OPTIONS.map(option => (
               <TouchableOpacity
                 key={option.value}
-                onPress={() => {
-                  setGender(option.value);
-                  setShowGenderModal(false);
-                }}
-                className={`flex-row items-center justify-between px-6 py-4 border-b border-brand-100 ${
-                  gender === option.value ? 'bg-brand-50' : ''
-                }`}
-              >
-                <Text
-                  className={`text-base ${
-                    gender === option.value ? 'text-brand-700 font-semibold' : 'text-brand-900'
+                onPress={() => { setGender(option.value); setShowGenderModal(false); }}
+                className={`flex-row items-center justify-between px-6 py-4 border-b border-brand-100 ${gender === option.value ? 'bg-brand-50' : ''
                   }`}
-                >
+              >
+                <Text className={`text-base ${gender === option.value ? 'text-brand-700 font-semibold' : 'text-brand-900'}`}>
                   {option.label}
                 </Text>
                 {gender === option.value && <Feather name="check" size={18} color="#8b6642" />}
@@ -247,6 +280,23 @@ export default function EditProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Photo picker modal */}
+      <PhotoPickerModal
+        open={modalType !== null}
+        type={modalType ?? PhotoType.AVATAR}
+        photos={photos}
+        loading={loading}
+        uploadProgress={uploadProgress}
+        error={error}
+        onClose={() => setModalType(null)}
+        onUpload={uploadPhoto}
+        onSetActive={setActive}
+        onDelete={removePhoto}
+        onRemoveActive={removeActive}
+        onSuccess={handlePhotoSuccess}
+        onActiveChanged={handleActiveChanged}
+      />
     </SafeAreaView>
   );
 }

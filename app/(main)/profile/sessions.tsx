@@ -1,4 +1,3 @@
-// app/(main)/profile/sessions.tsx
 import { useSessions } from '@/hooks/profile/useSessions';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -7,7 +6,7 @@ import React, { useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
-   ScrollView,
+  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -16,7 +15,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SessionsScreen() {
   const router = useRouter();
-  const { sessions, isLoading, fetchSessions, revokeSession, revokeAllOthers } = useSessions();
+  const {
+    sessions,
+    total,
+    isLoading,
+    fetchSessions,
+    revokeSession,
+    revokeAllOtherSessions,
+    revokeAllSessions,
+  } = useSessions();
 
   useEffect(() => {
     fetchSessions();
@@ -37,19 +44,17 @@ export default function SessionsScreen() {
     );
   };
 
-  const handleRevokeAllOthers = () => {
-    const otherSessions = sessions.filter(s => !s.isCurrent);
-    if (otherSessions.length === 0) return;
-
+  
+  const handleRevokeAll = () => {
     Alert.alert(
       'Xác nhận',
-      'Bạn có chắc chắn muốn đăng xuất tất cả thiết bị khác?',
+      'Bạn có chắc chắn muốn đăng xuất khỏi tất cả thiết bị, kể cả thiết bị này?',
       [
         { text: 'Hủy', style: 'cancel' },
         {
           text: 'Đăng xuất tất cả',
           style: 'destructive',
-          onPress: () => revokeAllOthers(),
+          onPress: () => revokeAllSessions(),
         },
       ]
     );
@@ -101,7 +106,7 @@ export default function SessionsScreen() {
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-brand-900">Thiết bị đã đăng nhập</Text>
         {otherSessions.length > 0 ? (
-          <TouchableOpacity onPress={handleRevokeAllOthers}>
+          <TouchableOpacity onPress={handleRevokeAll}>
             <Text className="text-sm text-red-600 font-medium">Đăng xuất tất cả</Text>
           </TouchableOpacity>
         ) : (
@@ -129,8 +134,8 @@ export default function SessionsScreen() {
                 <View
                   key={session.id}
                   className={`rounded-xl border p-4 mb-3 ${isCurrent
-                      ? 'border-blue-200 bg-blue-50'
-                      : 'border-brand-200 bg-white'
+                    ? 'border-blue-200 bg-blue-50'
+                    : 'border-brand-200 bg-white'
                     }`}
                 >
                   <View className="flex-row items-start">
