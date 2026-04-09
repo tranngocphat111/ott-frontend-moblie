@@ -1,4 +1,4 @@
-export { apiClient, getDeviceInfo } from './client';
+export { apiClient, chatApiClient, getDeviceInfo } from './client';
 export { authApi } from './auth.api';
 export { userApi } from './user.api';
 export { otpApi } from './otp.api';
@@ -8,3 +8,4 @@ export { profileApi } from './profile.api';
 export { qrApi } from './qr.api';
 export { sessionApi } from './session.api';
 export { twoFactorApi } from './twoFactor.api';
+export { ChatApi } from './chat.api';

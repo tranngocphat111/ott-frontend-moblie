@@ -7,17 +7,20 @@ import type { UserProfileResponse } from '../types';
 
 interface AuthContextType {
   user: UserProfileResponse | null;
+  chatUserId: string | null; // Separate ID for chat queries (mock or real)
   isAuthenticated: boolean;
   isLoading: boolean;
   setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  setChatUserId: (userId: string) => Promise<void>; // Set mock chat user ID
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfileResponse | null>(null);
+  const [chatUserId, setChatUserIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!user;
@@ -26,6 +29,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log('AuthContext: logout called');
     await SecureStore.deleteItemAsync('accessToken');
     await SecureStore.deleteItemAsync('refreshToken');
+    // Also clear mock chat user
+    await SecureStore.deleteItemAsync('mockChatUserId');
+    setChatUserIdState(null);
     setUser(null);
     router.replace('/login');
   };
@@ -43,6 +49,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
+      // Check for mock chat user ID (for demo mode)
+      const mockChatUserIdFromStorage = await SecureStore.getItemAsync('mockChatUserId');
+      if (mockChatUserIdFromStorage) {
+        console.log('[AuthContext] Using mock chat user ID:', mockChatUserIdFromStorage);
+        setChatUserIdState(mockChatUserIdFromStorage);
+      }
+
+      // Always try to fetch real user from auth token
       const token = await SecureStore.getItemAsync('accessToken');
       if (token) {
         await fetchUser();
@@ -98,15 +112,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await fetchUser();
   };
 
+  const setChatUserId = async (userId: string) => {
+    await SecureStore.setItemAsync('mockChatUserId', userId);
+    setChatUserIdState(userId);
+    console.log('[AuthContext] Set mock chat user ID:', userId);
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
+        chatUserId,
         isAuthenticated,
         isLoading,
         setTokens,
         logout,
         refreshUser,
+        setChatUserId,
       }}
     >
       {children}

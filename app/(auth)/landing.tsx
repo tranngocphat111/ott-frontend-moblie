@@ -57,6 +57,14 @@ export default function LandingScreen() {
               <Text className="text-white text-base font-semibold">Tạo tài khoản mới</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              className="bg-transparent rounded-2xl py-3 items-center border border-white/40"
+              onPress={() => router.push('/(auth)/demo-users')}
+              activeOpacity={0.7}
+            >
+              <Text className="text-white/70 text-xs font-medium">💬 Chế độ Demo (Test nhanh)</Text>
+            </TouchableOpacity>
+
             <Text className="text-center text-white/80 text-xs leading-5 px-4">
               Bằng việc tiếp tục, bạn đồng ý với Điều khoản sử dụng và Chính sách bảo mật.
             </Text>
