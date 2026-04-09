@@ -8,7 +8,7 @@ export const API_CONFIG = {
 };
 
 export const CHAT_API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_CHAT_API_URL || 'http://192.168.1.21:5000/api',
+  BASE_URL: process.env.EXPO_PUBLIC_CHAT_API_URL || 'http://192.168.1.3:5000/api',
   TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
   HEADERS: {
     'Content-Type': 'application/json',
