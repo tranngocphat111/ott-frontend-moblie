@@ -1,5 +1,5 @@
 // hooks/auth/useRegister.ts
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
 import { userApi } from '@/services/api/user.api';
 import { useRouter } from 'expo-router';

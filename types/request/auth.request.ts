@@ -30,6 +30,7 @@ export interface Verify2FARequest {
   deviceType?: DeviceType;
   ipAddress?: string;
   deviceInfo?: string;
+  isBackupCode?: boolean;
 }
 
 export interface RefreshRequest {

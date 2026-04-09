@@ -1,5 +1,5 @@
 // hooks/profile/useChangePhone.ts
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { accountApi } from '@/services/api/account.api';
 import { useState } from 'react';
 import { Alert } from 'react-native';

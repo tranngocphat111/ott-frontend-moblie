@@ -1,18 +1,17 @@
-import React, { useEffect } from 'react';
 import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import * as WebBrowser from 'expo-web-browser';
+import React, { useEffect } from 'react';
 import { Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// NativeWind CSS
 import '@/global.css';
 
-// Providers
-import { AuthProvider, useAuth } from '@/context/Authcontext';
-import { ThemeProvider } from '@/context/Themecontext';
+import { AuthProvider, useAuth } from '@/contexts/Authcontext';
+import { ThemeProvider } from '@/contexts/Themecontext';
+import { ToastProvider } from '@/contexts/ToastContext';
 
 WebBrowser.maybeCompleteAuthSession();
 SplashScreen.preventAutoHideAsync();
@@ -56,7 +55,6 @@ function RootLayoutNav() {
   );
 }
 
-// Error Boundary
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error?: Error }
@@ -103,8 +101,10 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <ThemeProvider>
             <AuthProvider>
-              <RootLayoutNav />
-              <StatusBar style="auto" />
+              <ToastProvider>
+                <RootLayoutNav />
+                <StatusBar style="auto" />
+              </ToastProvider>
             </AuthProvider>
           </ThemeProvider>
         </SafeAreaProvider>

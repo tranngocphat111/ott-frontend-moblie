@@ -1,4 +1,3 @@
-// app/(auth)/forgot-password.tsx
 import OtpInput from '@/components/auth/OtpInput';
 import TextInputField from '@/components/auth/TextInputField';
 import PrimaryButton from '@/components/common/PrimaryButton';

@@ -1,9 +1,9 @@
 export const DeviceType = {
-  MOBILE: 'mobile',
-  TABLET: 'tablet',
-  TV: 'tv',
-  DESKTOP: 'desktop',
-  UNKNOWN: 'unknown',
+  MOBILE: 'MOBILE',
+  TABLET: 'TABLET',
+  TV: 'TV',
+  DESKTOP: 'DESKTOP',
+  UNKNOWN: 'UNKNOWN',
 } as const;
 
 export type DeviceType = typeof DeviceType[keyof typeof DeviceType];

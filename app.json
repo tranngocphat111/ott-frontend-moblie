@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ott-app",
-    "slug": "ott-app",
+    "name": "Riff",
+    "slug": "Riff",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "ottapp",
+    "icon": "./assets/images/logo_tach_nen.jpg",
+    "scheme": "riff",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "owner": "chucnguyen02",

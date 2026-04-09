@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { accountApi } from '@/services/api/account.api';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 
 interface DeleteAccountErrors {
   password?: string;

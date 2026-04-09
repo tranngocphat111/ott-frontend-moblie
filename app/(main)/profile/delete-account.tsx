@@ -8,7 +8,7 @@ import TextInputField from '@/components/auth/TextInputField';
 import OtpInput from '@/components/auth/OtpInput';
 import PrimaryButton from '@/components/common/PrimaryButton';
 import { useDeleteAccount } from '@/hooks/profile/useDeleteAccount';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 
 export default function DeleteAccountScreen() {
   const router = useRouter();

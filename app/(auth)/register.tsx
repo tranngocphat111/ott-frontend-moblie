@@ -4,9 +4,9 @@ import { View, SafeAreaView, TouchableOpacity, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import RegisterStepOne from '@/components/auth/register/RegisterStepOne';
-import RegisterStepTwo from '@/components/auth/register/RegisterStepTwo';
-import { useRegister } from '@/hooks/auth/useRegister';
+import RegisterStepOne from '@/components/(auth)/register/RegisterStepOne';
+import RegisterStepTwo from '@/components/(auth)/register/RegisterStepTwo';
+import { useRegister } from '@/hooks/(auth)/useRegister';
 
 export default function RegisterScreen() {
   const router = useRouter();

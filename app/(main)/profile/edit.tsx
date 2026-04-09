@@ -1,7 +1,7 @@
 // app/(main)/profile/edit.tsx
 import TextInputField from '@/components/auth/TextInputField';
 import PrimaryButton from '@/components/common/PrimaryButton';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { useProfile } from '@/hooks/profile/useProfile';
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';

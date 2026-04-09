@@ -1,5 +1,5 @@
 // hooks/auth/useLogin.ts
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -119,6 +119,6 @@ function getErrorMessage(code?: number, fallback?: string): string {
     case 1005: return 'Mã OTP không đúng';
     case 1006: return 'Mã OTP đã hết hạn. Vui lòng gửi lại.';
     case 1007: return 'Nhập sai quá nhiều lần. Vui lòng gửi lại mã mới.';
-    default:   return fallback || 'Đã xảy ra lỗi. Vui lòng thử lại.';
+    default: return fallback || 'Đã xảy ra lỗi. Vui lòng thử lại.';
   }
 }
