@@ -8,11 +8,11 @@ import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function QrScanScreen() {
   const router = useRouter();
@@ -83,14 +83,14 @@ export default function QrScanScreen() {
 
   if (!permission.granted) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-brand-50">
         <StatusBar style="dark" />
         <TouchableOpacity onPress={() => router.back()} className="px-6 pt-4">
           <Feather name="arrow-left" size={28} color="#374151" />
         </TouchableOpacity>
         <View className="flex-1 justify-center items-center px-6">
           <Feather name="camera-off" size={64} color="#9ca3af" />
-          <Text className="text-xl font-bold text-gray-900 mt-6 mb-2 text-center">
+          <Text className="text-xl font-bold text-brand-900 mt-6 mb-2 text-center">
             Cần quyền truy cập camera
           </Text>
           <Text className="text-base text-gray-600 text-center mb-8">
@@ -98,7 +98,7 @@ export default function QrScanScreen() {
           </Text>
           <TouchableOpacity
             onPress={requestPermission}
-            className="bg-blue-600 rounded-xl py-4 px-8"
+            className="bg-brand-600 rounded-xl py-4 px-8"
           >
             <Text className="text-white font-semibold">Cấp quyền</Text>
           </TouchableOpacity>

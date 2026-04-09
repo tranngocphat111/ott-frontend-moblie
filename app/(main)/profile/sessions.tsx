@@ -7,11 +7,12 @@ import React, { useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView, ScrollView,
+   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SessionsScreen() {
   const router = useRouter();
@@ -91,14 +92,14 @@ export default function SessionsScreen() {
   const otherSessions = sessions.filter(s => !s.isCurrent);
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
 
-      <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-200">
+      <View className="flex-row items-center justify-between px-6 py-4 border-b border-brand-200">
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">Thiết bị đã đăng nhập</Text>
+        <Text className="text-lg font-semibold text-brand-900">Thiết bị đã đăng nhập</Text>
         {otherSessions.length > 0 ? (
           <TouchableOpacity onPress={handleRevokeAllOthers}>
             <Text className="text-sm text-red-600 font-medium">Đăng xuất tất cả</Text>
@@ -115,7 +116,7 @@ export default function SessionsScreen() {
       ) : (
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
           <View className="px-4 pt-4 pb-6">
-            <Text className="text-sm text-gray-500 mb-4 px-2">
+            <Text className="text-sm text-brand-500 mb-4 px-2">
               Bạn đang đăng nhập trên {sessions.length} thiết bị
             </Text>
 
@@ -129,7 +130,7 @@ export default function SessionsScreen() {
                   key={session.id}
                   className={`rounded-xl border p-4 mb-3 ${isCurrent
                       ? 'border-blue-200 bg-blue-50'
-                      : 'border-gray-200 bg-white'
+                      : 'border-brand-200 bg-white'
                     }`}
                 >
                   <View className="flex-row items-start">
@@ -149,11 +150,11 @@ export default function SessionsScreen() {
                     <View className="flex-1 ml-3">
                       {/* Device name row */}
                       <View className="flex-row items-center flex-wrap gap-1">
-                        <Text className="text-sm font-semibold text-gray-900">
+                        <Text className="text-sm font-semibold text-brand-900">
                           {session.deviceName || 'Thiết bị không xác định'}
                         </Text>
                         {isCurrent && (
-                          <View className="bg-blue-600 px-2 py-0.5 rounded ml-1">
+                          <View className="bg-brand-600 px-2 py-0.5 rounded ml-1">
                             <Text className="text-white text-xs font-medium">Hiện tại</Text>
                           </View>
                         )}
@@ -166,7 +167,7 @@ export default function SessionsScreen() {
                       {(session.ipAddress || session.location) && (
                         <View className="flex-row items-center mt-1">
                           <Feather name="map-pin" size={12} color="#9ca3af" />
-                          <Text className="text-xs text-gray-500 ml-1">
+                          <Text className="text-xs text-brand-500 ml-1">
                             {[session.ipAddress, session.location].filter(Boolean).join(' • ')}
                           </Text>
                         </View>
@@ -175,7 +176,7 @@ export default function SessionsScreen() {
                       {/* Last active */}
                       <View className="flex-row items-center mt-1">
                         <Feather name="clock" size={12} color="#9ca3af" />
-                        <Text className="text-xs text-gray-500 ml-1">
+                        <Text className="text-xs text-brand-500 ml-1">
                           Hoạt động {formatLastActive(session.lastActiveAt, session.createdAt)}
                         </Text>
                       </View>
