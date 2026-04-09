@@ -1,12 +1,13 @@
 // app/(main)/profile/two-factor.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, SafeAreaView, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import OtpInput from '@/components/auth/OtpInput';
 import PrimaryButton from '@/components/common/PrimaryButton';
 import { useTwoFactor } from '@/hooks/profile/useTwoFactor';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function TwoFactorScreen() {
   const router = useRouter();
@@ -72,7 +73,7 @@ export default function TwoFactorScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-brand-50">
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#0084ff" />
         </View>
@@ -81,14 +82,14 @@ export default function TwoFactorScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
       
-      <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-200">
+      <View className="flex-row items-center justify-between px-6 py-4 border-b border-brand-200">
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">
+        <Text className="text-lg font-semibold text-brand-900">
           Xác thực 2 bước
         </Text>
         <View style={{ width: 24 }} />
@@ -108,7 +109,7 @@ export default function TwoFactorScreen() {
                   />
                 </View>
                 <View className="flex-1 ml-3">
-                  <Text className="text-base font-semibold text-gray-900 mb-1">
+                  <Text className="text-base font-semibold text-brand-900 mb-1">
                     {isEnabled ? 'Đã bật' : 'Đã tắt'}
                   </Text>
                   <Text className="text-sm text-gray-600">
@@ -175,7 +176,7 @@ export default function TwoFactorScreen() {
 
           {/* Benefits */}
           <View className="mb-4">
-            <Text className="text-base font-semibold text-gray-900 mb-3">
+            <Text className="text-base font-semibold text-brand-900 mb-3">
               Lợi ích:
             </Text>
             

@@ -1,10 +1,11 @@
 // app/(auth)/google-login.tsx
 import React, { useEffect } from 'react';
-import { View, Text, SafeAreaView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useGoogleLogin } from '@/hooks/auth/useGoogleLogin';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function GoogleLoginScreen() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function GoogleLoginScreen() {
   }, []);
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
       
       <TouchableOpacity
@@ -37,7 +38,7 @@ export default function GoogleLoginScreen() {
         ) : error ? (
           <>
             <Feather name="alert-circle" size={64} color="#ef4444" />
-            <Text className="text-xl font-bold text-gray-900 mt-6 mb-2 text-center">
+            <Text className="text-xl font-bold text-brand-900 mt-6 mb-2 text-center">
               Đăng nhập thất bại
             </Text>
             <Text className="text-base text-gray-600 text-center mb-8">
@@ -45,7 +46,7 @@ export default function GoogleLoginScreen() {
             </Text>
             <TouchableOpacity
               onPress={loginWithGoogle}
-              className="bg-blue-600 rounded-xl py-4 px-8"
+              className="bg-brand-600 rounded-xl py-4 px-8"
             >
               <Text className="text-white font-semibold">Thử lại</Text>
             </TouchableOpacity>
@@ -53,7 +54,7 @@ export default function GoogleLoginScreen() {
         ) : (
           <>
             <Feather name="globe" size={64} color="#0084ff" />
-            <Text className="text-xl font-bold text-gray-900 mt-6 mb-2 text-center">
+            <Text className="text-xl font-bold text-brand-900 mt-6 mb-2 text-center">
               Đăng nhập Google
             </Text>
             <Text className="text-base text-gray-600 text-center mb-8">
@@ -61,7 +62,7 @@ export default function GoogleLoginScreen() {
             </Text>
             <TouchableOpacity
               onPress={loginWithGoogle}
-              className="bg-blue-600 rounded-xl py-4 px-8"
+              className="bg-brand-600 rounded-xl py-4 px-8"
             >
               <Text className="text-white font-semibold">Đăng nhập với Google</Text>
             </TouchableOpacity>

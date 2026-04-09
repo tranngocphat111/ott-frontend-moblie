@@ -1,7 +1,7 @@
 // components/auth/OtpInput.tsx
-import React, { useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import React, { useEffect, useRef } from 'react';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface OtpInputProps {
   value: string;
@@ -21,7 +21,6 @@ export default function OtpInput({
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    // Auto focus when component mounts
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
@@ -36,42 +35,40 @@ export default function OtpInput({
           disabled={countdown > 0}
           className={countdown > 0 ? 'opacity-50' : ''}
         >
-          <Text className="text-sm font-medium text-blue-600">
+          <Text className="text-sm font-medium text-brand-600">
             {countdown > 0 ? `Gửi lại (${countdown}s)` : 'Gửi lại'}
           </Text>
         </TouchableOpacity>
       </View>
 
       <View
-        className={`flex-row items-center border rounded-xl px-4 py-3 ${
-          error ? 'border-red-500' : 'border-gray-300'
-        } bg-white`}
+        className={`flex-row items-center border rounded-2xl px-4 py-3.5 ${
+          error ? 'border-red-500 bg-red-50/50' : 'border-brand-200 bg-surface-raised'
+        }`}
       >
-        <Feather name="shield" size={20} color={error ? '#ef4444' : '#6b7280'} />
+        <Feather name="shield" size={20} color={error ? '#dc2626' : '#8b6642'} />
         <TextInput
           ref={inputRef}
-          className="flex-1 ml-3 text-base text-gray-900 tracking-widest"
+          className="flex-1 ml-3 text-base text-brand-900 tracking-[5px]"
           placeholder="000000"
           value={value}
           onChangeText={onChangeText}
           keyboardType="number-pad"
           maxLength={6}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor="#bc9166"
         />
-        {value.length === 6 && (
-          <Feather name="check-circle" size={20} color="#22c55e" />
-        )}
+        {value.length === 6 && <Feather name="check-circle" size={20} color="#16a34a" />}
       </View>
 
       {error && (
         <View className="flex-row items-center mt-2">
-          <Feather name="alert-circle" size={14} color="#ef4444" />
-          <Text className="text-red-500 text-xs ml-1">{error}</Text>
+          <Feather name="alert-circle" size={14} color="#dc2626" />
+          <Text className="text-red-600 text-xs ml-1">{error}</Text>
         </View>
       )}
 
-      <Text className="text-xs text-gray-500 mt-2">
-        Mã OTP đã được gửi đến eamil của bạn. Vui lòng kiểm tra tin nhắn.
+      <Text className="text-xs text-brand-500 mt-2">
+        Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra tin nhắn.
       </Text>
     </View>
   );

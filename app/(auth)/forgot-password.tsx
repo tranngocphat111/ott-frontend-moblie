@@ -1,4 +1,7 @@
+// app/(auth)/forgot-password.tsx
+import EmailInput from '@/components/auth/EmailInput';
 import OtpInput from '@/components/auth/OtpInput';
+import PhoneInput from '@/components/auth/PhoneInput';
 import TextInputField from '@/components/auth/TextInputField';
 import PrimaryButton from '@/components/common/PrimaryButton';
 import { useForgotPassword } from '@/hooks/auth/useForgotPassword';
@@ -9,27 +12,17 @@ import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-
-import PhoneInput from '@/components/auth/PhoneInput';
-import EmailInput from '@/components/auth/EmailInput';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const {
-    requestOtp,
-    verifyOtp,
-    resendOtp,
-    isLoading,
-    errors,
-    otpSent,
-    countdown,
-  } = useForgotPassword();
+  const { requestOtp, verifyOtp, resendOtp, isLoading, errors, otpSent, countdown } =
+    useForgotPassword();
 
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -38,26 +31,23 @@ export default function ForgotPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const handleRequestOtp = async () => {
-    await requestOtp(phone, email);   // ← truyền thêm email
+    await requestOtp(phone, email);
   };
 
   const handleVerifyOtp = async () => {
-    await verifyOtp(phone, email, otp, newPassword, confirmPassword); // ← truyền thêm email
+    await verifyOtp(phone, email, otp, newPassword, confirmPassword);
   };
 
   const handleResendOtp = async () => {
-    await resendOtp(phone, email);   // ← truyền thêm email
+    await resendOtp(phone, email);
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
 
-      <TouchableOpacity
-        onPress={() => router.back()}
-        className="px-6 pt-4"
-      >
-        <Feather name="arrow-left" size={28} color="#374151" />
+      <TouchableOpacity onPress={() => router.back()} className="px-6 pt-4">
+        <Feather name="arrow-left" size={28} color="#694d31" />
       </TouchableOpacity>
 
       <KeyboardAvoidingView
@@ -71,17 +61,12 @@ export default function ForgotPasswordScreen() {
         >
           <View className="px-6 pt-8 pb-6">
             <View className="mb-8">
-              <Text className="text-3xl font-bold text-gray-900 mb-2">
-                Quên mật khẩu
-              </Text>
-              <Text className="text-base text-gray-600">
-                {otpSent
-                  ? 'Nhập mã OTP và mật khẩu mới'
-                  : 'Nhập số điện thoại & email đã đăng ký'}
+              <Text className="text-3xl font-bold text-brand-900 mb-2">Quên mật khẩu</Text>
+              <Text className="text-base text-brand-600">
+                {otpSent ? 'Nhập mã OTP và mật khẩu mới' : 'Nhập số điện thoại và email đã đăng ký'}
               </Text>
             </View>
 
-            {/* Step 1: Nhập phone + email */}
             {!otpSent ? (
               <>
                 <PhoneInput
@@ -99,13 +84,12 @@ export default function ForgotPasswordScreen() {
                 />
               </>
             ) : (
-              /* Thông tin đã gửi OTP (masked) */
-              <View className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl">
-                <Text className="text-sm text-blue-700 mb-1">
+              <View className="mb-6 p-4 bg-brand-50 border border-brand-200 rounded-2xl">
+                <Text className="text-sm text-brand-700 mb-1">
                   <Text className="font-medium">Số điện thoại:</Text>{' '}
                   {phone.replace(/(\d{3})\d{4}(\d{3})/, '$1****$2')}
                 </Text>
-                <Text className="text-sm text-blue-700">
+                <Text className="text-sm text-brand-700">
                   <Text className="font-medium">Email:</Text>{' '}
                   {email.replace(/(.{2}).*(@.*)/, '$1***$2')}
                 </Text>
@@ -149,8 +133,8 @@ export default function ForgotPasswordScreen() {
             )}
 
             {errors.general && (
-              <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-                <Text className="text-red-800 text-sm">{errors.general}</Text>
+              <View className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
+                <Text className="text-red-700 text-sm">{errors.general}</Text>
               </View>
             )}
 

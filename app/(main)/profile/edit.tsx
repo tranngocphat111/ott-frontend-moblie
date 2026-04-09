@@ -14,12 +14,12 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Gender = 'MALE' | 'FEMALE' | 'OTHER';
 
@@ -66,11 +66,8 @@ export default function EditProfileScreen() {
     });
 
     if (success) {
-      // refreshUser() đã chạy trong hook → user trong AuthContext đã cập nhật
-      // router.back() → profile.tsx đọc user mới từ context → hiển thị ngay
       router.back();
     }
-    // Nếu false → errors.general hiển thị tại chỗ, không navigate
   };
 
   const formatDate = (date?: Date) => {
@@ -81,15 +78,14 @@ export default function EditProfileScreen() {
   const genderLabel = GENDER_OPTIONS.find(g => g.value === gender)?.label || 'Khác';
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
 
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-200">
+      <View className="flex-row items-center justify-between px-6 py-4 border-b border-brand-200 bg-surface-raised">
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#374151" />
+          <Feather name="arrow-left" size={24} color="#694d31" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">Chỉnh sửa hồ sơ</Text>
+        <Text className="text-lg font-semibold text-brand-900">Chỉnh sửa hồ sơ</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -103,25 +99,22 @@ export default function EditProfileScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View className="px-6 pt-6 pb-6">
-
-            {/* Avatar */}
             <View className="items-center mb-8">
               <TouchableOpacity onPress={pickImage} className="relative">
                 {avatarUri ? (
                   <Image source={{ uri: avatarUri }} className="w-24 h-24 rounded-full" />
                 ) : (
-                  <View className="w-24 h-24 rounded-full bg-gray-200 justify-center items-center">
-                    <Feather name="user" size={40} color="#9ca3af" />
+                  <View className="w-24 h-24 rounded-full bg-brand-100 justify-center items-center">
+                    <Feather name="user" size={40} color="#8b6642" />
                   </View>
                 )}
-                <View className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-blue-600 justify-center items-center border-2 border-white">
+                <View className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-brand-600 justify-center items-center border-2 border-brand-50">
                   <Feather name="camera" size={16} color="#fff" />
                 </View>
               </TouchableOpacity>
-              <Text className="text-sm text-gray-600 mt-2">Nhấn để thay đổi ảnh đại diện</Text>
+              <Text className="text-sm text-brand-600 mt-2">Nhấn để thay đổi ảnh đại diện</Text>
             </View>
 
-            {/* Full Name */}
             <TextInputField
               label="Họ và tên"
               value={fullName}
@@ -133,12 +126,9 @@ export default function EditProfileScreen() {
               autoCapitalize="words"
             />
 
-            {/* Bio */}
             <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Giới thiệu bản thân
-              </Text>
-              <View className="border border-gray-300 rounded-xl px-4 py-3 bg-white">
+              <Text className="text-sm font-medium text-brand-700 mb-2">Giới thiệu bản thân</Text>
+              <View className="border border-brand-200 rounded-2xl px-4 py-3 bg-surface-raised">
                 <TextInputField
                   label=""
                   value={bio}
@@ -149,47 +139,44 @@ export default function EditProfileScreen() {
                   multiline
                 />
               </View>
-              <Text className="text-xs text-gray-500 mt-1 text-right">{bio.length}/200</Text>
+              <Text className="text-xs text-brand-500 mt-1 text-right">{bio.length}/200</Text>
             </View>
 
-            {/* Date of Birth */}
             <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Ngày sinh <Text className="text-gray-400 font-normal">(tuỳ chọn)</Text>
+              <Text className="text-sm font-medium text-brand-700 mb-2">
+                Ngày sinh <Text className="text-brand-400 font-normal">(tùy chọn)</Text>
               </Text>
               <TouchableOpacity
                 onPress={() => setShowDatePicker(true)}
-                className="flex-row items-center border border-gray-300 rounded-xl px-4 py-3 bg-white"
+                className="flex-row items-center border border-brand-200 rounded-2xl px-4 py-3 bg-surface-raised"
               >
-                <Feather name="calendar" size={18} color="#9ca3af" />
-                <Text className={`flex-1 ml-3 text-sm ${dateOfBirth ? 'text-gray-900' : 'text-gray-400'}`}>
+                <Feather name="calendar" size={18} color="#8b6642" />
+                <Text className={`flex-1 ml-3 text-sm ${dateOfBirth ? 'text-brand-900' : 'text-brand-400'}`}>
                   {formatDate(dateOfBirth)}
                 </Text>
                 {dateOfBirth && (
                   <TouchableOpacity onPress={() => setDateOfBirth(undefined)}>
-                    <Feather name="x" size={16} color="#9ca3af" />
+                    <Feather name="x" size={16} color="#8b6642" />
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
             </View>
 
-            {/* Gender */}
             <View className="mb-6">
-              <Text className="text-sm font-medium text-gray-700 mb-2">Giới tính</Text>
+              <Text className="text-sm font-medium text-brand-700 mb-2">Giới tính</Text>
               <TouchableOpacity
                 onPress={() => setShowGenderModal(true)}
-                className="flex-row items-center border border-gray-300 rounded-xl px-4 py-3 bg-white"
+                className="flex-row items-center border border-brand-200 rounded-2xl px-4 py-3 bg-surface-raised"
               >
-                <Feather name="users" size={18} color="#9ca3af" />
-                <Text className="flex-1 ml-3 text-sm text-gray-900">{genderLabel}</Text>
-                <Feather name="chevron-down" size={18} color="#9ca3af" />
+                <Feather name="users" size={18} color="#8b6642" />
+                <Text className="flex-1 ml-3 text-sm text-brand-900">{genderLabel}</Text>
+                <Feather name="chevron-down" size={18} color="#8b6642" />
               </TouchableOpacity>
             </View>
 
-            {/* General Error */}
             {errors.general && (
-              <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-                <Text className="text-red-800 text-sm">{errors.general}</Text>
+              <View className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
+                <Text className="text-red-700 text-sm">{errors.general}</Text>
               </View>
             )}
 
@@ -203,7 +190,6 @@ export default function EditProfileScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Date Picker */}
       {showDatePicker && (
         <DateTimePicker
           value={dateOfBirth || new Date(2000, 0, 1)}
@@ -222,16 +208,15 @@ export default function EditProfileScreen() {
         />
       )}
 
-      {/* Gender Modal */}
       <Modal visible={showGenderModal} transparent animationType="fade">
         <TouchableOpacity
           className="flex-1 bg-black/40 justify-end"
           activeOpacity={1}
           onPress={() => setShowGenderModal(false)}
         >
-          <View className="bg-white rounded-t-2xl overflow-hidden">
-            <View className="px-6 py-4 border-b border-gray-100">
-              <Text className="text-base font-bold text-gray-900">Chọn giới tính</Text>
+          <View className="bg-surface rounded-t-2xl overflow-hidden border-t border-brand-100">
+            <View className="px-6 py-4 border-b border-brand-100">
+              <Text className="text-base font-bold text-brand-900">Chọn giới tính</Text>
             </View>
             {GENDER_OPTIONS.map(option => (
               <TouchableOpacity
@@ -240,24 +225,23 @@ export default function EditProfileScreen() {
                   setGender(option.value);
                   setShowGenderModal(false);
                 }}
-                className={`flex-row items-center justify-between px-6 py-4 border-b border-gray-100 ${
-                  gender === option.value ? 'bg-blue-50' : ''
+                className={`flex-row items-center justify-between px-6 py-4 border-b border-brand-100 ${
+                  gender === option.value ? 'bg-brand-50' : ''
                 }`}
               >
-                <Text className={`text-base ${gender === option.value ? 'text-blue-600 font-semibold' : 'text-gray-900'}`}>
+                <Text
+                  className={`text-base ${
+                    gender === option.value ? 'text-brand-700 font-semibold' : 'text-brand-900'
+                  }`}
+                >
                   {option.label}
                 </Text>
-                {gender === option.value && (
-                  <Feather name="check" size={18} color="#3b82f6" />
-                )}
+                {gender === option.value && <Feather name="check" size={18} color="#8b6642" />}
               </TouchableOpacity>
             ))}
             <View className="px-6 py-4">
-              <TouchableOpacity
-                onPress={() => setShowGenderModal(false)}
-                className="py-3 items-center"
-              >
-                <Text className="text-gray-600 font-medium">Hủy</Text>
+              <TouchableOpacity onPress={() => setShowGenderModal(false)} className="py-3 items-center">
+                <Text className="text-brand-600 font-medium">Hủy</Text>
               </TouchableOpacity>
             </View>
           </View>

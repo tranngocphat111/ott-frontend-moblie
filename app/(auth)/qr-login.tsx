@@ -1,11 +1,12 @@
 // app/(auth)/qr-login.tsx
 import React, { useEffect } from 'react';
-import { View, Text, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useQrGenerate } from '@/hooks/auth/useQrGenerate';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function QrLoginScreen() {
   const router = useRouter();
@@ -50,7 +51,7 @@ export default function QrLoginScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
       
       <TouchableOpacity
@@ -69,7 +70,7 @@ export default function QrLoginScreen() {
         ) : error ? (
           <>
             <Feather name="alert-circle" size={64} color="#ef4444" />
-            <Text className="text-xl font-bold text-gray-900 mt-6 mb-2 text-center">
+            <Text className="text-xl font-bold text-brand-900 mt-6 mb-2 text-center">
               Lỗi
             </Text>
             <Text className="text-base text-gray-600 text-center mb-8">
@@ -77,7 +78,7 @@ export default function QrLoginScreen() {
             </Text>
             <TouchableOpacity
               onPress={refreshQr}
-              className="bg-blue-600 rounded-xl py-4 px-8"
+              className="bg-brand-600 rounded-xl py-4 px-8"
             >
               <Text className="text-white font-semibold">Thử lại</Text>
             </TouchableOpacity>
@@ -85,7 +86,7 @@ export default function QrLoginScreen() {
         ) : qrCode ? (
           <>
             {/* Title */}
-            <Text className="text-3xl font-bold text-gray-900 mb-2 text-center">
+            <Text className="text-3xl font-bold text-brand-900 mb-2 text-center">
               Đăng nhập bằng QR
             </Text>
             <Text className="text-base text-gray-600 mb-8 text-center">
@@ -93,7 +94,7 @@ export default function QrLoginScreen() {
             </Text>
 
             {/* QR Code Container */}
-            <View className="bg-white p-6 rounded-3xl shadow-lg border border-gray-200 mb-6">
+            <View className="bg-white p-6 rounded-3xl shadow-lg border border-brand-200 mb-6">
               {status === 'expired' || status === 'cancelled' ? (
                 <View className="w-64 h-64 justify-center items-center">
                   <Feather name="x-circle" size={80} color="#ef4444" />
@@ -124,7 +125,7 @@ export default function QrLoginScreen() {
 
             {/* Countdown */}
             {status === 'pending' || status === 'scanned' ? (
-              <Text className="text-sm text-gray-500 mb-6">
+              <Text className="text-sm text-brand-500 mb-6">
                 Mã hết hạn sau {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}
               </Text>
             ) : null}
@@ -160,7 +161,7 @@ export default function QrLoginScreen() {
             {(status === 'expired' || status === 'cancelled') && (
               <TouchableOpacity
                 onPress={refreshQr}
-                className="bg-blue-600 rounded-xl py-4 px-8"
+                className="bg-brand-600 rounded-xl py-4 px-8"
               >
                 <View className="flex-row items-center">
                   <Feather name="refresh-cw" size={20} color="#fff" />
@@ -181,7 +182,7 @@ export default function QrLoginScreen() {
             Chưa có ứng dụng?{' '}
           </Text>
           <TouchableOpacity>
-            <Text className="text-blue-600 text-sm font-semibold">
+            <Text className="text-brand-600 text-sm font-semibold">
               Tải về ngay
             </Text>
           </TouchableOpacity>
