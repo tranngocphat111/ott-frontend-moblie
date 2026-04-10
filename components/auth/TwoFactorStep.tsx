@@ -111,7 +111,7 @@ export default function TwoFactorStep({
 
             <PrimaryButton
               title={useBackupCode ? 'Xác nhận mã dự phòng' : 'Xác thực'}
-              onPress={onVerify(useBackupCode)}
+              onPress={() => onVerify(useBackupCode)}
               loading={isLoading}
               disabled={!isValid || isLoading}
             />
