@@ -1,7 +1,6 @@
-// hooks/profile/useChangePassword.ts
 import { useState } from 'react';
 import { accountApi } from '@/services/api/account.api';
-import { useAuth } from '@/context/Authcontext'; // import thêm
+import { useAuth } from '@/contexts/Authcontext';
 
 interface ChangePasswordErrors {
   oldPassword?: string;
@@ -11,7 +10,7 @@ interface ChangePasswordErrors {
 }
 
 export function useChangePassword() {
-  const { logout } = useAuth(); // thêm dòng này
+  const { logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<ChangePasswordErrors>({});
 

@@ -1,4 +1,4 @@
-import { OtpType } from '../enums';
+import type { OtpType } from '../enums';
 
 export interface OtpCode {
   id: string;

@@ -1,9 +1,9 @@
 export const QrCodeStatus = {
-  PENDING: 'pending',
-  SCANNED: 'scanned',
-  CONFIRMED: 'confirmed',
-  EXPIRED: 'expired',
-  CANCELLED: 'cancelled',
+  PENDING: 'PENDING',
+  SCANNED: 'SCANNED',
+  CONFIRMED: 'CONFIRMED',
+  EXPIRED: 'EXPIRED',
+  CANCELLED: 'CANCELLED',
 } as const;
 
 export type QrCodeStatus =
@@ -12,9 +12,9 @@ export type QrCodeStatus =
 
 // QrCodeType
 export const QrCodeType = {
-  LOGIN: 'login',
-  PAYMENT: 'payment',
-  ADD_FRIEND: 'add_friend',
+  LOGIN: 'LOGIN',
+  PAYMENT: 'PAYMENT',
+  ADD_FRIEND: 'ADD_FRIEND',
 } as const;
 
 export type QrCodeType =
@@ -23,10 +23,10 @@ export type QrCodeType =
 
 // QrLoginSessionStatus
 export const QrLoginSessionStatus = {
-  WAITING: 'waiting',
-  AUTHORIZED: 'authorized',
-  REJECTED: 'rejected',
-  EXPIRED: 'expired',
+  WAITING: 'WAITING',
+  AUTHORIZED: 'AUTHORIZED',
+  REJECTED: 'REJECTED',
+  EXPIRED: 'EXPIRED',
 } as const;
 
 export type QrLoginSessionStatus =

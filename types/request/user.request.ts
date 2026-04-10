@@ -73,3 +73,9 @@ export interface Disable2FARequest {
   password: string;
   otp: string;
 }
+
+export interface VerifyForgotOtpRequest {
+  phone: string;
+  email: string;
+  otp: string;
+}

@@ -1,12 +1,12 @@
 import { API_CONFIG, CHAT_API_CONFIG } from '@/configuration/api';
 import { triggerLogout } from '@/utils/logoutHandler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import axios, { AxiosError } from 'axios';
+import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import type { ApiError, ApiResponse } from '../../types';
+import type { ApiError, ApiResponse, DeviceType } from '../../types';
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_CONFIG.BASE_URL,
@@ -31,52 +31,101 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// ─── Refresh queue (tránh gọi refresh nhiều lần cùng lúc) ─
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const onRefreshed = (token: string) => {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+};
+
+const addRefreshSubscriber = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+// ─── Response interceptor ────────────────────────────────
 apiClient.interceptors.response.use(
-  (response) => {
-    console.log('✅ API Success:', response.config.url, response.status);
-    return response.data;
-  },
+  (response) => response.data,
+
   async (error: AxiosError<ApiResponse>) => {
-    console.error('❌ API Error:', error.config?.url, 'Status:', error.response?.status);
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     const apiError: ApiError = {
-      code: error.response?.data?.code || 500,
-      message: error.response?.data?.message || 'An error occurred',
+      code: error.response?.data?.code ?? error.response?.status ?? 500,
+      message: error.response?.data?.message ?? 'An error occurred',
       details: error.response?.data,
     };
 
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+
+      // Skip refresh cho các route public
+      const publicRoutes = [
+        '/password/forgot',
+        '/password/forgot/otp/verify',
+        '/password/forgot/verify',
+        '/auth/login',
+        '/auth/register',
+      ];
+
+      const isPublicRoute = publicRoutes.some((route) =>
+        originalRequest.url?.includes(route)
+      );
+
+      if (isPublicRoute) {
+        return Promise.reject(apiError);
+      }
+
+      if (!refreshToken) {
+        await triggerLogout();
+        return Promise.reject(apiError);
+      }
+
+      // Nếu đang refresh rồi → queue lại, chờ token mới
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          addRefreshSubscriber((newToken) => {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            resolve(apiClient.request(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
       try {
-        const refreshToken = await SecureStore.getItemAsync('refreshToken');
+        const deviceId = await AsyncStorage.getItem('deviceId') ?? undefined;
 
-        if (!refreshToken) {
-          console.log('No refresh token, triggering logout...');
-          await triggerLogout();
-          return Promise.reject(apiError);
-        }
-
-        console.log('Attempting token refresh...');
-        const response = await axios.post<ApiResponse>(
-          `${apiClient.defaults.baseURL}/auth/refresh`,
-          { token: refreshToken }
+        const response = await axios.post<ApiResponse<{ token: string; refreshToken: string }>>(
+          `${API_CONFIG.BASE_URL}/auth/refresh`,
+          { token: refreshToken, deviceId },
+          { headers: API_CONFIG.HEADERS }
         );
 
-        if (response.data.result) {
-          const { token, refreshToken: newRefreshToken } = response.data.result;
-          await SecureStore.setItemAsync('accessToken', token);
-          await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+        const newToken = response.data.result?.token;
+        const newRefreshToken = response.data.result?.refreshToken;
 
-          if (error.config) {
-            error.config.headers.Authorization = `Bearer ${token}`;
-            return apiClient.request(error.config);
-          }
+        if (!newToken || !newRefreshToken) {
+          throw new Error('Invalid refresh response');
         }
-      } catch (refreshError: any) {
-        console.log('🔴 Refresh failed:', refreshError?.response?.status, refreshError?.message);
-        // Refresh thất bại → xóa token và logout
+
+        await SecureStore.setItemAsync('accessToken', newToken);
+        await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+
+        onRefreshed(newToken);
+
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return apiClient.request(originalRequest);
+      } catch {
         await SecureStore.deleteItemAsync('accessToken');
         await SecureStore.deleteItemAsync('refreshToken');
+        refreshSubscribers = [];
         await triggerLogout();
+        return Promise.reject(apiError);
+      } finally {
+        isRefreshing = false;
       }
     }
 
@@ -117,10 +166,10 @@ chatApiClient.interceptors.response.use(
 
 export const getDeviceInfo = async () => {
   return {
-    deviceId: await getDeviceId(),
+    deviceId:   await getDeviceId(),
     deviceType: getDeviceType(),
     deviceName: getDeviceName(),
-    ipAddress: undefined,
+    ipAddress:  undefined,
     deviceInfo: `${Platform.OS} ${Platform.Version}`,
   };
 };
@@ -128,16 +177,16 @@ export const getDeviceInfo = async () => {
 const getDeviceId = async (): Promise<string> => {
   let deviceId = await AsyncStorage.getItem('deviceId');
   if (!deviceId) {
-    deviceId = `device_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    deviceId = `mobile_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     await AsyncStorage.setItem('deviceId', deviceId);
   }
   return deviceId;
 };
 
-const getDeviceType = (): string => {
-  if (Device.deviceType === Device.DeviceType.TABLET) return 'TABLET';
-  if (Device.deviceType === Device.DeviceType.PHONE) return 'MOBILE';
-  return 'MOBILE';
+const getDeviceType = (): DeviceType => {
+  if (Device.deviceType === Device.DeviceType.TABLET) return 'TABLET' as DeviceType;
+  if (Device.deviceType === Device.DeviceType.PHONE)  return 'MOBILE' as DeviceType;
+  return 'MOBILE' as DeviceType;
 };
 
 const getDeviceName = (): string => {

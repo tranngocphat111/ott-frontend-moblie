@@ -1,13 +1,13 @@
-// app/(main)/profile/change-phone.tsx
-import PhoneInput from '@/components/auth/EmailInput';
 import OtpInput from '@/components/auth/OtpInput';
+import PhoneInput from '@/components/auth/PhoneInput';
 import PrimaryButton from '@/components/common/PrimaryButton';
 import { useChangePhone } from '@/hooks/profile/useChangePhone';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 export default function ChangePhoneScreen() {
   const router = useRouter();

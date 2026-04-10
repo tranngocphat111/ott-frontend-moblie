@@ -1,5 +1,4 @@
-// hooks/auth/useLogin.ts
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -23,7 +22,6 @@ export function useLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<LoginErrors>({});
 
-  // ── Validation ──────────────────────────────────────────
   const validate = (phone: string, password: string): boolean => {
     const newErrors: LoginErrors = {};
     if (!phone) newErrors.phone = 'Vui lòng nhập số điện thoại';
@@ -53,7 +51,7 @@ export function useLogin() {
           return { requires2FA: true, tempToken };
         }
 
-        // Đăng nhập thành công
+     
         await setTokens(token, refreshToken);
         router.replace('/(main)/(tabs)/home');
         return { authenticated: true };
@@ -69,10 +67,10 @@ export function useLogin() {
     }
   };
 
-  // ── Verify 2FA ──────────────────────────────────────────
-  const verify2FA = async (tempToken: string, otpCode: string): Promise<LoginResult | undefined> => {
-    if (!otpCode || otpCode.length !== 6) {
-      setErrors({ otp: 'Vui lòng nhập đủ 6 chữ số' });
+  const verify2FA = async (tempToken: string, otpCode: string, isBackupCode = false): Promise<LoginResult | undefined> => {
+    const expectedLength = isBackupCode ? 8 : 6;
+    if (!otpCode || otpCode.length !== expectedLength) {
+      setErrors({ otp: `Vui lòng nhập đủ ${expectedLength} chữ số` });
       return;
     }
 
@@ -80,7 +78,7 @@ export function useLogin() {
     setErrors({});
 
     try {
-      const response = await authApi.verify2FA({ tempToken, otpCode });
+      const response = await authApi.verify2FAOtp({ tempToken, otpCode, isBackupCode });
 
       if (response.code === 1000 && response.result) {
         const { token, refreshToken } = response.result;
@@ -98,7 +96,6 @@ export function useLogin() {
     }
   };
 
-  // ── Resend 2FA OTP ──────────────────────────────────────
   const request2FAOtp = async (phone: string) => {
     try {
       await authApi.request2FAOtp({ phone });
@@ -110,7 +107,6 @@ export function useLogin() {
   return { login, verify2FA, request2FAOtp, isLoading, errors };
 }
 
-// ── Helper ──────────────────────────────────────────────
 function getErrorMessage(code?: number, fallback?: string): string {
   switch (code) {
     case 1002: return 'Số điện thoại hoặc mật khẩu không đúng';
@@ -119,6 +115,6 @@ function getErrorMessage(code?: number, fallback?: string): string {
     case 1005: return 'Mã OTP không đúng';
     case 1006: return 'Mã OTP đã hết hạn. Vui lòng gửi lại.';
     case 1007: return 'Nhập sai quá nhiều lần. Vui lòng gửi lại mã mới.';
-    default:   return fallback || 'Đã xảy ra lỗi. Vui lòng thử lại.';
+    default: return fallback || 'Đã xảy ra lỗi. Vui lòng thử lại.';
   }
 }

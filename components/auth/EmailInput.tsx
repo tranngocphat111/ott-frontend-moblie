@@ -1,4 +1,3 @@
-// components/auth/EmailInput.tsx
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';

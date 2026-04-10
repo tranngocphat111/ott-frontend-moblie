@@ -7,6 +7,7 @@ export interface UserResponse {
   googleId?: string;
   fullName: string;
   avatarUrl?: string;
+  coverUrl?: string;
   accountType: AccountType;
   isPhoneVerified: boolean;
   isEmailVerified: boolean;

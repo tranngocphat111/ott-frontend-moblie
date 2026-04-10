@@ -13,8 +13,9 @@ export const qrApi = {
    * Generate QR code for login (Desktop/Web)
    */
   generateQrCode: async (): Promise<ApiResponse<QrCodeResponse>> => {
+    const deviceInfo = await getDeviceInfo();
     const payload: QrGenerateRequest = {
-      ...getDeviceInfo(),
+      ...deviceInfo,
     };
     return apiClient.post('/auth/qr/generate', payload);
   },
@@ -23,10 +24,11 @@ export const qrApi = {
    * Scan QR code (Mobile - requires auth)
    */
   scanQrCode: async (qrData: string, location?: string): Promise<ApiResponse<QrStatusResponse>> => {
+    const deviceInfo = await getDeviceInfo();
     const payload: QrScanRequest = {
       qrData,
       location,
-      ...getDeviceInfo(),
+      ...deviceInfo,
     };
     return apiClient.post('/auth/qr/scan', payload);
   },

@@ -1,8 +1,8 @@
+import { useAuth } from '@/contexts/Authcontext';
+import { authApi } from '@/services/api/auth.api';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { authApi } from '@/services/api/auth.api';
-import { useAuth } from '@/context/Authcontext';
 
 interface OtpLoginErrors {
   email?: string;

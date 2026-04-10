@@ -1,19 +1,31 @@
-// hooks/profile/useTwoFactor.ts
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { twoFactorApi } from '@/services/api/twoFactor.api';
+import { useAuth } from '@/contexts/Authcontext';
+import { getErrorMessage } from '@/utils/messageMapping';
+import type { TwoFactorAuthStatus, Enable2FARequest, Disable2FARequest } from '@/types';
 
 export function useTwoFactor() {
-  const [isEnabled, setIsEnabled] = useState(false);
+  const { refreshUser } = useAuth();
+  const [status, setStatus] = useState<TwoFactorAuthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const startCountdown = (seconds: number) => {
+  useEffect(() => {
+    fetchStatus();
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  const startCountdown = (seconds = 60) => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
     setCountdown(seconds);
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          clearInterval(interval);
+          if (intervalRef.current) clearInterval(intervalRef.current);
           return 0;
         }
         return prev - 1;
@@ -21,88 +33,92 @@ export function useTwoFactor() {
     }, 1000);
   };
 
-  const checkStatus = async () => {
+  const fetchStatus = async () => {
     setIsLoading(true);
     try {
-      const response = await twoFactorApi.isEnabled();
-      if (response.success && response.data !== undefined) {
-        setIsEnabled(response.data);
-      }
-    } catch (error) {
-      Alert.alert('Lỗi', 'Không thể kiểm tra trạng thái 2FA');
+      const response = await twoFactorApi.getStatus();
+      if (response.result) setStatus(response.result);
+    } catch (err) {
+      console.error('Failed to fetch 2FA status:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const requestEnable = async () => {
+  // Bật 2FA - bước 1: gửi OTP
+  const requestEnableOtp = async (): Promise<void> => {
+    setIsLoading(true);
     try {
-      const response = await twoFactorApi.requestEnable();
-      if (response.success) {
-        startCountdown(60);
-        Alert.alert('Thành công', 'Mã OTP đã được gửi đến số điện thoại của bạn');
-        return true;
+      await twoFactorApi.requestEnable();
+      startCountdown(60);
+    } catch (err: unknown) {
+      const msg: string =
+        (err as any)?.response?.data?.message ||
+        (err as any)?.message || '';
+      if (!msg.includes('password required') && !msg.includes('already enabled') && !msg.includes('đã được bật')) {
+        Alert.alert('Lỗi', getErrorMessage(err));
       }
-      return false;
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể gửi OTP');
-      return false;
+      throw err; 
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const enable = async (otp: string) => {
+  const enable = async (data: Enable2FARequest) => {
+    setIsLoading(true);
     try {
-      const response = await twoFactorApi.enable({ otp });
-      if (response.success) {
-        setIsEnabled(true);
-        Alert.alert('Thành công', 'Đã bật xác thực 2 bước');
-        return true;
+      const response = await twoFactorApi.enable(data);
+      if (response.result) {
+        await fetchStatus();
+        await refreshUser();
       }
-      return false;
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể bật 2FA');
-      return false;
+      return response.result; // có backupCodes
+    } catch (err: unknown) {
+      Alert.alert('Lỗi', getErrorMessage(err));
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const requestDisable = async () => {
+  // Tắt 2FA - bước 1: xác nhận mật khẩu → gửi OTP
+  const requestDisableOtp = async (password: string): Promise<void> => {
+    setIsLoading(true);
     try {
-      const response = await twoFactorApi.requestDisable({ reason: 'User request' });
-      if (response.success) {
-        startCountdown(60);
-        Alert.alert('Thành công', 'Mã OTP đã được gửi đến số điện thoại của bạn');
-        return true;
-      }
-      return false;
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể gửi OTP');
-      return false;
+      await twoFactorApi.requestDisable({ password });
+      startCountdown(60);
+    } catch (err: unknown) {
+      Alert.alert('Lỗi', getErrorMessage(err));
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const disable = async (otp: string) => {
+  // Tắt 2FA - bước 2: xác nhận OTP
+  const disable = async (data: Disable2FARequest) => {
+    setIsLoading(true);
     try {
-      const response = await twoFactorApi.disable({ otp });
-      if (response.success) {
-        setIsEnabled(false);
-        Alert.alert('Thành công', 'Đã tắt xác thực 2 bước');
-        return true;
-      }
-      return false;
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể tắt 2FA');
-      return false;
+      const response = await twoFactorApi.disable(data);
+      await fetchStatus();
+      await refreshUser();
+      return response;
+    } catch (err: unknown) {
+      Alert.alert('Lỗi', getErrorMessage(err));
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return {
-    isEnabled,
+    status,
     isLoading,
     countdown,
-    checkStatus,
-    requestEnable,
+    fetchStatus,
+    requestEnableOtp,
     enable,
-    requestDisable,
+    requestDisableOtp,
     disable,
   };
 }

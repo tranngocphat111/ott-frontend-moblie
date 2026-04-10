@@ -1,7 +1,7 @@
 // app/(auth)/setup-phone.tsx
 import PhoneInput from '@/components/auth/EmailInput';
 import PrimaryButton from '@/components/common/PrimaryButton';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';

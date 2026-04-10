@@ -56,8 +56,8 @@ export default function LoginScreen() {
     }
   };
 
-  const handleVerify2FA = async () => {
-    await verify2FA(tempToken, otp);
+  const handleVerify2FA = async (isBackupCode: boolean) => {
+    await verify2FA(tempToken, otp, isBackupCode);
   };
 
   const handleResend2FA = async () => {

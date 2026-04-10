@@ -1,11 +1,10 @@
+import { useAuth } from '@/contexts/Authcontext';
 import { Redirect } from 'expo-router';
-import { useAuth } from '@/context/Authcontext';
-import { View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 
 export default function Index() {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // Loading state
   if (isLoading) {
     return (
       <View
@@ -21,7 +20,6 @@ export default function Index() {
     );
   }
 
-  // Redirect based on auth
   if (isAuthenticated) {
     return <Redirect href="/(main)/(tabs)/home" />;
   }

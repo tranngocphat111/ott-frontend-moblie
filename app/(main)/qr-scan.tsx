@@ -1,4 +1,3 @@
-// app/(main)/qr-scan.tsx
 import { useQrLogin } from '@/hooks/auth/useQrLogin';
 import { Feather } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -19,7 +18,6 @@ export default function QrScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const { scanQr, confirmQr, isLoading } = useQrLogin();
 
-  // ✅ useRef block ngay lập tức, không chờ re-render như useState
   const isProcessing = useRef(false);
   const [scanned, setScanned] = useState(false);
 

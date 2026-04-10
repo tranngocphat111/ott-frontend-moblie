@@ -16,6 +16,7 @@ import type {
   EmailChangeResponse,
   PhoneChangeResponse,
   AccountDeletionResponse,
+  VerifyForgotOtpRequest,
 } from '../../types';
 
 export const accountApi = {
@@ -61,5 +62,8 @@ export const accountApi = {
 
   deleteAccount: async (data: DeleteAccountRequest): Promise<ApiResponse<AccountDeletionResponse>> => {
     return apiClient.delete('/users/account', { data });
+  },
+  verifyForgotOtp: async (data: VerifyForgotOtpRequest): Promise<ApiResponse<void>> => {
+    return apiClient.post('/users/account/password/forgot/otp/verify', data);
   },
 };

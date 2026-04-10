@@ -1,125 +1,124 @@
-// hooks/profile/useDeleteAccount.ts
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { accountApi } from '@/services/api/account.api';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
+
+type DeleteAccountStep = 'warning' | 'confirm' | 'otp';
 
 interface DeleteAccountErrors {
   password?: string;
+  confirmText?: string;
   otp?: string;
   general?: string;
 }
 
-const OTP_EXPIRY_SECONDS = 120;
-
 export const useDeleteAccount = () => {
   const router = useRouter();
-  const { logout } = useAuth();
-  
+  const { logout, user } = useAuth();
+
+  const [step, setStep] = useState<DeleteAccountStep>('warning');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<DeleteAccountErrors>({});
-  const [otpSent, setOtpSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  const startCountdown = () => {
-    setCountdown(OTP_EXPIRY_SECONDS);
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
+  const [password, setPassword] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const [otp, setOtp] = useState('');
 
-  const requestOtp = async (): Promise<boolean> => {
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setInterval(() => setCountdown(prev => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  const requestOtp = async () => {
+    const normalized = confirmText.trim().toUpperCase();
+    if (normalized !== 'DELETE') {
+      setErrors({ confirmText: 'Vui lòng nhập chính xác: DELETE' });
+      return;
+    }
+    if (user?.hasPassword && !password.trim()) {
+      setErrors({ password: 'Vui lòng nhập mật khẩu' });
+      return;
+    }
+
     setIsLoading(true);
     setErrors({});
-
     try {
-      const response = await accountApi.requestDeleteAccount({});
-
-      if (response.code === 1000 && response.result) {
-        setOtpSent(true);
-        startCountdown();
-        Alert.alert(
-          'Thành công',
-          `Mã OTP đã được gửi đến ${response.result.email || response.result.phone}`
-        );
-        return true;
-      } else {
-        setErrors({ general: response.message || 'Không thể gửi OTP' });
-        return false;
-      }
+      await accountApi.requestDeleteAccount({
+        password: user?.hasPassword ? password : undefined,
+      });
+      setStep('otp');
+      setCountdown(60);
+      setConfirmText('');
     } catch (error: any) {
-      setErrors({ general: error.message || 'Đã xảy ra lỗi' });
-      return false;
+      const msg: string = error?.message || 'Đã xảy ra lỗi';
+      if (msg.includes('mật khẩu') || msg.includes('password')) {
+        setErrors({ password: 'Mật khẩu không đúng. Vui lòng thử lại.' });
+      } else {
+        setErrors({ general: msg });
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const resendOtp = async (): Promise<boolean> => {
-    if (countdown > 0) {
-      Alert.alert('Thông báo', `Vui lòng đợi ${countdown} giây trước khi gửi lại`);
-      return false;
-    }
-    return await requestOtp();
-  };
-
-  const deleteAccount = async (otp: string, password?: string): Promise<boolean> => {
+  const resendOtp = async () => {
+    if (countdown > 0) return;
     setIsLoading(true);
     setErrors({});
+    try {
+      await accountApi.requestDeleteAccount({});
+      setOtp('');
+      setCountdown(60);
+    } catch (error: any) {
+      setErrors({ general: error?.message || 'Không thể gửi lại OTP' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  const deleteAccount = async () => {
     if (!otp || otp.length !== 6) {
       setErrors({ otp: 'Mã OTP phải có 6 chữ số' });
-      setIsLoading(false);
-      return false;
+      return;
     }
 
+    setIsLoading(true);
+    setErrors({});
     try {
-      const response = await accountApi.deleteAccount({
-        otp,
-        password,
-      });
-
-      if (response.code === 1000) {
-        Alert.alert(
-          'Xóa tài khoản thành công',
-          'Tài khoản của bạn đã được xóa. Bạn sẽ được đăng xuất.',
-          [
-            {
-              text: 'OK',
-              onPress: async () => {
-                await logout();
-                router.replace('../(auth)/landing');
-              },
-            },
-          ]
-        );
-        return true;
-      } else {
-        setErrors({ general: response.message || 'Xóa tài khoản thất bại' });
-        return false;
-      }
+      await accountApi.deleteAccount({ otp });
+      Alert.alert(
+        'Xóa tài khoản thành công',
+        'Tài khoản của bạn đã được xóa vĩnh viễn.',
+        [{ text: 'OK', onPress: async () => { await logout(); } }]
+      );
     } catch (error: any) {
-      setErrors({ general: error.message || 'Đã xảy ra lỗi' });
-      return false;
+      setErrors({ general: error?.message || 'Xóa tài khoản thất bại' });
+      setOtp('');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const goToConfirm = () => setStep('confirm');
+  const backToWarning = () => { setStep('warning'); setErrors({}); };
+  const backToConfirm = () => { setStep('confirm'); setOtp(''); setErrors({}); };
+
   return {
+    step,
+    isLoading,
+    errors,
+    countdown,
+    password, setPassword,
+    confirmText, setConfirmText,
+    otp, setOtp,
     requestOtp,
     resendOtp,
     deleteAccount,
-    isLoading,
-    errors,
-    otpSent,
-    countdown,
+    goToConfirm,
+    backToWarning,
+    backToConfirm,
   };
 };

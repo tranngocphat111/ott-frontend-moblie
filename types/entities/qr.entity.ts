@@ -1,4 +1,4 @@
-import { DeviceType, QrCodeStatus, QrCodeType, QrLoginSessionStatus } from '../enums';
+import type { DeviceType, QrCodeStatus, QrCodeType, QrLoginSessionStatus } from '../enums';
 
 export interface QrCode {
   id: string;

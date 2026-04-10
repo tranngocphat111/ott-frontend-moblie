@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { linkingApi } from '@/services/api/linking.api';
 import { otpApi } from '@/services/api/otp.api';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 
 interface LinkEmailErrors {
   email?: string;
