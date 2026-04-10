@@ -10,12 +10,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/context/Authcontext';
+import { THEME_COLORS } from '@/constants/theme';
 import { ChatApi } from '@/services/api';
 import type { ChatMessage } from '@/types/entities/chat';
 import { getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
@@ -45,6 +47,7 @@ const getFirstContent = (message: ChatMessage) => {
 
 export default function ChatInfoScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const { user, chatUserId } = useAuth();
 
@@ -246,11 +249,12 @@ export default function ChatInfoScreen() {
   }, [tab, members, pinnedMessages, mediaMessages, fileMessages, linkMessages]);
 
   return (
-    <SafeAreaView className="flex-1 bg-[#f3f4f8]" edges={['top']}>
-      <LinearGradient colors={['#1d84f2', '#1ca6e9']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} className="px-4 pb-3 pt-3">
+    <SafeAreaView className="flex-1 bg-surface-sunken" edges={['left', 'right']}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <LinearGradient colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} className="px-4 pb-3" style={{ paddingTop: insets.top + 10 }}>
         <View className="flex-row items-center gap-3">
           <Pressable onPress={() => router.back()} className="h-10 w-10 rounded-full bg-white/20 items-center justify-center">
-            <Feather name="chevron-left" size={20} color="#fff" />
+            <Feather name="chevron-left" size={20} color={THEME_COLORS.neutral.white} />
           </Pressable>
 
           <View className="h-11 w-11 overflow-hidden rounded-full bg-slate-200">
@@ -272,7 +276,7 @@ export default function ChatInfoScreen() {
             <Pressable
               key={item.key}
               onPress={() => setTab(item.key)}
-              className={`rounded-full px-3 py-2 ${tab === item.key ? 'bg-[#8b6642]' : 'bg-slate-100'}`}
+              className={`rounded-full px-3 py-2 ${tab === item.key ? 'bg-primary-600' : 'bg-slate-100'}`}
             >
               <Text className={`text-[12px] font-semibold ${tab === item.key ? 'text-white' : 'text-slate-600'}`}>
                 {item.label}
@@ -310,7 +314,7 @@ export default function ChatInfoScreen() {
         <View className="mt-3 flex-row gap-2">
           <Pressable
             onPress={() => handleChangeNotificationStatus('on')}
-            className={`rounded-full px-3 py-2 ${participant?.settings?.notification_status === 'on' ? 'bg-[#1d84f2]' : 'bg-slate-100'}`}
+            className={`rounded-full px-3 py-2 ${participant?.settings?.notification_status === 'on' ? 'bg-primary-600' : 'bg-slate-100'}`}
           >
             <Text className={`text-[12px] font-semibold ${participant?.settings?.notification_status === 'on' ? 'text-white' : 'text-slate-700'}`}>
               Báo đầy đủ
@@ -318,7 +322,7 @@ export default function ChatInfoScreen() {
           </Pressable>
           <Pressable
             onPress={() => handleChangeNotificationStatus('mute')}
-            className={`rounded-full px-3 py-2 ${participant?.settings?.notification_status === 'mute' ? 'bg-[#1d84f2]' : 'bg-slate-100'}`}
+            className={`rounded-full px-3 py-2 ${participant?.settings?.notification_status === 'mute' ? 'bg-primary-600' : 'bg-slate-100'}`}
           >
             <Text className={`text-[12px] font-semibold ${participant?.settings?.notification_status === 'mute' ? 'text-white' : 'text-slate-700'}`}>
               Tắt tạm thời
@@ -326,7 +330,7 @@ export default function ChatInfoScreen() {
           </Pressable>
           <Pressable
             onPress={() => handleChangeNotificationStatus('off')}
-            className={`rounded-full px-3 py-2 ${participant?.settings?.notification_status === 'off' ? 'bg-[#1d84f2]' : 'bg-slate-100'}`}
+            className={`rounded-full px-3 py-2 ${participant?.settings?.notification_status === 'off' ? 'bg-primary-600' : 'bg-slate-100'}`}
           >
             <Text className={`text-[12px] font-semibold ${participant?.settings?.notification_status === 'off' ? 'text-white' : 'text-slate-700'}`}>
               Tắt hẳn
@@ -341,7 +345,7 @@ export default function ChatInfoScreen() {
           <View className="flex-row flex-wrap gap-2">
             <Pressable
               onPress={() => handleSelectCategory(null)}
-              className={`rounded-full px-3 py-2 ${!participant?.settings?.category_id ? 'bg-[#8b6642]' : 'bg-slate-100'}`}
+              className={`rounded-full px-3 py-2 ${!participant?.settings?.category_id ? 'bg-primary-600' : 'bg-slate-100'}`}
             >
               <Text className={`text-[12px] font-semibold ${!participant?.settings?.category_id ? 'text-white' : 'text-slate-700'}`}>
                 Không phân loại
@@ -354,7 +358,7 @@ export default function ChatInfoScreen() {
                 <Pressable
                   key={category._id}
                   onPress={() => handleSelectCategory(category._id)}
-                  className={`rounded-full px-3 py-2 ${isSelected ? 'bg-[#8b6642]' : 'bg-slate-100'}`}
+                  className={`rounded-full px-3 py-2 ${isSelected ? 'bg-primary-600' : 'bg-slate-100'}`}
                 >
                   <Text className={`text-[12px] font-semibold ${isSelected ? 'text-white' : 'text-slate-700'}`}>
                     {category.name}
@@ -368,7 +372,7 @@ export default function ChatInfoScreen() {
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#8b6642" />
+          <ActivityIndicator size="large" color={THEME_COLORS.primary[600]} />
         </View>
       ) : (
         <FlatList
@@ -393,7 +397,7 @@ export default function ChatInfoScreen() {
                     <Text className="text-[14px] font-semibold text-slate-900">{name}</Text>
                     <Text className="text-[12px] text-slate-500">{item?.roles === 'admin' ? 'Quản trị viên' : 'Thành viên'}</Text>
                   </View>
-                  <Feather name="more-horizontal" size={16} color="#64748b" />
+                  <Feather name="more-horizontal" size={16} color={THEME_COLORS.neutral.slate500} />
                 </Pressable>
               );
             }
@@ -436,7 +440,7 @@ export default function ChatInfoScreen() {
             <View className="mb-3 flex-row items-center justify-between">
               <Text className="text-[18px] font-bold text-slate-900">Thêm thành viên</Text>
               <Pressable className="h-8 w-8 items-center justify-center rounded-full bg-slate-100" onPress={() => setMemberModalVisible(false)}>
-                <Feather name="x" size={16} color="#334155" />
+                <Feather name="x" size={16} color={THEME_COLORS.neutral.slate700} />
               </Pressable>
             </View>
 
@@ -447,13 +451,13 @@ export default function ChatInfoScreen() {
               renderItem={({ item }) => (
                 <Pressable onPress={() => void handleAddMember(item.user_id)} className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-3 py-3">
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-slate-200">
-                    {item.avatar ? <Image source={{ uri: item.avatar }} className="h-full w-full rounded-full" /> : <Feather name="user" size={16} color="#64748b" />}
+                    {item.avatar ? <Image source={{ uri: item.avatar }} className="h-full w-full rounded-full" /> : <Feather name="user" size={16} color={THEME_COLORS.neutral.slate500} />}
                   </View>
                   <View className="flex-1">
                     <Text className="text-[14px] font-semibold text-slate-900">{item.name || item.user_id}</Text>
                     <Text className="text-[12px] text-slate-500">{item.user_id}</Text>
                   </View>
-                  <Feather name="plus-circle" size={18} color="#1d84f2" />
+                  <Feather name="plus-circle" size={18} color={THEME_COLORS.primary[600]} />
                 </Pressable>
               )}
             />
@@ -475,7 +479,7 @@ export default function ChatInfoScreen() {
               <Pressable onPress={() => setNicknameModalVisible(false)} className="rounded-xl bg-slate-100 px-4 py-2.5">
                 <Text className="text-[13px] font-semibold text-slate-700">Hủy</Text>
               </Pressable>
-              <Pressable onPress={() => void submitNickname()} className="rounded-xl bg-[#1d84f2] px-4 py-2.5">
+              <Pressable onPress={() => void submitNickname()} className="rounded-xl bg-primary-600 px-4 py-2.5">
                 <Text className="text-[13px] font-semibold text-white">Lưu</Text>
               </Pressable>
             </View>
@@ -485,3 +489,4 @@ export default function ChatInfoScreen() {
     </SafeAreaView>
   );
 }
+

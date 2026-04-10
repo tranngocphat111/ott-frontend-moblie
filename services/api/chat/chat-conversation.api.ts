@@ -1,6 +1,6 @@
 import { chatApiClient } from '../client';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
-import type { ChatSearchResult } from './chat.types';
+import type { ChatSearchOptions, ChatSearchResult } from './chat.types';
 
 export const chatConversationApi = {
   async getUserConversations(userId: string): Promise<ChatConversationWithParticipant[]> {
@@ -24,9 +24,16 @@ export const chatConversationApi = {
     return await chatApiClient.put(`/conversations/${conversationId}`, payload);
   },
 
-  async searchEverything(userId: string, keyword: string): Promise<ChatSearchResult> {
-    return await chatApiClient.get(
-      `/search/${encodeURIComponent(userId)}?keyword=${encodeURIComponent(keyword)}`,
-    );
+  async searchEverything(
+    userId: string,
+    keyword: string,
+    options?: ChatSearchOptions,
+  ): Promise<ChatSearchResult> {
+    const params = new URLSearchParams();
+    params.set('q', keyword);
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.senderId) params.set('senderId', options.senderId);
+
+    return await chatApiClient.get(`/search/${encodeURIComponent(userId)}?${params.toString()}`);
   },
 };

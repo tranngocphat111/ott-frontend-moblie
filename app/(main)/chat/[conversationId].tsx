@@ -11,11 +11,13 @@ import {
   FlatList,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/Authcontext';
+import { THEME_COLORS } from '@/constants/theme';
 import type { ChatMessage, ChatMessageContent } from '@/types/entities/chat';
 import { ChatComposer, ChatMessageBubble } from '@/components/chat';
 import {
@@ -63,6 +65,7 @@ const patchMessageById = (
 
 export default function ChatDetailScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const { user, chatUserId } = useAuth();
 
@@ -93,6 +96,7 @@ export default function ChatDetailScreen() {
   const [messageText, setMessageText] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [showPinnedList, setShowPinnedList] = useState(false);
 
   // Conversation metadata
   const title = getConversationTitle(conversation, userIdForChat);
@@ -123,8 +127,7 @@ export default function ChatDetailScreen() {
     if (String(payload?.conversation_id || '') !== String(conversationId)) return;
     setMessages((current) => patchMessageById(current, payload, undefined, normalizeMessages));
     setPinnedMessages((current) => {
-      const next = patchMessageById(current, payload, { remove: !payload.is_pinned }, normalizeMessages);
-      return next.slice(0, 3);
+      return patchMessageById(current, payload, { remove: !payload.is_pinned }, normalizeMessages);
     });
   }, [conversationId, normalizeMessages]);
 
@@ -136,7 +139,7 @@ export default function ChatDetailScreen() {
   const handleMessageDeleted = useCallback((payload: ChatMessage) => {
     if (String(payload?.conversation_id || '') !== String(conversationId)) return;
     setMessages((current) => patchMessageById(current, payload, { remove: true }, normalizeMessages));
-    setPinnedMessages((current) => patchMessageById(current, payload, { remove: true }, normalizeMessages).slice(0, 3));
+    setPinnedMessages((current) => patchMessageById(current, payload, { remove: true }, normalizeMessages));
   }, [conversationId, normalizeMessages]);
 
   // Setup socket listeners
@@ -179,19 +182,22 @@ export default function ChatDetailScreen() {
   }, [conversationId, userIdForChat, messageText, replyToMessage?.msg_id, loadConversation]);
 
   const pinnedChips = pinnedMessages.slice(0, 3);
+  const pinnedCount = pinnedMessages.length;
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F2F4F7]" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-surface-sunken" edges={['left', 'right']}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <LinearGradient
-          colors={['#1d84f2', '#1ca6e9']}
+          colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          className="px-4 py-3"
+          className="px-4 pb-3"
+          style={{ paddingTop: insets.top + 10 }}
         >
           <View className="flex-row items-center gap-3">
             <Pressable onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full bg-white/20">
-              <Feather name="chevron-left" size={20} color="#fff" />
+              <Feather name="chevron-left" size={20} color={THEME_COLORS.neutral.white} />
             </Pressable>
 
             <View className="flex-1 flex-row items-center gap-3">
@@ -218,7 +224,7 @@ export default function ChatDetailScreen() {
             </View>
 
             <Pressable className="h-10 w-10 items-center justify-center rounded-full bg-white/20">
-              <Feather name="phone" size={18} color="#fff" />
+              <Feather name="phone" size={18} color={THEME_COLORS.neutral.white} />
             </Pressable>
             <Pressable
               onPress={() =>
@@ -231,36 +237,65 @@ export default function ChatDetailScreen() {
               }
               className="h-10 w-10 items-center justify-center rounded-full bg-white/20"
             >
-              <Feather name="menu" size={18} color="#fff" />
+              <Feather name="menu" size={18} color={THEME_COLORS.neutral.white} />
             </Pressable>
           </View>
         </LinearGradient>
 
         {pinnedChips.length > 0 && (
           <View className="border-b border-slate-200 bg-white px-4 py-2">
-            <Pressable
-              onPress={() => pinnedChips[0]?.msg_id && highlightMessage(pinnedChips[0].msg_id)}
-              className="flex-row items-center justify-between rounded-2xl bg-slate-100 px-3 py-2"
-            >
-              <View className="mr-3 flex-1">
+            <View className="flex-row items-center gap-2 rounded-2xl bg-slate-100 px-3 py-2">
+              <Pressable
+                onPress={() => pinnedChips[0]?.msg_id && highlightMessage(pinnedChips[0].msg_id)}
+                className="flex-1"
+              >
                 <Text className="text-[13px] font-semibold text-slate-700" numberOfLines={1}>
                   {`@${pinnedChips[0]?.sender_name || 'Thành viên'}`}
                 </Text>
                 <Text className="text-[13px] text-slate-500" numberOfLines={1}>
                   {getMessageBodyText(pinnedChips[0])}
                 </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setShowPinnedList((prev) => !prev)}
+                className="flex-row items-center rounded-full border border-slate-300 px-3 py-1"
+              >
+                <Text className="mr-1 text-[12px] font-semibold text-slate-600">+{pinnedCount}</Text>
+                <Feather name={showPinnedList ? 'chevron-up' : 'chevron-down'} size={13} color={THEME_COLORS.neutral.slate500} />
+              </Pressable>
+            </View>
+
+            {showPinnedList && (
+              <View className="mt-2 gap-2">
+                {pinnedMessages.map((item) => (
+                  <Pressable
+                    key={item.msg_id || item._id}
+                    onPress={() => {
+                      if (item.msg_id) {
+                        highlightMessage(item.msg_id);
+                        setShowPinnedList(false);
+                      }
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <Text className="text-[12px] font-semibold text-slate-700" numberOfLines={1}>
+                      {item.sender_name || 'Thành viên'}
+                    </Text>
+                    <Text className="mt-0.5 text-[13px] text-slate-500" numberOfLines={2}>
+                      {getMessageBodyText(item)}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
-              <View className="rounded-full border border-slate-300 px-3 py-1">
-                <Text className="text-[12px] font-semibold text-slate-600">+{pinnedChips.length}</Text>
-              </View>
-            </Pressable>
+            )}
           </View>
         )}
 
         <View className="flex-1">
           {loading ? (
             <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#8b5e34" />
+              <ActivityIndicator size="large" color={THEME_COLORS.primary[600]} />
               <Text className="mt-3 text-[14px] text-slate-500">Đang tải cuộc trò chuyện...</Text>
             </View>
           ) : (
@@ -326,7 +361,7 @@ export default function ChatDetailScreen() {
               }}
               ListEmptyComponent={
                 <View className="flex-1 items-center justify-center px-6 py-24">
-                  <Feather name="message-square" size={32} color="#94a3b8" />
+                  <Feather name="message-square" size={32} color={THEME_COLORS.neutral.slate400} />
                   <Text className="mt-3 text-[15px] font-semibold text-slate-900">
                     Chưa có tin nhắn
                   </Text>
@@ -355,7 +390,7 @@ export default function ChatDetailScreen() {
             <Image source={{ uri: selectedImage }} className="h-[72%] w-full rounded-3xl" resizeMode="contain" />
           )}
           <Pressable onPress={() => setSelectedImage(null)} className="absolute right-5 top-16 h-11 w-11 items-center justify-center rounded-full bg-white/10">
-            <Feather name="x" size={22} color="#fff" />
+            <Feather name="x" size={22} color={THEME_COLORS.neutral.white} />
           </Pressable>
         </Pressable>
       </Modal>

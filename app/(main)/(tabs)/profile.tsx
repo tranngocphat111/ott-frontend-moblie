@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/Authcontext';
 import { useTheme } from '@/contexts/Themecontext';
+import { THEME_COLORS } from '@/constants/theme';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -132,7 +133,7 @@ export default function ProfileScreen() {
                 onPress={() => router.push('/profile/edit')}
                 className="flex-row items-center gap-1 bg-brand-600 px-4 py-2 rounded-2xl mt-2"
               >
-                <Feather name="edit-2" size={14} color="#fff" />
+                <Feather name="edit-2" size={14} color={THEME_COLORS.neutral.white} />
                 <Text className="text-white text-sm font-semibold ml-1">Chỉnh sửa</Text>
               </TouchableOpacity>
             </View>
@@ -142,13 +143,13 @@ export default function ProfileScreen() {
                 <Text className="text-xl font-bold text-brand-900">{user?.fullName || 'Người dùng'}</Text>
                 {user?.is2FAEnabled && (
                   <View className="flex-row items-center bg-green-100 px-2 py-0.5 rounded">
-                    <Feather name="shield" size={11} color="#16a34a" />
+                    <Feather name="shield" size={11} color={THEME_COLORS.neutral.green500} />
                     <Text className="text-green-700 text-xs font-medium ml-1">2FA</Text>
                   </View>
                 )}
                 {isGoogleUser && (
                   <View className="flex-row items-center bg-brand-100 px-2 py-0.5 rounded">
-                    <Feather name="globe" size={11} color="#8b6642" />
+                    <Feather name="globe" size={11} color={THEME_COLORS.primary[600]} />
                     <Text className="text-brand-700 text-xs font-medium ml-1">Google</Text>
                   </View>
                 )}
@@ -157,7 +158,7 @@ export default function ProfileScreen() {
               {user?.bio ? <Text className="text-sm text-brand-600 mt-1">{user.bio}</Text> : null}
 
               <View className="flex-row items-center gap-1 mt-2">
-                <Feather name="calendar" size={13} color="#bc9166" />
+                <Feather name="calendar" size={13} color={THEME_COLORS.primary[400]} />
                 <Text className="text-xs text-brand-500 ml-1">Tham gia {formatDate(user?.createdAt)}</Text>
               </View>
             </View>
@@ -168,7 +169,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/(main)/qr-scan')}
           className="mx-4 mt-4 bg-brand-600 rounded-2xl py-4 flex-row items-center justify-center gap-3"
         >
-          <Feather name="maximize" size={22} color="#fff" />
+          <Feather name="maximize" size={22} color={THEME_COLORS.neutral.white} />
           <View>
             <Text className="text-white font-bold text-base">Quét mã QR</Text>
             <Text className="text-brand-100 text-xs">Đăng nhập web bằng điện thoại</Text>
@@ -220,13 +221,13 @@ export default function ProfileScreen() {
                   <Feather
                     name={item.icon as any}
                     size={18}
-                    color={item.danger ? '#ef4444' : '#694d31'}
+                    color={item.danger ? THEME_COLORS.error.border : THEME_COLORS.primary[700]}
                   />
                 </View>
                 <Text className={`flex-1 text-sm ml-3 ${item.danger ? 'text-red-600' : 'text-brand-900'}`}>
                   {item.title}
                 </Text>
-                <Feather name="chevron-right" size={18} color="#bc9166" />
+                <Feather name="chevron-right" size={18} color={THEME_COLORS.primary[400]} />
               </TouchableOpacity>
             ))}
           </View>
@@ -237,7 +238,7 @@ export default function ProfileScreen() {
             onPress={handleLogout}
             className="bg-red-50 border border-red-200 rounded-2xl py-4 flex-row items-center justify-center"
           >
-            <Feather name="log-out" size={20} color="#dc2626" />
+            <Feather name="log-out" size={20} color={THEME_COLORS.neutral.red600} />
             <Text className="text-red-600 font-semibold ml-2">Đăng xuất</Text>
           </TouchableOpacity>
         </View>
@@ -245,3 +246,4 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
+

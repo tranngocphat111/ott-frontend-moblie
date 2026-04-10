@@ -46,7 +46,7 @@ export const UserPickerModal: React.FC<UserPickerModalProps> = ({
                 return (
                   <Pressable
                     onPress={() => onSelectUser(item.user_id)}
-                    className={`mb-2 flex-row items-center rounded-2xl border px-3 py-3 ${isSelected ? 'border-[#8b6642] bg-[#f7efe7]' : 'border-slate-200 bg-white'}`}
+                    className={`mb-2 flex-row items-center rounded-2xl border px-3 py-3 ${isSelected ? 'border-primary-600 bg-primary-50' : 'border-slate-200 bg-white'}`}
                   >
                     <View className="mr-3 h-12 w-12 overflow-hidden rounded-full bg-slate-200 items-center justify-center">
                       {item.avatar ? (
@@ -66,7 +66,7 @@ export const UserPickerModal: React.FC<UserPickerModalProps> = ({
                     </View>
 
                     {isSelected ? (
-                      <View className="h-6 w-6 items-center justify-center rounded-full bg-[#8b6642]">
+                      <View className="h-6 w-6 items-center justify-center rounded-full bg-primary-600">
                         <Feather name="check" size={14} color="#fff" />
                       </View>
                     ) : (

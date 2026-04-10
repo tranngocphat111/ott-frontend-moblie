@@ -30,7 +30,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
 }) => {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView className="flex-1 bg-[#f3f4f8]">
+      <SafeAreaView className="flex-1 bg-surface-sunken">
         <LinearGradient colors={['#1d84f2', '#1ca6e9']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} className="px-4 pb-4 pt-3">
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-[20px] font-bold text-white">Tìm kiếm nâng cao</Text>
@@ -48,7 +48,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
               className="ml-2 flex-1 text-[15px] text-white"
             />
             <Pressable onPress={onSearch} className="rounded-full bg-white px-3 py-1.5">
-              <Text className="text-[12px] font-semibold text-[#1d84f2]">Tìm</Text>
+              <Text className="text-[12px] font-semibold text-primary-600">Tìm</Text>
             </Pressable>
           </View>
         </LinearGradient>
@@ -64,7 +64,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
               <Pressable
                 key={tab.key}
                 onPress={() => onTabChange(tab.key as 'messages' | 'files' | 'links' | 'media')}
-                className={`rounded-full px-3 py-1.5 ${activeTab === tab.key ? 'bg-[#1d84f2]' : 'bg-slate-100'}`}
+                className={`rounded-full px-3 py-1.5 ${activeTab === tab.key ? 'bg-primary-600' : 'bg-slate-100'}`}
               >
                 <Text className={`text-[12px] font-semibold ${activeTab === tab.key ? 'text-white' : 'text-slate-600'}`}>
                   {tab.label}

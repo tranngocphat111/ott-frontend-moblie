@@ -44,15 +44,27 @@ export function useConversationMessages(conversationId: string | undefined, user
         ChatApi.getPinnedMessages(conversationId).catch(() => [] as ChatMessage[]),
       ]);
 
+      const normalizedMessages = Array.isArray(messagePayload)
+        ? messagePayload
+        : Array.isArray((messagePayload as any)?.messages)
+          ? (messagePayload as any).messages
+          : [];
+
+      const normalizedPinned = Array.isArray(pinnedPayload)
+        ? pinnedPayload
+        : Array.isArray((pinnedPayload as any)?.messages)
+          ? (pinnedPayload as any).messages
+          : [];
+
       const matched = conversationList.find(
         (item: any) => item.conversation._id === conversationId,
       );
 
       setConversation(matched?.conversation || null);
-      setMessages(normalizeMessages(messagePayload.messages || []));
-      setPinnedMessages((Array.isArray(pinnedPayload) ? pinnedPayload : []).slice(0, 3));
+      setMessages(normalizeMessages(normalizedMessages));
+      setPinnedMessages(normalizeMessages(normalizedPinned));
 
-      const lastMessage = messagePayload.messages?.[messagePayload.messages.length - 1];
+      const lastMessage = normalizedMessages[normalizedMessages.length - 1];
       if (userIdForChat && lastMessage?.msg_id) {
         void ChatApi.markAsRead(conversationId, userIdForChat, lastMessage.msg_id).catch(() => undefined);
       }

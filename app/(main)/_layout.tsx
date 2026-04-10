@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { THEME_COLORS } from '@/constants/theme';
 
 export default function MainLayout() {
   return (
@@ -6,7 +7,7 @@ export default function MainLayout() {
       screenOptions={{
         headerShown: false,
         animation: 'fade',
-        contentStyle: { backgroundColor: '#fff' },
+        contentStyle: { backgroundColor: THEME_COLORS.surface.DEFAULT },
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

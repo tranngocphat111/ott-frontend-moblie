@@ -1,6 +1,7 @@
 // components/common/PrimaryButton.tsx
 import React from 'react';
 import { ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import { THEME_COLORS } from '@/constants/theme';
 
 interface PrimaryButtonProps {
   title: string;
@@ -50,10 +51,11 @@ export default function PrimaryButton({
       activeOpacity={0.85}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' ? '#8b6642' : '#ffffff'} />
+        <ActivityIndicator color={variant === 'outline' ? THEME_COLORS.primary[600] : THEME_COLORS.neutral.white} />
       ) : (
         <Text className={`${getTextStyle()} text-base font-semibold`}>{title}</Text>
       )}
     </TouchableOpacity>
   );
 }
+

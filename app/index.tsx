@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/Authcontext';
+import { THEME_COLORS } from '@/constants/theme';
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -12,10 +13,10 @@ export default function Index() {
           flex: 1,
           justifyContent: 'center',
           alignItems: 'center',
-          backgroundColor: '#fff',
+          backgroundColor: THEME_COLORS.surface.DEFAULT,
         }}
       >
-        <ActivityIndicator size="large" color="#0084ff" />
+        <ActivityIndicator size="large" color={THEME_COLORS.primary[600]} />
       </View>
     );
   }

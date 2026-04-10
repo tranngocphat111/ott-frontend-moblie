@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useGoogleLogin } from '@/hooks/auth/useGoogleLogin';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { THEME_COLORS } from '@/constants/theme';
 
 export default function GoogleLoginScreen() {
   const router = useRouter();
@@ -24,20 +25,20 @@ export default function GoogleLoginScreen() {
         onPress={() => router.back()}
         className="px-6 pt-4"
       >
-        <Feather name="arrow-left" size={28} color="#374151" />
+        <Feather name="arrow-left" size={28} color={THEME_COLORS.neutral.gray700} />
       </TouchableOpacity>
 
       <View className="flex-1 justify-center items-center px-6">
         {isLoading ? (
           <>
-            <ActivityIndicator size="large" color="#0084ff" />
+            <ActivityIndicator size="large" color={THEME_COLORS.primary[600]} />
             <Text className="text-gray-600 mt-4 text-center">
               Đang đăng nhập bằng Google...
             </Text>
           </>
         ) : error ? (
           <>
-            <Feather name="alert-circle" size={64} color="#ef4444" />
+            <Feather name="alert-circle" size={64} color={THEME_COLORS.error.border} />
             <Text className="text-xl font-bold text-brand-900 mt-6 mb-2 text-center">
               Đăng nhập thất bại
             </Text>
@@ -53,7 +54,7 @@ export default function GoogleLoginScreen() {
           </>
         ) : (
           <>
-            <Feather name="globe" size={64} color="#0084ff" />
+            <Feather name="globe" size={64} color={THEME_COLORS.primary[600]} />
             <Text className="text-xl font-bold text-brand-900 mt-6 mb-2 text-center">
               Đăng nhập Google
             </Text>

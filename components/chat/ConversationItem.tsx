@@ -7,11 +7,14 @@ import {
   getConversationTitle,
   getMessageBodyText,
 } from '@/utils/chat';
-import { Feather } from 'lucide-react-native';
+import { THEME_COLORS } from '@/constants/theme';
+import { Pin } from 'lucide-react-native';
+import type { ChatCategory } from '@/services/api/chat';
 
 interface ConversationItemProps {
   item: ChatConversationWithParticipant;
   currentUserId?: string;
+  category?: ChatCategory | null;
   onPress: () => void;
 }
 
@@ -23,6 +26,7 @@ const getInitials = (value: string) => {
 export const ConversationItem: React.FC<ConversationItemProps> = ({
   item,
   currentUserId,
+  category,
   onPress,
 }) => {
   const { conversation, participant } = item;
@@ -75,12 +79,24 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
               {title}
             </Text>
             <View className="flex-row items-center gap-2">
-              {isPinned && <Feather name="pin" size={13} color="#1d84f2" />}
+              {isPinned && <Pin size={13} color={THEME_COLORS.primary[600]} />}
               <Text className="text-xs font-medium text-slate-400">
                 {formatConversationTime(conversation.last_message?.createdAt)}
               </Text>
             </View>
           </View>
+
+          {category && (
+            <View className="mb-1 flex-row items-center">
+              <View
+                className="mr-2 h-2.5 w-2.5 rounded-sm"
+                style={{ backgroundColor: category.color || THEME_COLORS.neutral.slate400 }}
+              />
+              <Text className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                {category.name}
+              </Text>
+            </View>
+          )}
 
           <View className="flex-row items-center justify-between gap-3">
             <Text className="flex-1 text-[13px] leading-5 text-slate-500" numberOfLines={1}>
@@ -102,3 +118,4 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
     </Pressable>
   );
 };
+

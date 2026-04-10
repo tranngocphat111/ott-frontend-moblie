@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { THEME_COLORS } from '@/constants/theme';
 
 interface ThemeContextType {
   isDark: boolean;
@@ -20,9 +21,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const colors = {
-    primary: '#0084ff',
-    background: isDark ? '#000000' : '#ffffff',
-    text: isDark ? '#ffffff' : '#000000',
+    primary: THEME_COLORS.primary[600],
+    background: isDark ? '#000000' : THEME_COLORS.surface.DEFAULT,
+    text: isDark ? THEME_COLORS.surface.DEFAULT : THEME_COLORS.chat.otherText,
   };
 
   return (

@@ -11,6 +11,32 @@ export const chatParticipantApi = {
     return await chatApiClient.get(`/categories/${userId}`);
   },
 
+  async createCategory(payload: {
+    userId: string;
+    name: string;
+    color: string;
+    icon?: string;
+    order?: number;
+  }): Promise<ChatCategory> {
+    return await chatApiClient.post('/categories', payload);
+  },
+
+  async updateCategory(
+    categoryId: string,
+    payload: {
+      name?: string;
+      color?: string;
+      icon?: string;
+      order?: number;
+    },
+  ): Promise<ChatCategory> {
+    return await chatApiClient.put(`/categories/${categoryId}`, payload);
+  },
+
+  async deleteCategory(categoryId: string): Promise<{ message?: string }> {
+    return await chatApiClient.delete(`/categories/${categoryId}`);
+  },
+
   async addMembers(
     conversationId: string,
     addedBy: string,
