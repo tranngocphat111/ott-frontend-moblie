@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useQrGenerate } from '@/hooks/auth/useQrGenerate';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { THEME_COLORS } from '@/constants/theme';
 
 export default function QrLoginScreen() {
   const router = useRouter();
@@ -19,12 +20,12 @@ export default function QrLoginScreen() {
 
   const getStatusColor = () => {
     switch (status) {
-      case 'pending': return '#3b82f6';
-      case 'scanned': return '#f59e0b';
-      case 'confirmed': return '#22c55e';
-      case 'expired': return '#ef4444';
-      case 'cancelled': return '#6b7280';
-      default: return '#3b82f6';
+      case 'pending': return THEME_COLORS.neutral.blue500;
+      case 'scanned': return THEME_COLORS.neutral.amber500;
+      case 'confirmed': return THEME_COLORS.neutral.green500;
+      case 'expired': return THEME_COLORS.error.border;
+      case 'cancelled': return THEME_COLORS.neutral.gray500;
+      default: return THEME_COLORS.neutral.blue500;
     }
   };
 
@@ -58,18 +59,18 @@ export default function QrLoginScreen() {
         onPress={() => router.back()}
         className="px-6 pt-4"
       >
-        <Feather name="arrow-left" size={28} color="#374151" />
+        <Feather name="arrow-left" size={28} color={THEME_COLORS.neutral.gray700} />
       </TouchableOpacity>
 
       <View className="flex-1 justify-center items-center px-6">
         {isLoading && !qrCode ? (
           <>
-            <ActivityIndicator size="large" color="#0084ff" />
+            <ActivityIndicator size="large" color={THEME_COLORS.primary[600]} />
             <Text className="text-gray-600 mt-4">Đang tạo mã QR...</Text>
           </>
         ) : error ? (
           <>
-            <Feather name="alert-circle" size={64} color="#ef4444" />
+            <Feather name="alert-circle" size={64} color={THEME_COLORS.error.border} />
             <Text className="text-xl font-bold text-brand-900 mt-6 mb-2 text-center">
               Lỗi
             </Text>
@@ -97,7 +98,7 @@ export default function QrLoginScreen() {
             <View className="bg-white p-6 rounded-3xl shadow-lg border border-brand-200 mb-6">
               {status === 'expired' || status === 'cancelled' ? (
                 <View className="w-64 h-64 justify-center items-center">
-                  <Feather name="x-circle" size={80} color="#ef4444" />
+                  <Feather name="x-circle" size={80} color={THEME_COLORS.error.border} />
                   <Text className="text-gray-600 mt-4 font-medium">
                     {status === 'expired' ? 'Mã đã hết hạn' : 'Đã hủy'}
                   </Text>
@@ -164,7 +165,7 @@ export default function QrLoginScreen() {
                 className="bg-brand-600 rounded-xl py-4 px-8"
               >
                 <View className="flex-row items-center">
-                  <Feather name="refresh-cw" size={20} color="#fff" />
+                  <Feather name="refresh-cw" size={20} color={THEME_COLORS.neutral.white} />
                   <Text className="text-white font-semibold ml-2">
                     Tạo mã mới
                   </Text>

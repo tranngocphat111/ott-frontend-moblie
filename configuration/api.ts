@@ -8,6 +8,20 @@ export const API_CONFIG = {
   },
 };
 
+export const CHAT_API_CONFIG = {
+  BASE_URL: process.env.EXPO_PUBLIC_CHAT_API_URL || 'http://192.168.1.22:5000/api',
+  TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
+  HEADERS: {
+    'Content-Type': 'application/json',
+  },
+};
+
+export const MEDIA_CONFIG = {
+  BASE_URL:
+    process.env.EXPO_PUBLIC_MEDIA_URL ||
+    'https://riff-storage-iuh.s3.ap-southeast-1.amazonaws.com/',
+};
+
 export const GOOGLE_CONFIG = {
   CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
   IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',

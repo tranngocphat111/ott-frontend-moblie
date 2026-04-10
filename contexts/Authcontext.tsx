@@ -7,6 +7,7 @@ import type { UserProfileResponse } from '../types';
 
 interface AuthContextType {
   user: UserProfileResponse | null;
+  chatUserId: string | null; // Từ file ngắn: ID cho chat (mock hoặc real)
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (
@@ -35,32 +36,42 @@ interface AuthContextType {
   ) => Promise<void>;
   updateProfile: (updates: Partial<UserProfileResponse>) => void;
   refreshUser: () => Promise<void>;
+  setChatUserId: (userId: string) => Promise<void>; // Từ file ngắn
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfileResponse | null>(null);
+  const [chatUserId, setChatUserIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!user;
 
+  // Hợp nhất logic logout: Xóa token, xóa chat ID và gọi API logout
   const logout = async () => {
     console.log('AuthContext: logout called');
     try {
       const token = await SecureStore.getItemAsync('accessToken');
       if (token) {
+        // Gọi API để revoke token phía server (từ file dài)
         await authApi.logout({ token });
         console.log('AuthContext: Logout API call successful');
       }
     } catch (error) {
       console.error('AuthContext: Logout API error:', error);
     } finally {
+      // Xóa tất cả storage (kết hợp cả 2 file)
       await SecureStore.deleteItemAsync('accessToken');
       await SecureStore.deleteItemAsync('refreshToken');
+      await SecureStore.deleteItemAsync('mockChatUserId');
+      
+      // Reset state
       setUser(null);
+      setChatUserIdState(null);
+      
       router.replace('/login');
-      console.log('AuthContext: Logout completed, tokens cleared');
+      console.log('AuthContext: Logout completed, tokens and chat user cleared');
     }
   };
 
@@ -73,26 +84,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(response.result);
         return response.result;
       } else {
-        console.error('AuthContext: No result in profile response');
         throw new Error('No user data in response');
       }
     } catch (error) {
       console.error('AuthContext: Failed to fetch user:', error);
-      await SecureStore.deleteItemAsync('accessToken');
-      await SecureStore.deleteItemAsync('refreshToken');
-      setUser(null);
+      await logout(); // File ngắn yêu cầu logout khi fetch lỗi
       throw error;
     }
   };
 
   const checkAuth = async () => {
     try {
+      // 1. Kiểm tra mock chat user ID (từ file ngắn)
+      const mockChatUserIdFromStorage = await SecureStore.getItemAsync('mockChatUserId');
+      if (mockChatUserIdFromStorage) {
+        console.log('[AuthContext] Found mock chat user ID:', mockChatUserIdFromStorage);
+        setChatUserIdState(mockChatUserIdFromStorage);
+      }
+
+      // 2. Kiểm tra token đăng nhập (từ file dài)
       const token = await SecureStore.getItemAsync('accessToken');
       if (token) {
         console.log('AuthContext: Found token in SecureStore, fetching user...');
         await fetchUser();
-      } else {
-        console.log('AuthContext: No token found');
       }
     } catch (error) {
       console.error('AuthContext: checkAuth error:', error);
@@ -105,26 +119,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     checkAuth();
   }, []);
 
-  // Đăng ký logout handler để interceptor có thể gọi khi token hết hạn
+  // Đăng ký logout handler để interceptor có thể gọi khi gặp 401
   useEffect(() => {
     setLogoutHandler(logout);
     console.log('AuthContext: logout handler registered');
   }, []);
 
-  // Poll mỗi 15 giây để detect session bị revoke từ thiết bị khác
-  // Khi đổi mật khẩu trên web/app khác → token bị revoke → poll nhận 401
-  // → interceptor tự xử lý refresh → refresh cũng 401 → triggerLogout → logout
+  // Polling logic: Kiểm tra session mỗi 15 giây (có trong cả 2 file)
   useEffect(() => {
     if (!isAuthenticated) return;
 
     console.log('AuthContext: starting session polling (15s interval)');
-
     const poll = setInterval(async () => {
       try {
         await profileApi.getCurrentProfile();
         console.log('AuthContext: session still valid');
       } catch {
-        // Interceptor tự xử lý 401 → triggerLogout
+        // Interceptor sẽ tự trigger logout thông qua logoutHandler đã set ở trên
       }
     }, 15000);
 
@@ -134,124 +145,80 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isAuthenticated]);
 
+  // --- Các hàm chức năng từ file dài ---
+
   const login = async (phone: string, password: string, otpCode?: string) => {
-    console.log('AuthContext: Local login attempt');
+    const response = await authApi.localLogin({ phone, password, otpCode });
 
-    try {
-      const response = await authApi.localLogin({
-        phone,
-        password,
-        otpCode,
-      });
-
-      if (response.result) {
-        // 2FA required
-        if (response.result.requires2FA && response.result.tempToken) {
-          console.log('AuthContext: 2FA required');
-          return {
-            requires2FA: true,
-            tempToken: response.result.tempToken,
-            authenticated: false,
-          };
-        }
-
-        // Login success
-        if (response.result.token && response.result.refreshToken) {
-          console.log('AuthContext: Login successful, storing tokens');
-          await SecureStore.setItemAsync('accessToken', response.result.token);
-          await SecureStore.setItemAsync('refreshToken', response.result.refreshToken);
-          await fetchUser();
-          console.log('AuthContext: User fetched after login');
-          return { authenticated: true };
-        }
+    if (response.result) {
+      if (response.result.requires2FA && response.result.tempToken) {
+        return {
+          requires2FA: true,
+          tempToken: response.result.tempToken,
+          authenticated: false,
+        };
       }
 
-      throw new Error(response.message || 'Login failed');
-    } catch (error: unknown) {
-      throw error;
+      if (response.result.token && response.result.refreshToken) {
+        await SecureStore.setItemAsync('accessToken', response.result.token);
+        await SecureStore.setItemAsync('refreshToken', response.result.refreshToken);
+        await fetchUser();
+        return { authenticated: true };
+      }
     }
+    throw new Error(response.message || 'Login failed');
   };
 
-  const verify2FA = async (
-    tempToken: string,
-    otpCode: string,
-    isBackupCode: boolean = false
-  ) => {
-    const response = await authApi.verify2FAOtp({
-      tempToken,
-      otpCode,
-      isBackupCode,
-    });
-
+  const verify2FA = async (tempToken: string, otpCode: string, isBackupCode: boolean = false) => {
+    const response = await authApi.verify2FAOtp({ tempToken, otpCode, isBackupCode });
     if (response.result?.token && response.result?.refreshToken) {
       await SecureStore.setItemAsync('accessToken', response.result.token);
       await SecureStore.setItemAsync('refreshToken', response.result.refreshToken);
       await fetchUser();
       return { authenticated: true };
     }
-
     throw new Error(response.message || '2FA verification failed');
   };
 
   const request2FAOtp = async (phone: string) => {
-    console.log('AuthContext: Requesting 2FA OTP resend');
-
     const response = await authApi.request2FAOtp({ phone });
-
-    if (!response.result) {
-      throw new Error(response.message || 'Failed to send OTP');
-    }
-
-    console.log('AuthContext: 2FA OTP sent successfully');
+    if (!response.result) throw new Error(response.message || 'Failed to send OTP');
   };
 
   const setTokens = async (accessToken: string, refreshToken: string) => {
-    console.log('AuthContext: setTokens called');
     await SecureStore.setItemAsync('accessToken', accessToken);
     await SecureStore.setItemAsync('refreshToken', refreshToken);
     await fetchUser();
-    console.log('AuthContext: setTokens completed');
   };
 
-  const register = async (
-    phone: string,
-    email: string,
-    password: string,
-    fullName: string,
-    otp: string
-  ) => {
-    console.log('AuthContext: Registration attempt');
-
-    const response = await userApi.register({
-      phone,
-      email,
-      password,
-      fullName,
-      otp,
-    });
-
+  const register = async (phone: string, email: string, password: string, fullName: string, otp: string) => {
+    const response = await userApi.register({ phone, email, password, fullName, otp });
     if (response.result) {
-      console.log('AuthContext: Registration successful, auto-logging in');
       await login(phone, password);
     }
   };
 
   const updateProfile = (updates: Partial<UserProfileResponse>) => {
-    if (user) {
-      console.log('AuthContext: Updating profile locally');
-      setUser({ ...user, ...updates });
-    }
+    if (user) setUser({ ...user, ...updates });
   };
 
   const refreshUser = async () => {
-    console.log('AuthContext: Refreshing user data');
     await fetchUser();
+  };
+
+  // --- Hàm chức năng từ file ngắn ---
+
+  const setChatUserId = async (userId: string) => {
+    await SecureStore.setItemAsync('mockChatUserId', userId);
+    setChatUserIdState(userId);
+    console.log('[AuthContext] Set mock chat user ID:', userId);
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        chatUserId,
         isAuthenticated,
         isLoading,
         login,
@@ -262,6 +229,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         register,
         updateProfile,
         refreshUser,
+        setChatUserId,
       }}
     >
       {children}

@@ -1,5 +1,4 @@
-
-import { API_CONFIG } from '@/configuration/api';
+import { API_CONFIG, CHAT_API_CONFIG } from '@/configuration/api';
 import { triggerLogout } from '@/utils/logoutHandler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
@@ -13,6 +12,12 @@ export const apiClient: AxiosInstance = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
   headers: API_CONFIG.HEADERS,
+});
+
+export const chatApiClient: AxiosInstance = axios.create({
+  baseURL: CHAT_API_CONFIG.BASE_URL,
+  timeout: CHAT_API_CONFIG.TIMEOUT,
+  headers: CHAT_API_CONFIG.HEADERS,
 });
 
 apiClient.interceptors.request.use(
@@ -128,7 +133,37 @@ apiClient.interceptors.response.use(
   }
 );
 
-// ─── Device info ─────────────────────────────────────────
+chatApiClient.interceptors.response.use(
+  (response) => {
+    console.log('✅ CHAT API Success:', response.config.url, response.status);
+    return response.data;
+  },
+  async (error: AxiosError<ApiResponse>) => {
+    console.error('❌ CHAT API Error:', error.config?.url, 'Status:', error.response?.status);
+
+    const isNetworkError = !error.response;
+
+    const apiError: ApiError = {
+      code: error.response?.data?.code || (isNetworkError ? 503 : 500),
+      message:
+        error.response?.data?.message ||
+        (isNetworkError
+          ? `Cannot connect to chat-service (${CHAT_API_CONFIG.BASE_URL})`
+          : 'An error occurred'),
+      details:
+        error.response?.data ||
+        (isNetworkError
+          ? {
+              reason: error.message,
+              baseUrl: CHAT_API_CONFIG.BASE_URL,
+            }
+          : undefined),
+    };
+
+    return Promise.reject(apiError);
+  }
+);
+
 export const getDeviceInfo = async () => {
   return {
     deviceId:   await getDeviceId(),

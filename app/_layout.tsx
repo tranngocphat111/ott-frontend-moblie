@@ -12,9 +12,10 @@ import '@/global.css';
 import { AuthProvider, useAuth } from '@/contexts/Authcontext';
 import { ThemeProvider } from '@/contexts/Themecontext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { THEME_COLORS } from '@/constants/theme';
 
 WebBrowser.maybeCompleteAuthSession();
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function RootLayoutNav() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -36,7 +37,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!isLoading) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync().catch(() => undefined);
     }
   }, [isLoading]);
 
@@ -45,7 +46,7 @@ function RootLayoutNav() {
       screenOptions={{
         headerShown: false,
         animation: 'fade',
-        contentStyle: { backgroundColor: '#fff' },
+        contentStyle: { backgroundColor: THEME_COLORS.surface.DEFAULT },
       }}
     >
       <Stack.Screen name="(auth)" />
@@ -92,7 +93,7 @@ class ErrorBoundary extends React.Component<
 
 export default function RootLayout() {
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync('#ffffff');
+    SystemUI.setBackgroundColorAsync(THEME_COLORS.surface.DEFAULT);
   }, []);
 
   return (
