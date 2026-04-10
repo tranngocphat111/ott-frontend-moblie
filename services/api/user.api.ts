@@ -1,5 +1,3 @@
-// services/api/user.api.ts
-
 import { apiClient, getDeviceInfo } from './client';
 import type {
   ApiResponse,
@@ -11,9 +9,7 @@ import type {
 import { API_ENDPOINTS } from '../../configuration/api';
 
 export const userApi = {
-  /**
-   * Request OTP for registration
-   */
+
   requestRegisterOtp: async (
     phone: string,
     email: string,
@@ -28,9 +24,7 @@ export const userApi = {
     return apiClient.post(API_ENDPOINTS.USERS.REQUEST_REGISTER_OTP, payload);
   },
 
-  /**
-   * Complete registration with OTP
-   */
+
   register: async (data: {
     phone: string;
     email: string;

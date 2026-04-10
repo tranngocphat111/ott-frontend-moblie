@@ -1,13 +1,14 @@
 // app/(auth)/setup-phone.tsx
 import PhoneInput from '@/components/auth/EmailInput';
 import PrimaryButton from '@/components/common/PrimaryButton';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SetupPhoneScreen() {
   const router = useRouter();
@@ -70,7 +71,7 @@ export default function SetupPhoneScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
 
       <KeyboardAvoidingView
@@ -88,7 +89,7 @@ export default function SetupPhoneScreen() {
               <View className="w-20 h-20 bg-blue-100 rounded-full justify-center items-center mb-4">
                 <Feather name="phone" size={40} color="#0084ff" />
               </View>
-              <Text className="text-3xl font-bold text-gray-900 mb-2 text-center">
+              <Text className="text-3xl font-bold text-brand-900 mb-2 text-center">
                 Thiết lập số điện thoại
               </Text>
               <Text className="text-base text-gray-600 text-center">

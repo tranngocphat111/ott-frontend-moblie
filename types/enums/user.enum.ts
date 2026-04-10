@@ -9,9 +9,9 @@ export type AccountType =
 
 
 export const Gender = {
-  MALE: 'male',
-  FEMALE: 'female',
-  OTHER: 'other',
+  MALE: 'MALE',
+  FEMALE: 'FEMALE',
+  OTHER: 'OTHER',
 } as const;
 
 export type Gender = typeof Gender[keyof typeof Gender];

@@ -35,4 +35,5 @@ export interface Request2FADisableOtpRequest {
 
 export interface RequestDeleteAccountOtpRequest {
   ipAddress?: string;
+  password?: string;
 }

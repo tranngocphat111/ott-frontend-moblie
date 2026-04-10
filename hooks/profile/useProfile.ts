@@ -1,7 +1,7 @@
 // hooks/profile/useProfile.ts
 import { useState } from 'react';
 import { profileApi } from '@/services/api/profile.api';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import type { UpdateProfileRequest } from '@/types';
 
 interface ProfileErrors {

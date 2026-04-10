@@ -1,12 +1,13 @@
 // app/(main)/profile/change-password.tsx
 import React, { useState } from 'react';
-import { View, Text, SafeAreaView, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import TextInputField from '@/components/auth/TextInputField';
 import PrimaryButton from '@/components/common/PrimaryButton';
 import { useChangePassword } from '@/hooks/profile/useChangePassword';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -21,14 +22,14 @@ export default function ChangePasswordScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
       
-      <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-200">
+      <View className="flex-row items-center justify-between px-6 py-4 border-b border-brand-200">
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">
+        <Text className="text-lg font-semibold text-brand-900">
           Đổi mật khẩu
         </Text>
         <View style={{ width: 24 }} />

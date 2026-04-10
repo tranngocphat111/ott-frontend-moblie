@@ -1,4 +1,4 @@
-import { DeviceType } from '../enums';
+import type { DeviceType } from '../enums';
 
 export interface DeviceToken {
   id: string;

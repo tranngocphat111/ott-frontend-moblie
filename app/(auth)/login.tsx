@@ -11,14 +11,15 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -28,7 +29,6 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
 
-  // 2FA state
   const [requires2FA, setRequires2FA] = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [otp, setOtp] = useState('');
@@ -38,7 +38,10 @@ export default function LoginScreen() {
     setCountdown(60);
     const interval = setInterval(() => {
       setCountdown(prev => {
-        if (prev <= 1) { clearInterval(interval); return 0; }
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
         return prev - 1;
       });
     }, 1000);
@@ -53,8 +56,8 @@ export default function LoginScreen() {
     }
   };
 
-  const handleVerify2FA = async () => {
-    await verify2FA(tempToken, otp);
+  const handleVerify2FA = async (isBackupCode: boolean) => {
+    await verify2FA(tempToken, otp, isBackupCode);
   };
 
   const handleResend2FA = async () => {
@@ -87,11 +90,11 @@ export default function LoginScreen() {
   const anyLoading = isLoading || googleLoading;
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
 
       <TouchableOpacity onPress={() => router.back()} className="px-6 pt-4">
-        <Feather name="x" size={28} color="#374151" />
+        <Feather name="x" size={28} color="#694d31" />
       </TouchableOpacity>
 
       <KeyboardAvoidingView
@@ -104,13 +107,12 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View className="px-6 pt-6 pb-6">
-            {/* Branding */}
             <View className="items-center mb-8">
-              <View className="w-16 h-16 bg-blue-600 rounded-2xl justify-center items-center mb-3 shadow-lg shadow-blue-200">
-                <Feather name="message-circle" size={32} color="#fff" />
+              <View className="w-20 h-20 bg-white rounded-3xl justify-center items-center mb-3 border border-brand-200 shadow-soft overflow-hidden">
+                <Image source={require('../../assets/logo_tach_nen.jpg')} className="w-16 h-16" resizeMode="contain" />
               </View>
-              <Text className="text-2xl font-bold text-gray-900">Đăng nhập</Text>
-              <Text className="text-sm text-gray-500 mt-1">Nhập thông tin để tiếp tục</Text>
+              <Text className="text-2xl font-bold text-brand-900">Đăng nhập</Text>
+              <Text className="text-sm text-brand-600 mt-1">Nhập thông tin để tiếp tục</Text>
             </View>
 
             <PhoneInput
@@ -136,14 +138,12 @@ export default function LoginScreen() {
               onPress={() => router.push('../(auth)/forgot-password')}
               className="self-end mb-6"
             >
-              <Text className="text-blue-600 text-sm font-medium">Quên mật khẩu?</Text>
+              <Text className="text-brand-600 text-sm font-medium">Quên mật khẩu?</Text>
             </TouchableOpacity>
 
             {(errors.general || googleError) && (
-              <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-                <Text className="text-red-800 text-sm">
-                  {errors.general || googleError}
-                </Text>
+              <View className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
+                <Text className="text-red-700 text-sm">{errors.general || googleError}</Text>
               </View>
             )}
 
@@ -155,9 +155,9 @@ export default function LoginScreen() {
             />
 
             <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-gray-200" />
-              <Text className="mx-4 text-gray-400 text-sm">Hoặc đăng nhập bằng</Text>
-              <View className="flex-1 h-px bg-gray-200" />
+              <View className="flex-1 h-px bg-brand-200" />
+              <Text className="mx-4 text-brand-500 text-sm">Hoặc đăng nhập bằng</Text>
+              <View className="flex-1 h-px bg-brand-200" />
             </View>
 
             <View className="gap-3">
@@ -179,14 +179,14 @@ export default function LoginScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View className="px-6 pb-6 pt-4 border-t border-gray-100">
+      <View className="px-6 pb-6 pt-4 border-t border-brand-100 bg-white/80">
         <View className="flex-row justify-center items-center">
-          <Text className="text-gray-500 text-sm">Chưa có tài khoản? </Text>
+          <Text className="text-brand-600 text-sm">Chưa có tài khoản? </Text>
           <TouchableOpacity
             onPress={() => router.push('../(auth)/register')}
             disabled={anyLoading}
           >
-            <Text className="text-blue-600 text-sm font-semibold">Đăng ký</Text>
+            <Text className="text-brand-700 text-sm font-semibold">Đăng ký</Text>
           </TouchableOpacity>
         </View>
       </View>

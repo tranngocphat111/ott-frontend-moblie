@@ -1,5 +1,5 @@
 import { GOOGLE_CONFIG } from '@/configuration/api';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
 import * as AuthSession from 'expo-auth-session';
 import { useRouter } from 'expo-router';

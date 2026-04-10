@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { qrApi } from '@/services/api/qr.api';
-import { useAuth } from '@/context/Authcontext';
+import { useAuth } from '@/contexts/Authcontext';
 import type { QrCodeResponse, QrStatusResponse } from '@/types';
 
 const POLLING_INTERVAL = 2000; // 2 seconds

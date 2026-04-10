@@ -1,6 +1,6 @@
 // components/common/PrimaryButton.tsx
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 
 interface PrimaryButtonProps {
   title: string;
@@ -19,40 +19,40 @@ export default function PrimaryButton({
 }: PrimaryButtonProps) {
   const getButtonStyle = () => {
     if (disabled || loading) {
-      return 'bg-gray-300';
+      return 'bg-brand-200 border border-brand-200';
     }
+
     switch (variant) {
       case 'primary':
-        return 'bg-blue-600';
+        return 'bg-brand-600 border border-brand-600';
       case 'secondary':
-        return 'bg-gray-600';
+        return 'bg-brand-500 border border-brand-500';
       case 'outline':
-        return 'bg-white border-2 border-blue-600';
+        return 'bg-white border border-brand-300';
       default:
-        return 'bg-blue-600';
+        return 'bg-brand-600 border border-brand-600';
     }
   };
 
   const getTextStyle = () => {
     if (disabled || loading) {
-      return 'text-gray-500';
+      return 'text-brand-600';
     }
-    return variant === 'outline' ? 'text-blue-600' : 'text-white';
+
+    return variant === 'outline' ? 'text-brand-700' : 'text-white';
   };
 
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled || loading}
-      className={`${getButtonStyle()} rounded-xl py-4 px-6 flex-row justify-center items-center`}
-      activeOpacity={0.7}
+      className={`${getButtonStyle()} rounded-2xl py-4 px-6 flex-row justify-center items-center shadow-soft`}
+      activeOpacity={0.85}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' ? '#2563eb' : '#fff'} />
+        <ActivityIndicator color={variant === 'outline' ? '#8b6642' : '#ffffff'} />
       ) : (
-        <Text className={`${getTextStyle()} text-base font-semibold`}>
-          {title}
-        </Text>
+        <Text className={`${getTextStyle()} text-base font-semibold`}>{title}</Text>
       )}
     </TouchableOpacity>
   );

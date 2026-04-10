@@ -1,4 +1,4 @@
-// components/auth/register/RegisterStepOne.tsx
+import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import {
   KeyboardAvoidingView,
@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import PrimaryButton from '../../common/PrimaryButton';
 import PhoneInput from '../PhoneInput';
 import TextInputField from '../TextInputField';
@@ -64,36 +63,27 @@ export default function RegisterStepOne({
         keyboardShouldPersistTaps="handled"
       >
         <View className="px-6 pt-8 pb-6">
-
-          {/* Header */}
           <View className="mb-6">
-            <Text className="text-2xl font-bold text-gray-900 mb-1">
-              Tạo tài khoản
-            </Text>
-            <Text className="text-sm text-gray-500">
-              Điền đầy đủ thông tin để đăng ký
-            </Text>
+            <Text className="text-2xl font-bold text-brand-900 mb-1">Tạo tài khoản</Text>
+            <Text className="text-sm text-brand-600">Điền đầy đủ thông tin để đăng ký</Text>
           </View>
 
-          {/* Step Indicator */}
           <View className="flex-row items-center mb-8">
-            <View className="w-8 h-8 rounded-full bg-blue-600 justify-center items-center">
+            <View className="w-8 h-8 rounded-full bg-brand-600 justify-center items-center">
               <Text className="text-white font-bold text-sm">1</Text>
             </View>
-            <View className="flex-1 h-0.5 bg-gray-200 mx-2" />
-            <View className="w-8 h-8 rounded-full bg-gray-200 justify-center items-center">
-              <Text className="text-gray-400 font-bold text-sm">2</Text>
+            <View className="flex-1 h-0.5 bg-brand-200 mx-2" />
+            <View className="w-8 h-8 rounded-full bg-brand-100 justify-center items-center">
+              <Text className="text-brand-400 font-bold text-sm">2</Text>
             </View>
           </View>
 
-          {/* General Error */}
           {errors.general && (
-            <View className="bg-red-50 border border-red-200 rounded-xl p-3.5 mb-4">
-              <Text className="text-red-600 text-sm">{errors.general}</Text>
+            <View className="bg-red-50 border border-red-200 rounded-2xl p-3.5 mb-4">
+              <Text className="text-red-700 text-sm">{errors.general}</Text>
             </View>
           )}
 
-          {/* Full Name */}
           <TextInputField
             label="Họ và tên"
             value={fullName}
@@ -105,7 +95,6 @@ export default function RegisterStepOne({
             autoCapitalize="words"
           />
 
-          {/* Phone */}
           <PhoneInput
             value={phone}
             onChangeText={onPhoneChange}
@@ -113,7 +102,6 @@ export default function RegisterStepOne({
             onClear={() => onPhoneChange('')}
           />
 
-          {/* Email */}
           <TextInputField
             label="Email"
             value={email}
@@ -126,7 +114,6 @@ export default function RegisterStepOne({
             autoCapitalize="none"
           />
 
-          {/* Password */}
           <TextInputField
             label="Mật khẩu"
             value={password}
@@ -139,7 +126,6 @@ export default function RegisterStepOne({
             autoCapitalize="none"
           />
 
-          {/* Confirm Password */}
           <TextInputField
             label="Xác nhận mật khẩu"
             value={confirmPassword}
@@ -152,43 +138,43 @@ export default function RegisterStepOne({
             autoCapitalize="none"
           />
 
-          {/* Password checklist */}
           {(password.length > 0 || confirmPassword.length > 0) && (
-            <View className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 mb-4">
+            <View className="bg-brand-50 border border-brand-200 rounded-2xl p-3.5 mb-4">
               <View className="flex-row items-center mb-1.5">
                 <Feather
                   name={passwordLongEnough ? 'check-circle' : 'circle'}
                   size={13}
-                  color={passwordLongEnough ? '#22c55e' : '#9ca3af'}
+                  color={passwordLongEnough ? '#16a34a' : '#bc9166'}
                 />
-                <Text className="text-blue-700 text-xs ml-2">Ít nhất 8 ký tự</Text>
+                <Text className="text-brand-700 text-xs ml-2">Ít nhất 8 ký tự</Text>
               </View>
               <View className="flex-row items-center">
                 <Feather
                   name={passwordsMatch ? 'check-circle' : 'circle'}
                   size={13}
-                  color={passwordsMatch ? '#22c55e' : '#9ca3af'}
+                  color={passwordsMatch ? '#16a34a' : '#bc9166'}
                 />
-                <Text className="text-blue-700 text-xs ml-2">Mật khẩu khớp nhau</Text>
+                <Text className="text-brand-700 text-xs ml-2">Mật khẩu khớp nhau</Text>
               </View>
             </View>
           )}
 
-          {/* Info */}
-          <View className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 mb-6">
-            <Text className="text-blue-700 text-xs">
+          <View className="bg-brand-50 border border-brand-200 rounded-2xl p-3.5 mb-6">
+            <Text className="text-brand-700 text-xs">
               <Text className="font-semibold">Lưu ý:</Text> Mã OTP sẽ được gửi đến email của bạn để xác thực tài khoản.
             </Text>
           </View>
 
-          {/* Button */}
           <PrimaryButton
             title={isLoading ? 'Đang gửi...' : 'Gửi mã OTP'}
             onPress={onNext}
             loading={isLoading}
             disabled={
-              !phone || !email || !fullName ||
-              !password || !confirmPassword ||
+              !phone ||
+              !email ||
+              !fullName ||
+              !password ||
+              !confirmPassword ||
               isLoading
             }
           />

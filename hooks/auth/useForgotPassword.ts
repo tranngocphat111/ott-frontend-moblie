@@ -1,8 +1,10 @@
-// hooks/auth/useForgotPassword.ts
 import { useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { accountApi } from '@/services/api/account.api';
+import { getErrorMessage } from '@/utils/messageMapping';
+
+type Step = 'request' | 'verify' | 'reset';
 
 interface ForgotPasswordErrors {
   phone?: string;
@@ -15,20 +17,19 @@ interface ForgotPasswordErrors {
 
 export function useForgotPassword() {
   const router = useRouter();
+  const [step, setStep] = useState<Step>('request');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<ForgotPasswordErrors>({});
-  const [otpSent, setOtpSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Cleanup interval
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
-  const startCountdown = (seconds: number) => {
+  const startCountdown = (seconds = 60) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setCountdown(seconds);
     intervalRef.current = setInterval(() => {
@@ -42,9 +43,8 @@ export function useForgotPassword() {
     }, 1000);
   };
 
-  const requestOtp = async (phone: string, email: string) => {
-    console.log('🔄 [requestOtp] called with:', { phone, email });
-
+  // Bước 1: Gửi OTP
+  const requestPasswordReset = async (phone: string, email: string): Promise<boolean> => {
     setErrors({});
 
     if (!phone?.trim()) {
@@ -57,59 +57,52 @@ export function useForgotPassword() {
     }
 
     setIsLoading(true);
-    console.log('📡 [requestOtp] Calling API...');
-
     try {
-      const response = await accountApi.requestPasswordReset({ phone, email });
-      console.log('📨 [requestOtp] API Response:', response);
-
-      // Kiểm tra linh hoạt nhiều dạng response
-      const isSuccess =
-        response?.success === true ||
-        response?.status === 'success' ||
-        response?.ok === true ||
-        response?.code === 200 ||
-        (response?.message && response.message.toLowerCase().includes('sent'));
-
-      if (isSuccess) {
-        console.log('✅ OTP sent successfully!');
-        setOtpSent(true);
-        startCountdown(60);
-        Alert.alert('Thành công', 'Mã OTP đã được gửi đến email của bạn');
-        return true;
-      } else {
-        const msg = response?.message || 'Không thể gửi OTP';
-        console.log('❌ API success = false:', msg);
-        setErrors({ general: msg });
-        return false;
-      }
-    } catch (error: any) {
-      console.error('🚨 [requestOtp] Error:', error?.response?.data || error);
-      const errorMessage =
-        error?.response?.data?.message ||
-        error?.message ||
-        'Đã xảy ra lỗi khi gửi OTP';
-      setErrors({ general: errorMessage });
+      await accountApi.requestPasswordReset({ phone, email });
+      setStep('verify');
+      startCountdown(60);
+      return true;
+    } catch (err: unknown) {
+      setErrors({ general: getErrorMessage(err) });
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const verifyOtp = async (
-    phone: string,
-    email: string,
-    otp: string,
-    newPassword: string,
-    confirmPassword: string
-  ) => {
+  // Bước 2: Xác thực OTP
+  const verifyOtp = async (phone: string, email: string, otp: string): Promise<boolean> => {
     setErrors({});
 
     if (!otp || otp.length !== 6) {
       setErrors({ otp: 'Vui lòng nhập mã OTP 6 số' });
       return false;
     }
-    if (!newPassword || newPassword.length < 8) {
+
+    setIsLoading(true);
+    try {
+      await accountApi.verifyForgotOtp({ phone, email, otp });
+      setStep('reset');
+      return true;
+    } catch (err: unknown) {
+      setErrors({ otp: getErrorMessage(err) });
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Bước 3: Đặt mật khẩu mới
+  const resetPassword = async (
+    phone: string,
+    email: string,
+    otp: string,
+    newPassword: string,
+    confirmPassword: string
+  ): Promise<boolean> => {
+    setErrors({});
+
+    if (newPassword.length < 8) {
       setErrors({ password: 'Mật khẩu phải có ít nhất 8 ký tự' });
       return false;
     }
@@ -119,30 +112,16 @@ export function useForgotPassword() {
     }
 
     setIsLoading(true);
-
     try {
-      const response = await accountApi.verifyPasswordReset({
-        phone,
-        email,
-        otp,
-        newPassword,
-        confirmPassword,   // ← ĐÃ SỬA (trước là '')
-      });
-
-      if (response?.success) {
-        Alert.alert(
-          'Thành công',
-          'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.',
-          [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
-        );
-        return true;
-      } else {
-        setErrors({ general: response?.message || 'Đặt lại mật khẩu thất bại' });
-        return false;
-      }
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || 'Đã xảy ra lỗi';
-      setErrors({ general: errorMessage });
+      await accountApi.verifyPasswordReset({ phone, email, otp, newPassword, confirmPassword });
+      Alert.alert(
+        'Thành công',
+        'Đặt lại mật khẩu thành công! Hãy đăng nhập bằng mật khẩu mới.',
+        [{ text: 'Đăng nhập', onPress: () => router.replace('/(auth)/login') }]
+      );
+      return true;
+    } catch (err: unknown) {
+      setErrors({ general: getErrorMessage(err) });
       return false;
     } finally {
       setIsLoading(false);
@@ -151,16 +130,19 @@ export function useForgotPassword() {
 
   const resendOtp = async (phone: string, email: string) => {
     if (countdown > 0) return;
-    return await requestOtp(phone, email);
+    await requestPasswordReset(phone, email);
+    // Không setStep lại vì vẫn ở bước verify
+    setStep('verify');
   };
 
   return {
-    requestOtp,
-    verifyOtp,
-    resendOtp,
+    step,
     isLoading,
     errors,
-    otpSent,
     countdown,
+    requestPasswordReset,
+    verifyOtp,
+    resetPassword,
+    resendOtp,
   };
 }

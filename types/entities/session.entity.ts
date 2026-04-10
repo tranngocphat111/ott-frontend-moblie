@@ -1,4 +1,4 @@
-import { DeviceType, LoginMethod } from '../enums';
+import type { DeviceType, LoginMethod } from '../enums';
 
 export interface UserSession {
   id: string;

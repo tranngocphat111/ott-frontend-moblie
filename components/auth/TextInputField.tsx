@@ -40,25 +40,25 @@ export default function TextInputField({
 
   return (
     <View className="mb-4">
-      {/* Label — ẩn nếu label rỗng (dùng trong bio field của edit.tsx) */}
       {label ? (
-        <Text className="text-sm font-medium text-gray-700 mb-2">
-          {label}{required && <Text className="text-red-500"> *</Text>}
+        <Text className="text-sm font-medium text-brand-700 mb-2">
+          {label}
+          {required && <Text className="text-red-500"> *</Text>}
         </Text>
       ) : null}
 
       <View
-        className={`flex-row items-center border rounded-xl px-4 ${
-          multiline ? 'items-start py-3' : 'py-3'
-        } ${error ? 'border-red-400' : 'border-gray-300'} ${
-          !editable ? 'bg-gray-50' : 'bg-white'
+        className={`flex-row items-center border rounded-2xl px-4 ${
+          multiline ? 'items-start py-3.5' : 'py-3.5'
+        } ${error ? 'border-red-400 bg-red-50/50' : 'border-brand-200 bg-surface-raised'} ${
+          !editable ? 'bg-brand-100' : ''
         }`}
       >
         {icon && (
           <Feather
             name={icon as any}
             size={18}
-            color={error ? '#ef4444' : '#9ca3af'}
+            color={error ? '#dc2626' : '#8b6642'}
             style={{ marginTop: multiline ? 2 : 0 }}
           />
         )}
@@ -67,7 +67,7 @@ export default function TextInputField({
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor="#bc9166"
           keyboardType={keyboardType}
           maxLength={maxLength}
           editable={editable}
@@ -77,7 +77,7 @@ export default function TextInputField({
           multiline={multiline}
           numberOfLines={multiline ? numberOfLines : 1}
           textAlignVertical={multiline ? 'top' : 'center'}
-          className={`flex-1 text-sm text-gray-900 ${icon ? 'ml-3' : ''}`}
+          className={`flex-1 text-sm text-brand-900 ${icon ? 'ml-3' : ''}`}
           style={{ minHeight: multiline ? 72 : undefined }}
         />
 
@@ -89,7 +89,7 @@ export default function TextInputField({
             <Feather
               name={showPassword ? 'eye-off' : 'eye'}
               size={18}
-              color="#9ca3af"
+              color="#8b6642"
             />
           </TouchableOpacity>
         )}
@@ -97,8 +97,8 @@ export default function TextInputField({
 
       {error && (
         <View className="flex-row items-center mt-1.5 ml-1">
-          <Feather name="alert-circle" size={13} color="#ef4444" />
-          <Text className="text-red-500 text-xs ml-1">{error}</Text>
+          <Feather name="alert-circle" size={13} color="#dc2626" />
+          <Text className="text-red-600 text-xs ml-1">{error}</Text>
         </View>
       )}
     </View>

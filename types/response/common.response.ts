@@ -1,4 +1,4 @@
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = void> {
   code: number;
   message?: string;
   result?: T;
@@ -7,7 +7,7 @@ export interface ApiResponse<T = any> {
 export interface ApiError {
   code: number;
   message: string;
-  details?: Record<string, any>;
+  details?: unknown;
 }
 
 export interface PaginatedResponse<T> {

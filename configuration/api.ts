@@ -1,4 +1,5 @@
-// configuration/api.ts
+import * as AuthSession from 'expo-auth-session';
+
 export const API_CONFIG = {
   BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.6:8080/riff/api',
   TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
@@ -8,12 +9,14 @@ export const API_CONFIG = {
 };
 
 export const GOOGLE_CONFIG = {
-  // Web Client ID — dùng cho Expo Go
   CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
-  // Mobile Client IDs — tạo riêng trên Google Console
   IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
   ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '',
   SCOPE: 'profile email openid',
+  REDIRECT_URI: AuthSession.makeRedirectUri({
+    scheme: process.env.EXPO_PUBLIC_APP_SCHEME || 'riff',
+    path: 'auth/google',
+  }),
 };
 
 export const APP_CONFIG = {
@@ -24,15 +27,20 @@ export const APP_CONFIG = {
 export const API_ENDPOINTS = {
   AUTH: {
     LOCAL_LOGIN: '/auth/login/local',
+    REQUEST_EMAIL_OTP_LOGIN: '/auth/login/email-otp/request',
+    VERIFY_EMAIL_OTP_LOGIN: '/auth/login/email-otp/verify',
     GOOGLE_AUTH: '/auth/login/google',
-    GOOGLE_AUTH_TOKEN: '/auth/login/google/token',
     GOOGLE_COMPLETE: '/auth/login/google/complete',
     REQUEST_2FA_OTP: '/auth/2fa/otp/request',
     VERIFY_2FA: '/auth/2fa/verify',
-    INTROSPECT: '/auth/introspect',
-    REFRESH: '/auth/refresh',
     LOGOUT: '/auth/logout',
-    REQUEST_EMAIL_OTP_LOGIN: '/auth/login/email-otp/request',
-    VERIFY_EMAIL_OTP_LOGIN: '/auth/login/email-otp/verify',
+    REFRESH: '/auth/refresh',
+    INTROSPECT: '/auth/introspect',
+    GOOGLE_AUTH_TOKEN: '/auth/login/google/token',
+  },
+
+  USERS: {
+    REQUEST_REGISTER_OTP: '/users/register/otp',
+    REGISTER: '/users/register',
   },
 };

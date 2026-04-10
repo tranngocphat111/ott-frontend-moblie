@@ -1,11 +1,11 @@
-// app/(main)/(tabs)/profile.tsx
-import { useAuth } from '@/context/Authcontext';
-import { useTheme } from '@/context/Themecontext';
+import { useAuth } from '@/contexts/Authcontext';
+import { useTheme } from '@/contexts/Themecontext';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
-import { Alert, Image, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const InfoRow = ({
   label,
@@ -16,10 +16,10 @@ const InfoRow = ({
   value?: string;
   verified?: boolean;
 }) => (
-  <View className="flex-row items-center justify-between py-3 border-b border-gray-100">
-    <Text className="text-sm font-medium text-gray-500 w-36">{label}</Text>
+  <View className="flex-row items-center justify-between py-3 border-b border-brand-100">
+    <Text className="text-sm font-medium text-brand-500 w-36">{label}</Text>
     <View className="flex-1 flex-row items-center justify-end gap-2">
-      <Text className="text-sm text-gray-900 text-right flex-shrink">{value || 'Chưa cập nhật'}</Text>
+      <Text className="text-sm text-brand-900 text-right flex-shrink">{value || 'Chưa cập nhật'}</Text>
       {verified && (
         <View className="bg-green-100 px-2 py-0.5 rounded ml-2">
           <Text className="text-green-700 text-xs font-medium">Đã xác thực</Text>
@@ -35,25 +35,21 @@ export default function ProfileScreen() {
   const { isDark } = useTheme();
 
   const handleLogout = () => {
-    Alert.alert(
-      'Đăng xuất',
-      'Bạn có chắc chắn muốn đăng xuất?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Đăng xuất',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-          },
+    Alert.alert('Đăng xuất', 'Bạn có chắc chắn muốn đăng xuất?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Đăng xuất',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const hasPhone = !!user?.phone;
   const hasEmail = !!user?.email;
-  const hasPassword = user?.accountType !== 'google_only';
+  const hasPassword = user?.hasPassword;
   const isGoogleUser = !!user?.googleId;
 
   const menuItems = [
@@ -103,29 +99,27 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Cover + Avatar */}
         <View>
           <View className="h-36 relative">
             {user?.coverUrl ? (
               <Image source={{ uri: user.coverUrl }} className="w-full h-full" resizeMode="cover" />
             ) : (
-              <View className="w-full h-full bg-blue-500" />
+              <View className="w-full h-full bg-brand-400" />
             )}
           </View>
 
-          {/* Avatar row */}
-          <View className="px-6 pb-4 bg-white">
+          <View className="px-6 pb-4 bg-surface-raised border-b border-brand-100">
             <View className="flex-row items-end justify-between -mt-12">
               <View className="relative">
-                <View className="w-24 h-24 rounded-full border-4 border-white shadow overflow-hidden bg-gray-100">
+                <View className="w-24 h-24 rounded-full border-4 border-brand-50 shadow overflow-hidden bg-brand-100">
                   {user?.avatarUrl ? (
                     <Image source={{ uri: user.avatarUrl }} className="w-full h-full" resizeMode="cover" />
                   ) : (
-                    <View className="w-full h-full bg-blue-500 justify-center items-center">
+                    <View className="w-full h-full bg-brand-500 justify-center items-center">
                       <Text className="text-white text-3xl font-bold">
                         {user?.fullName?.charAt(0)?.toUpperCase() || '?'}
                       </Text>
@@ -136,7 +130,7 @@ export default function ProfileScreen() {
 
               <TouchableOpacity
                 onPress={() => router.push('/profile/edit')}
-                className="flex-row items-center gap-1 bg-blue-600 px-4 py-2 rounded-xl mt-2"
+                className="flex-row items-center gap-1 bg-brand-600 px-4 py-2 rounded-2xl mt-2"
               >
                 <Feather name="edit-2" size={14} color="#fff" />
                 <Text className="text-white text-sm font-semibold ml-1">Chỉnh sửa</Text>
@@ -145,9 +139,7 @@ export default function ProfileScreen() {
 
             <View className="mt-3">
               <View className="flex-row items-center gap-2 flex-wrap">
-                <Text className="text-xl font-bold text-gray-900">
-                  {user?.fullName || 'Người dùng'}
-                </Text>
+                <Text className="text-xl font-bold text-brand-900">{user?.fullName || 'Người dùng'}</Text>
                 {user?.is2FAEnabled && (
                   <View className="flex-row items-center bg-green-100 px-2 py-0.5 rounded">
                     <Feather name="shield" size={11} color="#16a34a" />
@@ -155,43 +147,37 @@ export default function ProfileScreen() {
                   </View>
                 )}
                 {isGoogleUser && (
-                  <View className="flex-row items-center bg-blue-100 px-2 py-0.5 rounded">
-                    <Feather name="globe" size={11} color="#3b82f6" />
-                    <Text className="text-blue-600 text-xs font-medium ml-1">Google</Text>
+                  <View className="flex-row items-center bg-brand-100 px-2 py-0.5 rounded">
+                    <Feather name="globe" size={11} color="#8b6642" />
+                    <Text className="text-brand-700 text-xs font-medium ml-1">Google</Text>
                   </View>
                 )}
               </View>
 
-              {user?.bio ? (
-                <Text className="text-sm text-gray-600 mt-1">{user.bio}</Text>
-              ) : null}
+              {user?.bio ? <Text className="text-sm text-brand-600 mt-1">{user.bio}</Text> : null}
 
               <View className="flex-row items-center gap-1 mt-2">
-                <Feather name="calendar" size={13} color="#9ca3af" />
-                <Text className="text-xs text-gray-500 ml-1">
-                  Tham gia {formatDate(user?.createdAt)}
-                </Text>
+                <Feather name="calendar" size={13} color="#bc9166" />
+                <Text className="text-xs text-brand-500 ml-1">Tham gia {formatDate(user?.createdAt)}</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* ✅ QR Scan Button — chỉ user đăng nhập mới thấy */}
         <TouchableOpacity
           onPress={() => router.push('/(main)/qr-scan')}
-          className="mx-4 mt-4 bg-blue-600 rounded-2xl py-4 flex-row items-center justify-center gap-3"
+          className="mx-4 mt-4 bg-brand-600 rounded-2xl py-4 flex-row items-center justify-center gap-3"
         >
           <Feather name="maximize" size={22} color="#fff" />
           <View>
             <Text className="text-white font-bold text-base">Quét mã QR</Text>
-            <Text className="text-blue-200 text-xs">Đăng nhập web bằng điện thoại</Text>
+            <Text className="text-brand-100 text-xs">Đăng nhập web bằng điện thoại</Text>
           </View>
         </TouchableOpacity>
 
-        {/* Personal Info Card */}
-        <View className="mx-4 mt-4 bg-white rounded-2xl shadow-sm overflow-hidden">
+        <View className="mx-4 mt-4 bg-surface-raised rounded-2xl border border-brand-100 overflow-hidden">
           <View className="px-4 pt-4 pb-2">
-            <Text className="text-base font-bold text-gray-900">Thông tin cá nhân</Text>
+            <Text className="text-base font-bold text-brand-900">Thông tin cá nhân</Text>
           </View>
           <View className="px-4 pb-2">
             <InfoRow label="Họ và tên" value={user?.fullName} />
@@ -213,46 +199,43 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Security & Account Card */}
-        <View className="mx-4 mt-4 bg-white rounded-2xl shadow-sm overflow-hidden">
+        <View className="mx-4 mt-4 bg-surface-raised rounded-2xl border border-brand-100 overflow-hidden">
           <View className="px-4 pt-4 pb-2">
-            <Text className="text-base font-bold text-gray-900">Bảo mật & Tài khoản</Text>
+            <Text className="text-base font-bold text-brand-900">Bảo mật và Tài khoản</Text>
           </View>
           <View className="px-4 pb-2">
             {menuItems.map((item, index) => (
               <TouchableOpacity
                 key={index}
                 onPress={item.onPress}
-                className={`flex-row items-center py-3 ${index < menuItems.length - 1 ? 'border-b border-gray-100' : ''
-                  }`}
+                className={`flex-row items-center py-3 ${
+                  index < menuItems.length - 1 ? 'border-b border-brand-100' : ''
+                }`}
               >
                 <View
-                  className={`w-9 h-9 rounded-full justify-center items-center ${item.danger ? 'bg-red-100' : 'bg-gray-100'
-                    }`}
+                  className={`w-9 h-9 rounded-full justify-center items-center ${
+                    item.danger ? 'bg-red-100' : 'bg-brand-100'
+                  }`}
                 >
                   <Feather
                     name={item.icon as any}
                     size={18}
-                    color={item.danger ? '#ef4444' : '#374151'}
+                    color={item.danger ? '#ef4444' : '#694d31'}
                   />
                 </View>
-                <Text
-                  className={`flex-1 text-sm ml-3 ${item.danger ? 'text-red-600' : 'text-gray-900'
-                    }`}
-                >
+                <Text className={`flex-1 text-sm ml-3 ${item.danger ? 'text-red-600' : 'text-brand-900'}`}>
                   {item.title}
                 </Text>
-                <Feather name="chevron-right" size={18} color="#9ca3af" />
+                <Feather name="chevron-right" size={18} color="#bc9166" />
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Logout */}
         <View className="mx-4 mt-4 mb-8">
           <TouchableOpacity
             onPress={handleLogout}
-            className="bg-red-50 border border-red-200 rounded-xl py-4 flex-row items-center justify-center"
+            className="bg-red-50 border border-red-200 rounded-2xl py-4 flex-row items-center justify-center"
           >
             <Feather name="log-out" size={20} color="#dc2626" />
             <Text className="text-red-600 font-semibold ml-2">Đăng xuất</Text>
