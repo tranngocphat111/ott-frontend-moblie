@@ -48,7 +48,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   return (
     <Pressable
       onPress={onPress}
-      className="mx-4 mb-3 rounded-[22px] border border-slate-200 bg-white px-4 py-3.5 shadow-sm"
+      className="border-b border-slate-100 bg-white px-4 py-3.5"
     >
       <View className="flex-row items-center">
         <View className="relative mr-3">
@@ -75,7 +75,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
               {title}
             </Text>
             <View className="flex-row items-center gap-2">
-              {isPinned && <Feather name="pin" size={13} color="#c2410c" />}
+              {isPinned && <Feather name="pin" size={13} color="#1d84f2" />}
               <Text className="text-xs font-medium text-slate-400">
                 {formatConversationTime(conversation.last_message?.createdAt)}
               </Text>

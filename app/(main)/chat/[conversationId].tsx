@@ -95,8 +95,8 @@ export default function ChatDetailScreen() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // Conversation metadata
-  const title = getConversationTitle(conversation, user?.id);
-  const avatar = getConversationAvatar(conversation, user?.id);
+  const title = getConversationTitle(conversation, userIdForChat);
+  const avatar = getConversationAvatar(conversation, userIdForChat);
   const isGroup = conversation?.type === 'group';
 
   // Setup focus effect
@@ -237,26 +237,23 @@ export default function ChatDetailScreen() {
         </LinearGradient>
 
         {pinnedChips.length > 0 && (
-          <View className="border-b border-slate-200 bg-white px-4 pb-3 pt-3">
-            <Text className="mb-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Tin nhắn ghim
-            </Text>
-            <View className="flex-row gap-2">
-              {pinnedChips.map((item) => (
-                <Pressable
-                  key={item._id}
-                  onPress={() => item.msg_id && highlightMessage(item.msg_id)}
-                  className="max-w-[70%] flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
-                >
-                  <Text className="text-[12px] font-semibold text-slate-500" numberOfLines={1}>
-                    {item.sender_name || 'Thành viên'}
-                  </Text>
-                  <Text className="mt-0.5 text-[13px] text-slate-800" numberOfLines={1}>
-                    {getMessageBodyText(item)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+          <View className="border-b border-slate-200 bg-white px-4 py-2">
+            <Pressable
+              onPress={() => pinnedChips[0]?.msg_id && highlightMessage(pinnedChips[0].msg_id)}
+              className="flex-row items-center justify-between rounded-2xl bg-slate-100 px-3 py-2"
+            >
+              <View className="mr-3 flex-1">
+                <Text className="text-[13px] font-semibold text-slate-700" numberOfLines={1}>
+                  {`@${pinnedChips[0]?.sender_name || 'Thành viên'}`}
+                </Text>
+                <Text className="text-[13px] text-slate-500" numberOfLines={1}>
+                  {getMessageBodyText(pinnedChips[0])}
+                </Text>
+              </View>
+              <View className="rounded-full border border-slate-300 px-3 py-1">
+                <Text className="text-[12px] font-semibold text-slate-600">+{pinnedChips.length}</Text>
+              </View>
+            </Pressable>
           </View>
         )}
 
@@ -348,7 +345,7 @@ export default function ChatDetailScreen() {
           onSend={() => void onSendMessage()}
           replyToMessage={replyToMessage}
           onCancelReply={() => setReplyToMessage(null)}
-          disabled={!conversationId || !user?.id}
+          disabled={!conversationId || !userIdForChat}
         />
       </KeyboardAvoidingView>
 

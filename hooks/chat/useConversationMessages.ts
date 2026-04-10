@@ -26,12 +26,20 @@ export function useConversationMessages(conversationId: string | undefined, user
   };
 
   const loadConversation = useCallback(async () => {
-    if (!conversationId || !userIdForChat) return;
+    if (!conversationId) {
+      setLoading(false);
+      setMessages([]);
+      setPinnedMessages([]);
+      setConversation(null);
+      return;
+    }
 
     setLoading(true);
     try {
       const [conversationList, messagePayload, pinnedPayload] = await Promise.all([
-        ChatApi.getUserConversations(userIdForChat),
+        userIdForChat
+          ? ChatApi.getUserConversations(userIdForChat).catch(() => [] as any[])
+          : Promise.resolve([] as any[]),
         ChatApi.getMessages(conversationId, userIdForChat),
         ChatApi.getPinnedMessages(conversationId).catch(() => [] as ChatMessage[]),
       ]);
@@ -45,7 +53,7 @@ export function useConversationMessages(conversationId: string | undefined, user
       setPinnedMessages((Array.isArray(pinnedPayload) ? pinnedPayload : []).slice(0, 3));
 
       const lastMessage = messagePayload.messages?.[messagePayload.messages.length - 1];
-      if (lastMessage?.msg_id) {
+      if (userIdForChat && lastMessage?.msg_id) {
         void ChatApi.markAsRead(conversationId, userIdForChat, lastMessage.msg_id).catch(() => undefined);
       }
     } catch (error) {

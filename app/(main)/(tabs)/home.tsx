@@ -53,7 +53,6 @@ export default function HomeScreen() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeBucket, setActiveBucket] = useState<'priority' | 'other'>('priority');
   const [advancedSearchVisible, setAdvancedSearchVisible] = useState(false);
   const [advancedKeyword, setAdvancedKeyword] = useState('');
   const [advancedSearchTab, setAdvancedSearchTab] = useState<'messages' | 'files' | 'links' | 'media'>('messages');
@@ -207,18 +206,6 @@ export default function HomeScreen() {
     });
   }, [items, searchText]);
 
-  const bucketedItems = useMemo(() => {
-    if (activeBucket === 'priority') {
-      return filteredItems.filter(
-        (item) => !!item.participant.settings?.is_pinned || (item.participant.unread_count || 0) > 0,
-      );
-    }
-
-    return filteredItems.filter(
-      (item) => !item.participant.settings?.is_pinned && (item.participant.unread_count || 0) === 0,
-    );
-  }, [activeBucket, filteredItems]);
-
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     void loadConversations();
@@ -339,29 +326,10 @@ export default function HomeScreen() {
         onSelectUser={(userId) => void handleSelectChatUser(userId)}
       />
 
-      <View className="border-b border-slate-200 bg-white px-4 pb-2 pt-2">
+      <View className="border-b border-slate-200 bg-white px-4 py-2">
         <View className="flex-row items-center justify-between">
-          <View className="flex-row rounded-full bg-slate-100 p-1">
-            <Pressable
-              onPress={() => setActiveBucket('priority')}
-              className={`rounded-full px-4 py-1.5 ${activeBucket === 'priority' ? 'bg-white' : ''}`}
-            >
-              <Text className={`text-[17px] font-semibold ${activeBucket === 'priority' ? 'text-slate-900' : 'text-slate-500'}`}>
-                Ưu tiên
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setActiveBucket('other')}
-              className={`rounded-full px-4 py-1.5 ${activeBucket === 'other' ? 'bg-white' : ''}`}
-            >
-              <Text className={`text-[17px] font-semibold ${activeBucket === 'other' ? 'text-slate-900' : 'text-slate-500'}`}>
-                Khác
-              </Text>
-            </Pressable>
-          </View>
-
-          <Pressable onPress={() => setAdvancedSearchVisible(true)} className="h-10 w-10 items-center justify-center rounded-full">
+          <Text className="text-[16px] font-semibold text-slate-900">Tất cả hội thoại</Text>
+          <Pressable onPress={() => setAdvancedSearchVisible(true)} className="h-10 w-10 items-center justify-center">
             <Feather name="sliders" size={22} color="#7a7d86" />
           </Pressable>
         </View>
@@ -382,7 +350,7 @@ export default function HomeScreen() {
 
       <View className="flex-1 pt-2">
         <FlatList
-          data={bucketedItems}
+          data={filteredItems}
           keyExtractor={(item) => item.conversation._id}
           renderItem={({ item }) => (
             <ConversationItem
@@ -419,9 +387,7 @@ export default function HomeScreen() {
                 <Text className="mt-2 text-center text-[13px] leading-5 text-slate-500">
                   {searchText.trim()
                     ? 'Hãy thử từ khóa khác để tìm đúng cuộc trò chuyện.'
-                    : activeBucket === 'priority'
-                      ? 'Mục Ưu tiên đang trống. Chuyển sang mục Khác để xem thêm.'
-                      : 'Khi có tin nhắn mới, danh sách sẽ xuất hiện ở đây.'}
+                    : 'Khi có tin nhắn mới, danh sách sẽ xuất hiện ở đây.'}
                 </Text>
               </View>
             )
