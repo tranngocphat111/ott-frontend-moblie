@@ -15,7 +15,7 @@ import { ToastProvider } from '@/contexts/ToastContext';
 import { THEME_COLORS } from '@/constants/theme';
 
 WebBrowser.maybeCompleteAuthSession();
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function RootLayoutNav() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -37,7 +37,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!isLoading) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync().catch(() => undefined);
     }
   }, [isLoading]);
 

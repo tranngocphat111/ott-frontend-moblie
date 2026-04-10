@@ -22,6 +22,7 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
   onClose,
   onReload,
 }) => {
+  const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -114,12 +115,20 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
   }
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onClose}>
-      <View className="flex-1">
-        <Pressable className="absolute inset-0 bg-black/35" onPress={onClose} />
-        <View className="flex-1 justify-end">
-          <Animated.View style={{ transform: [{ translateY }] }}>
-            <Pressable className="max-h-[88%] rounded-t-[28px] bg-white px-4 pb-6 pt-4" onPress={() => undefined}>
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Pressable className="flex-1 justify-end bg-black/35" onPress={onClose}>
+        <AnimatedPressable
+          style={{ transform: [{ translateY }], maxHeight: '88%' }}
+          className="rounded-t-[28px] bg-white px-4 pb-6 pt-4"
+          onPress={() => undefined}
+        >
           <View className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" />
           <View className="mb-4 flex-row items-center justify-between">
             <Text className="text-[20px] font-bold text-slate-900">Quản lý thẻ phân loại</Text>
@@ -189,10 +198,8 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
               <Text className="ml-2 text-[15px] font-semibold text-slate-600">Thêm thẻ phân loại</Text>
             </Pressable>
           )}
-            </Pressable>
-          </Animated.View>
-        </View>
-      </View>
+        </AnimatedPressable>
+      </Pressable>
     </Modal>
   );
 };

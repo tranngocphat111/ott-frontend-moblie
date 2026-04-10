@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Modal, Pressable, Text, View } from 'react-native';
+import React from 'react';
+import { Modal, Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { THEME_COLORS } from '@/constants/theme';
 
@@ -18,32 +18,6 @@ export const ConversationFilterModal: React.FC<ConversationFilterModalProps> = (
   onOpenCategoryPicker,
   onClose,
 }) => {
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!visible) {
-      slideAnim.setValue(0);
-      fadeAnim.setValue(0);
-      return;
-    }
-
-    slideAnim.setValue(-10);
-    fadeAnim.setValue(0);
-    Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, slideAnim, visible]);
-
   if (!visible) {
     return null;
   }
@@ -51,9 +25,8 @@ export const ConversationFilterModal: React.FC<ConversationFilterModalProps> = (
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
       <Pressable className="flex-1 bg-black/15" onPress={onClose}>
-        <Animated.View style={{ opacity: fadeAnim }} className="absolute right-4 top-16">
-          <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
-            <View className="w-56 rounded-[24px] bg-white px-4 py-3 shadow-2xl shadow-black/20">
+        <View className="items-end px-4 pt-56">
+          <View className="w-56 rounded-[24px] bg-white px-4 py-3 shadow-2xl shadow-black/20">
             <Pressable
               onPress={() => {
                 onChangeFilterMode('unread');
@@ -75,9 +48,8 @@ export const ConversationFilterModal: React.FC<ConversationFilterModalProps> = (
               <Feather name="tag" size={18} color={THEME_COLORS.chat.otherText} />
               <Text className="text-[16px] text-slate-900">Thẻ phân loại</Text>
             </Pressable>
-            </View>
-          </Animated.View>
-        </Animated.View>
+          </View>
+        </View>
       </Pressable>
     </Modal>
   );

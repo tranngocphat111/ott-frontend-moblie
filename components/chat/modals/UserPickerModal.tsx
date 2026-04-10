@@ -21,10 +21,16 @@ export const UserPickerModal: React.FC<UserPickerModalProps> = ({
   onSelectUser,
 }) => {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
       <Pressable className="flex-1 justify-end bg-black/35" onPress={onClose}>
-        <Pressable className="max-h-[78%] rounded-t-[28px] bg-white px-4 pb-6 pt-4" onPress={() => undefined}>
-          <View className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" />
+        <Pressable style={{ maxHeight: '78%' }} className="rounded-t-[28px] bg-white px-4 pb-6 pt-4" onPress={() => undefined}>
           <View className="mb-4 flex-row items-center justify-between">
             <Text className="text-[18px] font-bold text-slate-900">Chọn user chat</Text>
             <Pressable onPress={onClose} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100">

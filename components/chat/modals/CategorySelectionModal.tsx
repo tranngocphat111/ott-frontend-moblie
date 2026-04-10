@@ -25,6 +25,7 @@ export const CategorySelectionModal: React.FC<CategorySelectionModalProps> = ({
   onManageCategories,
   onClose,
 }) => {
+  const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
   const translateY = useRef(new Animated.Value(24)).current;
 
   useEffect(() => {
@@ -47,12 +48,20 @@ export const CategorySelectionModal: React.FC<CategorySelectionModalProps> = ({
   }
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onClose}>
-      <View className="flex-1">
-        <Pressable className="absolute inset-0 bg-black/35" onPress={onClose} />
-        <View className="flex-1 justify-end">
-          <Animated.View style={{ transform: [{ translateY }] }}>
-            <Pressable className="max-h-[82%] rounded-t-[28px] bg-white px-4 pb-6 pt-4" onPress={() => undefined}>
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Pressable className="flex-1 justify-end bg-black/35" onPress={onClose}>
+        <AnimatedPressable
+          style={{ transform: [{ translateY }], maxHeight: '82%' }}
+          className="rounded-t-[28px] bg-white px-4 pb-6 pt-4"
+          onPress={() => undefined}
+        >
               <View className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" />
               <View className="mb-4 flex-row items-center justify-between">
                 <Text className="text-[20px] font-bold text-slate-900">Thẻ phân loại</Text>
@@ -91,10 +100,8 @@ export const CategorySelectionModal: React.FC<CategorySelectionModalProps> = ({
                   <Text className="text-[15px] font-semibold text-white">Áp dụng</Text>
                 </Pressable>
               </View>
-            </Pressable>
-          </Animated.View>
-        </View>
-      </View>
+        </AnimatedPressable>
+      </Pressable>
     </Modal>
   );
 };

@@ -673,14 +673,17 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-surface-sunken" edges={['left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: THEME_COLORS.surface.sunken }} edges={['left', 'right']}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
       <LinearGradient
         colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        className="px-4 pb-4"
-        style={{ paddingTop: insets.top + 10 }}
+        style={{
+          paddingHorizontal: 16,
+          paddingBottom: 16,
+          paddingTop: insets.top + 10,
+        }}
       >
         <View className="mb-3 flex-row items-center justify-between">
           <Pressable
@@ -712,7 +715,16 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View className={`flex-row items-center rounded-2xl px-4 py-3 ${isSearchFocused ? 'bg-white shadow-sm' : 'bg-white/15'}`}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            borderRadius: 16,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            backgroundColor: isSearchFocused ? THEME_COLORS.neutral.white : 'rgba(255,255,255,0.15)',
+          }}
+        >
           <Feather name="search" size={20} color={isSearchFocused ? THEME_COLORS.neutral.slate500 : THEME_COLORS.neutral.white} />
           <TextInput
             value={searchText}
@@ -721,7 +733,12 @@ export default function HomeScreen() {
             placeholderTextColor={isSearchFocused ? THEME_COLORS.neutral.slate400 : THEME_COLORS.neutral.white}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => setIsSearchFocused(false)}
-            className={`ml-3 flex-1 text-[16px] ${isSearchFocused ? 'text-slate-900' : 'text-white'}`}
+            style={{
+              marginLeft: 12,
+              flex: 1,
+              fontSize: 16,
+              color: isSearchFocused ? THEME_COLORS.neutral.slate700 : THEME_COLORS.neutral.white,
+            }}
           />
           {searchText.length > 0 && (
             <Pressable onPress={() => setSearchText('')}>
