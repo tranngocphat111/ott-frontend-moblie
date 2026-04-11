@@ -1,35 +1,29 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  FlatList,
-  Image,
+  Modal,
   Pressable,
-  RefreshControl,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
 import { THEME_COLORS } from '@/constants/theme';
+import { getConversationAvatar } from '@/utils/chat';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type {
   ChatCategory,
   ChatSearchContactItem,
-  ChatSearchFileItem,
-  ChatSearchMessageItem,
   ChatSearchResult,
   ChatServiceUser,
 } from '@/services/api/chat';
-import { ConversationItem } from '@/components/chat/ConversationItem';
 import {
   ConversationFilterModal,
   type ConversationFilterMode,
@@ -37,9 +31,27 @@ import {
 import { CategorySelectionModal } from '@/components/chat/modals/CategorySelectionModal';
 import { CategoryManagementModal } from '@/components/chat/modals/CategoryManagementModal';
 import { UserPickerModal } from '@/components/chat/modals/UserPickerModal';
+import { HomeTopSection } from '@/components/home/HomeTopSection';
+import { HomeSearchPanel } from '@/components/home/HomeSearchPanel';
+import { HomeConversationList } from '@/components/home/HomeConversationList';
 
-type SearchTab = 'all' | 'contacts' | 'messages' | 'files';
-const SEARCH_HISTORY_KEY = 'ott-chat-search-history';
+type SearchTab = 'all' | 'contacts' | 'conversations' | 'messages' | 'files';
+const SEARCH_CONTACT_HISTORY_KEY = 'ott-chat-search-contact-history';
+const SEARCH_LOAD_MORE_STEP = 5;
+
+const INITIAL_SEARCH_VISIBLE_COUNTS = {
+  conversations: 5,
+  messages: 5,
+  files: 5,
+  media: 5,
+};
+
+type SearchHistoryContact = {
+  user_id: string;
+  conversation_id?: string;
+  name: string;
+  avatar?: string;
+};
 
 const EMPTY_SEARCH: ChatSearchResult = {
   contacts: [],
@@ -104,17 +116,8 @@ const normalizeSearchResult = (payload: any): ChatSearchResult => {
   return result;
 };
 
-const previewMessage = (item: ChatSearchMessageItem) => {
-  return String(item.preview || '').trim() || '[Tin nhắn]';
-};
-
-const previewFile = (item: ChatSearchFileItem) => {
-  return String(item.file_name || item.key || '').trim() || '[Tệp]';
-};
-
 export default function HomeScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { chatUserId, setChatUserId } = useAuth();
 
   const [searchText, setSearchText] = useState('');
@@ -139,8 +142,14 @@ export default function HomeScreen() {
   const [searchResults, setSearchResults] = useState<ChatSearchResult | null>(null);
   const [senderFilter, setSenderFilter] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchVisibleCounts, setSearchVisibleCounts] = useState(INITIAL_SEARCH_VISIBLE_COUNTS);
+  const [recentContactHistory, setRecentContactHistory] = useState<SearchHistoryContact[]>([]);
   const [draftCategoryIds, setDraftCategoryIds] = useState<string[]>([]);
+  const [isEditingHistory, setIsEditingHistory] = useState(false);
+  const [actionConversationId, setActionConversationId] = useState<string | null>(null);
+  const [categoryTargetConversation, setCategoryTargetConversation] = useState<ChatConversationWithParticipant | null>(null);
+  const [conversationCategoryPickerVisible, setConversationCategoryPickerVisible] = useState(false);
 
   const selectedUser = useMemo(
     () => chatUsers.find((candidate) => candidate.user_id === chatUserId) || null,
@@ -175,12 +184,21 @@ export default function HomeScreen() {
   useEffect(() => {
     void (async () => {
       try {
-        const storedHistory = await AsyncStorage.getItem(SEARCH_HISTORY_KEY);
+        const storedHistory = await AsyncStorage.getItem(SEARCH_CONTACT_HISTORY_KEY);
         if (!storedHistory) return;
 
         const parsedHistory = JSON.parse(storedHistory);
         if (Array.isArray(parsedHistory)) {
-          setRecentSearches(parsedHistory.filter((item) => typeof item === 'string').slice(0, 8));
+          const normalized = parsedHistory
+            .filter((item) => item && typeof item === 'object' && typeof item.user_id === 'string')
+            .map((item) => ({
+              user_id: String(item.user_id),
+              conversation_id: item.conversation_id ? String(item.conversation_id) : undefined,
+              name: String(item.name || item.user_id),
+              avatar: item.avatar ? String(item.avatar) : undefined,
+            }))
+            .slice(0, 12);
+          setRecentContactHistory(normalized);
         }
       } catch (error) {
         console.warn('Cannot load search history.', error);
@@ -188,13 +206,30 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  const rememberSearchQuery = useCallback(async (query: string) => {
-    const normalizedQuery = query.trim();
-    if (!normalizedQuery) return;
+  const rememberSearchContacts = useCallback(async (contacts: ChatSearchContactItem[]) => {
+    if (!Array.isArray(contacts) || contacts.length === 0) return;
 
-    setRecentSearches((current) => {
-      const next = [normalizedQuery, ...current.filter((item) => item !== normalizedQuery)].slice(0, 8);
-      void AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next));
+    const normalizedContacts: SearchHistoryContact[] = contacts
+      .filter((contact) => !!contact?.user_id)
+      .slice(0, 4)
+      .map((contact) => ({
+        conversation_id: contact.conversation_ids?.[0] ? String(contact.conversation_ids[0]) : undefined,
+        user_id: String(contact.user_id),
+        name: String(contact.name || contact.user_id),
+        avatar: contact.avatar,
+      }));
+
+    setRecentContactHistory((current) => {
+      const merged = [...normalizedContacts, ...current].reduce<SearchHistoryContact[]>((acc, nextItem) => {
+        if (acc.some((item) => item.user_id === nextItem.user_id)) {
+          return acc;
+        }
+        acc.push(nextItem);
+        return acc;
+      }, []);
+
+      const next = merged.slice(0, 12);
+      void AsyncStorage.setItem(SEARCH_CONTACT_HISTORY_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
@@ -320,8 +355,9 @@ export default function HomeScreen() {
           limit: 24,
           senderId: senderFilter || undefined,
         });
-        setSearchResults(normalizeSearchResult(payload));
-        void rememberSearchQuery(keyword);
+        const normalized = normalizeSearchResult(payload);
+        setSearchResults(normalized);
+        void rememberSearchContacts(normalized.contacts);
       } catch (error) {
         console.error('Search failed', error);
         setSearchResults(EMPTY_SEARCH);
@@ -331,7 +367,11 @@ export default function HomeScreen() {
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [searchText, chatUserId, senderFilter, rememberSearchQuery]);
+  }, [searchText, chatUserId, senderFilter, rememberSearchContacts]);
+
+  useEffect(() => {
+    setSearchVisibleCounts(INITIAL_SEARCH_VISIBLE_COUNTS);
+  }, [searchText]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -356,7 +396,7 @@ export default function HomeScreen() {
   );
 
   const handleToggleCategory = useCallback((categoryId: string) => {
-    setSelectedCategoryIds((current) =>
+    setDraftCategoryIds((current) =>
       current.includes(categoryId)
         ? current.filter((id) => id !== categoryId)
         : [...current, categoryId],
@@ -383,6 +423,12 @@ export default function HomeScreen() {
   }, [draftCategoryIds]);
 
   const handleClearDraftCategories = useCallback(() => {
+    setDraftCategoryIds([]);
+  }, []);
+
+  const handleClearFilter = useCallback(() => {
+    setFilterMode('all');
+    setSelectedCategoryIds([]);
     setDraftCategoryIds([]);
   }, []);
 
@@ -445,45 +491,51 @@ export default function HomeScreen() {
     return messages.filter((item) => String(item.sender_id || '') === senderFilter);
   }, [searchResults, senderFilter]);
 
+  const searchAvatarByUserId = useMemo(() => {
+    const map = new Map<string, string>();
+    (searchResults?.contacts || []).forEach((item) => {
+      if (item.user_id && item.avatar) {
+        map.set(String(item.user_id), String(item.avatar));
+      }
+    });
+    return map;
+  }, [searchResults]);
+
+  const searchAvatarByConversationId = useMemo(() => {
+    const map = new Map<string, string>();
+    (searchResults?.conversations || []).forEach((item) => {
+      if (item.conversation_id && item.avatar) {
+        map.set(String(item.conversation_id), String(item.avatar));
+      }
+    });
+    return map;
+  }, [searchResults]);
+
+  const inboxAvatarByUserId = useMemo(() => {
+    const map = new Map<string, string>();
+    items.forEach((item) => {
+      (item.conversation.participants || []).forEach((participant) => {
+        if (participant?.user_id && participant?.avatar && !map.has(String(participant.user_id))) {
+          map.set(String(participant.user_id), String(participant.avatar));
+        }
+      });
+    });
+    return map;
+  }, [items]);
+
+  const inboxAvatarByConversationId = useMemo(() => {
+    const map = new Map<string, string>();
+    items.forEach((item) => {
+      const conversationId = String(item.conversation._id || '');
+      const avatar = getConversationAvatar(item.conversation, chatUserId);
+      if (conversationId && avatar) {
+        map.set(conversationId, avatar);
+      }
+    });
+    return map;
+  }, [items, chatUserId]);
+
   const hasSearchQuery = searchText.trim().length > 0;
-  const isSearching = isSearchFocused || hasSearchQuery;
-
-  const getInitials = useCallback((label: string) => {
-    const parts = String(label || '')
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
-
-    if (parts.length === 0) {
-      return '?';
-    }
-
-    return parts
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase();
-  }, []);
-
-  const renderAvatar = useCallback(
-    (options: { label: string; avatar?: string | null; icon: React.ComponentProps<typeof Feather>['name'] }) => {
-      const initials = getInitials(options.label);
-
-      return (
-        <View className="h-11 w-11 overflow-hidden rounded-2xl bg-primary-600/12 items-center justify-center">
-          {options.avatar ? (
-            <Image source={{ uri: options.avatar }} className="h-full w-full" />
-          ) : (
-            <View className="h-full w-full items-center justify-center bg-primary-600/12">
-              <Feather name={options.icon} size={16} color={THEME_COLORS.primary[600]} />
-              <Text className="mt-0.5 text-[11px] font-bold text-primary-600">{initials}</Text>
-            </View>
-          )}
-        </View>
-      );
-    },
-    [getInitials],
-  );
 
   const openConversation = useCallback(
     (conversationId: string) => {
@@ -493,261 +545,189 @@ export default function HomeScreen() {
     [router],
   );
 
-  const renderSearchSectionHeader = (label: string, count: number) => (
-    <Text className="mb-2 text-[13px] font-semibold text-slate-700">{`${label} (${count})`}</Text>
+  const handleOpenHistoryConversation = useCallback(
+    (historyItem: SearchHistoryContact) => {
+      const historyConversationId = String(historyItem.conversation_id || '');
+      const hasConversationInInbox =
+        historyConversationId.length > 0 &&
+        items.some((item) => String(item.conversation._id || '') === historyConversationId);
+
+      if (hasConversationInInbox) {
+        openConversation(historyConversationId);
+        return;
+      }
+
+      const fallbackConversation = items.find((item) =>
+        (item.conversation.participants || []).some(
+          (participant) => String(participant?.user_id || '') === String(historyItem.user_id || ''),
+        ),
+      );
+
+      const fallbackConversationId = String(fallbackConversation?.conversation._id || '');
+      if (fallbackConversationId) {
+        openConversation(fallbackConversationId);
+        return;
+      }
+
+      Alert.alert('Không thể mở hội thoại', 'Không tìm thấy hội thoại phù hợp trong danh sách hiện tại.');
+    },
+    [items, openConversation],
   );
 
-  const renderSearchHistory = () => {
-    if (recentSearches.length === 0) {
-      return (
-        <View className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-          <Text className="text-[15px] font-semibold text-slate-900">Lịch sử tìm kiếm</Text>
-          <Text className="mt-1 text-[13px] text-slate-500">
-            Bắt đầu nhập để tìm đoạn chat, người gửi, file hoặc media.
-          </Text>
-        </View>
-      );
-    }
+  const handleSearchFocus = useCallback(() => {
+    setIsSearchFocused(true);
+    setIsSearchMode(true);
+  }, []);
 
-    return (
-      <View className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-        <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-[15px] font-semibold text-slate-900">Lịch sử tìm kiếm</Text>
-          <Feather name="clock" size={15} color={THEME_COLORS.neutral.slate500} />
-        </View>
-        <View className="flex-row flex-wrap gap-2">
-          {recentSearches.map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => setSearchText(item)}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2"
-            >
-              <Text className="text-[13px] font-medium text-slate-700">{item}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    );
-  };
+  const handleSearchBlur = useCallback(() => {
+    setIsSearchFocused(false);
+  }, []);
 
-  const renderSearchPanel = () => {
-    if (searchLoading) {
-      return (
-        <View className="flex-1 items-center justify-center px-6 py-20">
-          <Text className="text-[14px] text-slate-500">Đang tìm kiếm...</Text>
-        </View>
-      );
-    }
+  const handleCloseSearch = useCallback(() => {
+    setSearchText('');
+    setSearchResults(null);
+    setSearchTab('all');
+    setSenderFilter('');
+    setIsSearchFocused(false);
+    setIsSearchMode(false);
+  }, []);
 
-    if (searchText.trim().length === 0) {
-      return (
-        <ScrollView className="flex-1" contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
-          {renderSearchHistory()}
-        </ScrollView>
-      );
-    }
+  const handleClearSearchInput = useCallback(() => {
+    setSearchText('');
+    setSearchResults(null);
+    setSearchTab('all');
+    setSenderFilter('');
+  }, []);
 
-    if (!searchResults || searchResults.total === 0) {
-      return (
-        <View className="flex-1 items-center justify-center px-6 py-20">
-          <Text className="text-[14px] text-slate-500">Không tìm thấy kết quả phù hợp</Text>
-        </View>
-      );
-    }
+  const clearContactSearchHistory = useCallback(() => {
+    setRecentContactHistory([]);
+    void AsyncStorage.removeItem(SEARCH_CONTACT_HISTORY_KEY);
+  }, []);
 
-    const keyword = searchText.trim().toLowerCase();
-    const conversationByName = (searchResults.conversations || []).filter((item) =>
-      String(item.name || '').toLowerCase().includes(keyword),
-    );
+  const handleTogglePinConversation = useCallback(
+    async (item: ChatConversationWithParticipant) => {
+      if (!chatUserId) return;
 
-    return (
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
-        {(searchTab === 'all' || searchTab === 'contacts') && searchResults.contacts.length > 0 && (
-          <View className="mb-4 rounded-2xl bg-white p-3 shadow-sm">
-            {renderSearchSectionHeader('Liên hệ', searchResults.contacts.length)}
-            {searchResults.contacts.slice(0, searchTab === 'all' ? 4 : 24).map((item: ChatSearchContactItem, idx) => (
-              <Pressable
-                key={`${item.user_id}_${idx}`}
-                onPress={() => openConversation(String(item.conversation_ids?.[0] || ''))}
-                className="mb-2 flex-row items-center rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
-              >
-                {renderAvatar({ label: item.name || item.user_id, avatar: item.avatar, icon: 'user' })}
-                <View className="ml-3 flex-1">
-                  <Text className="text-[15px] font-semibold text-slate-900">{item.name || item.user_id}</Text>
-                  <Text className="mt-0.5 text-[12px] text-slate-500">{item.phone || item.user_id}</Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={THEME_COLORS.neutral.slate400} />
-              </Pressable>
-            ))}
-          </View>
-        )}
+      const conversationId = String(item.conversation._id || '');
+      if (!conversationId) return;
 
-        {(searchTab === 'all' || searchTab === 'contacts') && conversationByName.length > 0 && (
-          <View className="mb-4 rounded-2xl bg-white p-3 shadow-sm">
-            {renderSearchSectionHeader('Đoạn chat', conversationByName.length)}
-            {conversationByName.slice(0, searchTab === 'all' ? 4 : 24).map((item, idx) => (
-              <Pressable
-                key={`${item.conversation_id}_${idx}`}
-                onPress={() => openConversation(String(item.conversation_id || ''))}
-                className="mb-2 flex-row items-center rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
-              >
-                {renderAvatar({ label: item.name || 'Đoạn chat', avatar: item.avatar, icon: item.type === 'group' ? 'users' : 'message-circle' })}
-                <View className="ml-3 flex-1">
-                  <Text className="text-[15px] font-semibold text-slate-900">{item.name || 'Đoạn chat'}</Text>
-                  <Text className="mt-0.5 text-[12px] text-slate-500">{item.type === 'group' ? 'Nhóm' : 'Riêng tư'}</Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={THEME_COLORS.neutral.slate400} />
-              </Pressable>
-            ))}
-          </View>
-        )}
+      try {
+        setActionConversationId(conversationId);
+        await ChatApi.updatePinStatus(
+          conversationId,
+          chatUserId,
+          !Boolean(item.participant.settings?.is_pinned),
+        );
+        await loadConversations();
+      } catch (error) {
+        console.error('Failed to toggle pin status:', error);
+        Alert.alert('Lỗi', 'Không thể cập nhật trạng thái ghim.');
+      } finally {
+        setActionConversationId(null);
+      }
+    },
+    [chatUserId, loadConversations],
+  );
 
-        {(searchTab === 'all' || searchTab === 'messages') && filteredSearchMessages.length > 0 && (
-          <View className="mb-4 rounded-2xl bg-white p-3 shadow-sm">
-            {renderSearchSectionHeader('Tin nhắn', filteredSearchMessages.length)}
-            {filteredSearchMessages.slice(0, searchTab === 'all' ? 5 : 30).map((item) => (
-              <Pressable
-                key={item._id}
-                onPress={() => openConversation(String(item.conversation_id || ''))}
-                className="mb-2 flex-row items-start rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
-              >
-                {renderAvatar({ label: item.sender_name || item.sender_id || 'Tin nhắn', icon: 'message-circle' })}
-                <View className="ml-3 flex-1">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-[14px] font-semibold text-slate-900">{item.sender_name || item.sender_id}</Text>
-                    <Text className="text-[11px] text-slate-400">Tin nhắn</Text>
-                  </View>
-                  <Text className="mt-1 text-[14px] leading-5 text-slate-700" numberOfLines={2}>
-                    {previewMessage(item)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        )}
+  const handleToggleMuteConversation = useCallback(
+    async (item: ChatConversationWithParticipant) => {
+      if (!chatUserId) return;
 
-        {(searchTab === 'all' || searchTab === 'files') && (searchResults.files.length > 0 || searchResults.media.length > 0) && (
-          <View className="rounded-2xl bg-white p-3 shadow-sm">
-            {renderSearchSectionHeader('Tệp và media', searchResults.files.length + searchResults.media.length)}
-            {searchResults.files.slice(0, searchTab === 'all' ? 5 : 24).map((item: ChatSearchFileItem) => (
-              <Pressable
-                key={item._id}
-                onPress={() => openConversation(String(item.conversation_id || ''))}
-                className="mb-2 flex-row items-start rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
-              >
-                {renderAvatar({ label: item.sender_name || item.sender_id || 'File', icon: 'paperclip' })}
-                <View className="ml-3 flex-1">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-[14px] font-semibold text-slate-900">{item.sender_name || item.sender_id}</Text>
-                    <Text className="text-[11px] text-slate-400">File</Text>
-                  </View>
-                  <Text className="mt-1 text-[14px] leading-5 text-slate-700" numberOfLines={1}>
-                    {previewFile(item)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
+      const conversationId = String(item.conversation._id || '');
+      if (!conversationId) return;
 
-            {searchResults.media.slice(0, searchTab === 'all' ? 4 : 24).map((item: any, idx: number) => (
-              <Pressable
-                key={`${item._id || item.message_id || idx}`}
-                onPress={() => openConversation(String(item.conversation_id || ''))}
-                className="mb-2 flex-row items-start rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
-              >
-                {renderAvatar({ label: item.sender_name || item.sender_id || 'Media', icon: 'image' })}
-                <View className="ml-3 flex-1">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-[14px] font-semibold text-slate-900">{item.sender_name || item.sender_id}</Text>
-                    <Text className="text-[11px] text-slate-400">Media</Text>
-                  </View>
-                  <Text className="mt-1 text-[14px] leading-5 text-slate-700">
-                    [{String(item.media_type || 'media').toUpperCase()}]
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    );
-  };
+      const currentStatus = item.participant.settings?.notification_status || 'on';
+      const nextStatus: 'on' | 'off' = currentStatus === 'off' ? 'on' : 'off';
 
+      try {
+        setActionConversationId(conversationId);
+        await ChatApi.updateNotificationStatus(conversationId, chatUserId, nextStatus, null);
+        await loadConversations();
+      } catch (error) {
+        console.error('Failed to update notification status:', error);
+        Alert.alert('Lỗi', 'Không thể cập nhật trạng thái thông báo.');
+      } finally {
+        setActionConversationId(null);
+      }
+    },
+    [chatUserId, loadConversations],
+  );
+
+  const handleDeleteConversation = useCallback(
+    (item: ChatConversationWithParticipant) => {
+      if (!chatUserId) return;
+
+      const conversationId = String(item.conversation._id || '');
+      if (!conversationId) return;
+
+      Alert.alert('Xóa cuộc trò chuyện', 'Bạn có chắc muốn xóa cuộc trò chuyện này?', [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                setActionConversationId(conversationId);
+                await ChatApi.deleteConversationForMe(conversationId, chatUserId);
+                await loadConversations();
+              } catch (error) {
+                console.error('Failed to delete conversation:', error);
+                Alert.alert('Lỗi', 'Không thể xóa cuộc trò chuyện.');
+              } finally {
+                setActionConversationId(null);
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [chatUserId, loadConversations],
+  );
+
+  const handleOpenConversationCategory = useCallback((item: ChatConversationWithParticipant) => {
+    setCategoryTargetConversation(item);
+    setConversationCategoryPickerVisible(true);
+  }, []);
+
+  const handleSelectConversationCategory = useCallback(
+    async (categoryId?: string | null) => {
+      if (!chatUserId || !categoryTargetConversation) return;
+
+      const conversationId = String(categoryTargetConversation.conversation._id || '');
+      if (!conversationId) return;
+
+      try {
+        setActionConversationId(conversationId);
+        await ChatApi.updateConversationCategory(conversationId, chatUserId, categoryId ?? null);
+        setConversationCategoryPickerVisible(false);
+        setCategoryTargetConversation(null);
+        await loadConversations();
+      } catch (error) {
+        console.error('Failed to update conversation category:', error);
+        Alert.alert('Lỗi', 'Không thể cập nhật phân loại cho hội thoại.');
+      } finally {
+        setActionConversationId(null);
+      }
+    },
+    [categoryTargetConversation, chatUserId, loadConversations],
+  );
+
+  const selectedConversationCategoryId = useMemo(() => {
+    const rawValue = categoryTargetConversation?.participant.settings?.category_id;
+    return rawValue ? String(rawValue) : '';
+  }, [categoryTargetConversation]);
+
+  const deleteHistoryItem = useCallback((userId: string) => {
+    setRecentContactHistory((current) => {
+      const updated = current.filter((item) => item.user_id !== userId);
+      void AsyncStorage.setItem(SEARCH_CONTACT_HISTORY_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME_COLORS.surface.sunken }} edges={['left', 'right']}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
-      <LinearGradient
-        colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={{
-          paddingHorizontal: 16,
-          paddingBottom: 16,
-          paddingTop: insets.top + 10,
-        }}
-      >
-        <View className="mb-3 flex-row items-center justify-between">
-          <Pressable
-            onPress={handleOpenUserPicker}
-            className="max-w-[65%] flex-row items-center rounded-full bg-white/18 px-3 py-2"
-          >
-            <View className="h-6 w-6 items-center justify-center rounded-full bg-white/25">
-              <Feather name="users" size={13} color={THEME_COLORS.neutral.white} />
-            </View>
-            <Text className="ml-2 flex-1 text-[12px] font-semibold text-white" numberOfLines={1}>
-              {selectedUser ? `User: ${selectedUser.name || selectedUser.user_id}` : 'Chọn user chat'}
-            </Text>
-            <Feather name="chevron-down" size={14} color={THEME_COLORS.neutral.white} />
-          </Pressable>
-
-          <View className="flex-row items-center gap-3">
-            <Pressable
-              onPress={handleOpenUserPicker}
-              className="h-9 w-9 items-center justify-center rounded-full bg-white/18"
-            >
-              <Feather name="grid" size={17} color={THEME_COLORS.neutral.white} />
-            </Pressable>
-            <Pressable
-              onPress={() => Alert.alert('Chức năng', 'Tạo cuộc trò chuyện mới sẽ được nối sau')}
-              className="h-9 w-9 items-center justify-center rounded-full bg-white/18"
-            >
-              <Feather name="plus" size={19} color={THEME_COLORS.neutral.white} />
-            </Pressable>
-          </View>
-        </View>
-
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderRadius: 16,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            backgroundColor: isSearchFocused ? THEME_COLORS.neutral.white : 'rgba(255,255,255,0.15)',
-          }}
-        >
-          <Feather name="search" size={20} color={isSearchFocused ? THEME_COLORS.neutral.slate500 : THEME_COLORS.neutral.white} />
-          <TextInput
-            value={searchText}
-            onChangeText={setSearchText}
-            placeholder="Tìm kiếm đoạn chat, người gửi, nội dung, tệp..."
-            placeholderTextColor={isSearchFocused ? THEME_COLORS.neutral.slate400 : THEME_COLORS.neutral.white}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setIsSearchFocused(false)}
-            style={{
-              marginLeft: 12,
-              flex: 1,
-              fontSize: 16,
-              color: isSearchFocused ? THEME_COLORS.neutral.slate700 : THEME_COLORS.neutral.white,
-            }}
-          />
-          {searchText.length > 0 && (
-            <Pressable onPress={() => setSearchText('')}>
-              <Feather name="x-circle" size={18} color={isSearchFocused ? THEME_COLORS.neutral.slate400 : THEME_COLORS.neutral.white} />
-            </Pressable>
-          )}
-        </View>
-      </LinearGradient>
-
       <UserPickerModal
         visible={pickerVisible}
         users={chatUsers}
@@ -786,145 +766,157 @@ export default function HomeScreen() {
         onReload={() => void loadConversations()}
       />
 
-      <View className="border-b border-slate-200 bg-white px-4 py-2">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-[16px] font-semibold text-slate-900">
-            {isSearching ? 'Kết quả tìm kiếm' : 'Tất cả hội thoại'}
-          </Text>
-          <View className="flex-row items-center gap-2">
-            {isUnreadFilterActive && (
-              <Pressable
-                onPress={() => setFilterMode('all')}
-                className="flex-row items-center rounded-full border border-slate-200 bg-white px-3 py-1.5"
-              >
-                <Text className="mr-1 text-[12px] font-semibold text-slate-700">Chưa đọc</Text>
-                <Feather name="x" size={13} color={THEME_COLORS.neutral.slate500} />
-              </Pressable>
-            )}
-
-            {isCategoryFilterActive && (
-              <Pressable
-                onPress={() => {
-                  setSelectedCategoryIds([]);
-                  setDraftCategoryIds([]);
-                  setFilterMode('all');
-                }}
-                className="flex-row items-center rounded-full border border-slate-200 bg-white px-3 py-1.5"
-              >
-                <View
-                  className="mr-2 h-3 w-3 rounded-sm"
-                  style={{ backgroundColor: firstSelectedCategory?.color || THEME_COLORS.success.border }}
-                />
-                <Text className="mr-1 text-[12px] font-semibold text-slate-700">
-                  {selectedCategoryIds.length} thẻ
-                </Text>
-                <Feather name="x" size={13} color={THEME_COLORS.neutral.slate500} />
-              </Pressable>
-            )}
-
-            {!isFilterActive && (
-              <Pressable onPress={() => setFilterVisible(true)} className="h-10 w-10 items-center justify-center">
-                <Feather name="filter" size={22} color={THEME_COLORS.neutral.slate500} />
-              </Pressable>
-            )}
-          </View>
-        </View>
-
-        {hasSearchQuery && (
-          <View className="mt-2">
-            <View className="flex-row flex-wrap gap-2">
-              {[
-                { key: 'all', label: 'Tất cả' },
-                { key: 'contacts', label: 'Liên hệ' },
-                { key: 'messages', label: 'Tin nhắn' },
-                { key: 'files', label: 'File' },
-              ].map((tab) => (
-                <Pressable
-                  key={tab.key}
-                  onPress={() => setSearchTab(tab.key as SearchTab)}
-                  className={`rounded-full px-3 py-1.5 ${searchTab === tab.key ? 'bg-primary-600' : 'bg-slate-100'}`}
-                >
-                  <Text className={`text-[12px] font-semibold ${searchTab === tab.key ? 'text-white' : 'text-slate-600'}`}>
-                    {tab.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {searchTab === 'messages' && senderOptions.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
-                <View className="flex-row gap-2">
-                  <Pressable
-                    onPress={() => setSenderFilter('')}
-                    className={`rounded-full px-3 py-1.5 ${senderFilter === '' ? 'bg-primary-600/15' : 'bg-slate-100'}`}
-                  >
-                    <Text className="text-[12px] text-slate-700">Tất cả người gửi</Text>
-                  </Pressable>
-                  {senderOptions.map((sender) => (
-                    <Pressable
-                      key={sender.id}
-                      onPress={() => setSenderFilter(sender.id)}
-                      className={`rounded-full px-3 py-1.5 ${senderFilter === sender.id ? 'bg-primary-600/15' : 'bg-slate-100'}`}
-                    >
-                      <Text className="text-[12px] text-slate-700">{sender.name}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            )}
-          </View>
-        )}
-      </View>
+      <HomeTopSection
+        onCreateConversation={() => Alert.alert('Chức năng', 'Tạo cuộc trò chuyện mới sẽ được nối sau')}
+        onOpenFilter={() => setFilterVisible(true)}
+        onClearFilter={handleClearFilter}
+        filterMode={filterMode}
+        selectedCategoryCount={selectedCategoryIds.length}
+        conversationCount={filteredItems.length}
+        categoryColor={firstSelectedCategory?.color || undefined}
+        onOpenQrScanner={() => router.push('/qr-scan' as any)}
+        searchText={searchText}
+        onSearchTextChange={setSearchText}
+        onSearchFocus={handleSearchFocus}
+        onSearchBlur={handleSearchBlur}
+        onClearSearch={handleClearSearchInput}
+        onCloseSearch={handleCloseSearch}
+        isSearchMode={isSearchMode}
+        isSearchFocused={isSearchFocused}
+      />
 
       <View className="flex-1 pt-2">
-        {isSearching ? (
-          renderSearchPanel()
+        {isSearchMode ? (
+          <HomeSearchPanel
+            searchLoading={searchLoading}
+            searchText={searchText}
+            searchResults={searchResults}
+            searchTab={searchTab}
+            senderFilter={senderFilter}
+            searchVisibleCounts={searchVisibleCounts}
+            recentContactHistory={recentContactHistory}
+            isEditingHistory={isEditingHistory}
+            onToggleEditHistory={() => setIsEditingHistory((current) => !current)}
+            onOpenHistoryConversation={handleOpenHistoryConversation}
+            onDeleteHistoryItem={deleteHistoryItem}
+            onClearHistory={clearContactSearchHistory}
+            onOpenConversation={openConversation}
+            onLoadMore={(section) => {
+              setSearchVisibleCounts((current) => ({
+                ...current,
+                [section]: current[section] + SEARCH_LOAD_MORE_STEP,
+              }));
+            }}
+            searchAvatarByUserId={searchAvatarByUserId}
+            searchAvatarByConversationId={searchAvatarByConversationId}
+            inboxAvatarByUserId={inboxAvatarByUserId}
+            inboxAvatarByConversationId={inboxAvatarByConversationId}
+          />
         ) : (
-          <FlatList
-            data={filteredItems}
-            keyExtractor={(item) => item.conversation._id}
-            renderItem={({ item }) => (
-              <ConversationItem
-                item={item}
-                currentUserId={chatUserId || undefined}
-                category={item.participant.settings?.category_id ? categoryById.get(String(item.participant.settings.category_id)) || null : null}
-                onPress={() =>
-                  router.push(
-                    {
-                      pathname: '/chat/[conversationId]',
-                      params: { conversationId: item.conversation._id },
-                    } as any,
-                  )
-                }
-              />
-            )}
-            refreshControl={
-              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={THEME_COLORS.primary[600]} />
-            }
-            contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              isLoading ? (
-                <View className="flex-1 items-center justify-center px-6 py-20">
-                  <Text className="text-[15px] text-slate-500">Đang tải cuộc trò chuyện...</Text>
-                </View>
-              ) : (
-                <View className="flex-1 items-center justify-center px-6 py-20">
-                  <View className="mb-4 h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm">
-                    <Feather name="message-circle" size={28} color={THEME_COLORS.primary[600]} />
-                  </View>
-                  <Text className="text-center text-[17px] font-semibold text-slate-900">
-                    Chưa có hội thoại nào
-                  </Text>
-                  <Text className="mt-2 text-center text-[13px] leading-5 text-slate-500">
-                    Khi có tin nhắn mới, danh sách sẽ xuất hiện ở đây.
-                  </Text>
-                </View>
-              )
-            }
+          <HomeConversationList
+            items={filteredItems}
+            categoryById={categoryById}
+            currentUserId={chatUserId || undefined}
+            isLoading={isLoading}
+            isRefreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            onOpenConversation={openConversation}
+            onTogglePinConversation={handleTogglePinConversation}
+            onToggleMuteConversation={handleToggleMuteConversation}
+            onOpenConversationCategory={handleOpenConversationCategory}
+            onDeleteConversation={handleDeleteConversation}
+            actionConversationId={actionConversationId}
           />
         )}
       </View>
+
+      <Modal
+        visible={conversationCategoryPickerVisible}
+        transparent
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        onRequestClose={() => {
+          setConversationCategoryPickerVisible(false);
+          setCategoryTargetConversation(null);
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'center', paddingHorizontal: 20 }}>
+          <Pressable
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            onPress={() => {
+              setConversationCategoryPickerVisible(false);
+              setCategoryTargetConversation(null);
+            }}
+          />
+          <View className="rounded-2xl bg-white px-4 py-4">
+            <Text className="mb-3 text-[17px] font-semibold text-slate-900">Phân loại hội thoại</Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {!!selectedConversationCategoryId && (
+                <Pressable
+                  onPress={() => void handleSelectConversationCategory(null)}
+                  className="mb-2 flex-row items-center rounded-xl border border-slate-200 px-3 py-3"
+                >
+                  <Feather name="x-circle" size={16} color={THEME_COLORS.neutral.slate500} />
+                  <Text className="ml-2 text-[15px] text-slate-700">Bỏ phân loại</Text>
+                </Pressable>
+              )}
+
+              {categories.map((category) => (
+                <Pressable
+                  key={category._id}
+                  onPress={() => void handleSelectConversationCategory(category._id)}
+                  className="mb-2 flex-row items-center rounded-xl border px-3 py-3"
+                  style={{
+                    borderColor:
+                      selectedConversationCategoryId === category._id
+                        ? category.color || THEME_COLORS.primary[500]
+                        : THEME_COLORS.neutral.slate300,
+                    backgroundColor:
+                      selectedConversationCategoryId === category._id
+                        ? 'rgba(148,163,184,0.08)'
+                        : '#FFFFFF',
+                  }}
+                >
+                  <View
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: category.color || THEME_COLORS.neutral.slate400 }}
+                  />
+                  <Text className="ml-2 flex-1 text-[15px] text-slate-800">{category.name}</Text>
+                  {selectedConversationCategoryId === category._id && (
+                    <Feather name="check" size={16} color={category.color || THEME_COLORS.primary[600]} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Pressable
+        onPress={handleOpenUserPicker}
+        style={{
+          position: 'absolute',
+          right: 16,
+          bottom: 96,
+          width: 58,
+          height: 58,
+          borderRadius: 29,
+          backgroundColor: THEME_COLORS.primary[600],
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#000',
+          shadowOpacity: 0.2,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 8,
+        }}
+      >
+        <Feather name="users" size={18} color={THEME_COLORS.neutral.white} />
+        <Text className="mt-0.5 text-[10px] font-semibold text-white" numberOfLines={1}>
+          {selectedUser?.name ? String(selectedUser.name).slice(0, 4) : 'TEST'}
+        </Text>
+      </Pressable>
     </SafeAreaView>
   );
 }

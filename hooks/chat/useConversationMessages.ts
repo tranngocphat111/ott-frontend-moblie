@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { ChatApi } from '@/services/api';
 import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
@@ -10,6 +10,13 @@ export function useConversationMessages(conversationId: string | undefined, user
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pinnedMessages, setPinnedMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const activeRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      activeRequestIdRef.current += 1;
+    };
+  }, []);
 
   const normalizeMessages = (messageList: ChatMessage[]) => {
     return [...messageList].sort((left, right) => {
@@ -18,10 +25,11 @@ export function useConversationMessages(conversationId: string | undefined, user
 
       if (leftTime !== rightTime) return leftTime - rightTime;
 
-      const leftId = Number(left.msg_id || 0);
-      const rightId = Number(right.msg_id || 0);
+      const leftId = BigInt(String(left.msg_id || 0));
+      const rightId = BigInt(String(right.msg_id || 0));
 
-      return leftId - rightId;
+      if (leftId === rightId) return 0;
+      return leftId < rightId ? -1 : 1;
     });
   };
 
@@ -34,15 +42,24 @@ export function useConversationMessages(conversationId: string | undefined, user
       return;
     }
 
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
     setLoading(true);
+
+    const shouldLoadConversationMeta =
+      !conversation || String(conversation._id || '') !== String(conversationId || '');
+
+    if (shouldLoadConversationMeta) {
+      setConversation(null);
+    }
+
     try {
-      const [conversationList, messagePayload, pinnedPayload] = await Promise.all([
-        userIdForChat
-          ? ChatApi.getUserConversations(userIdForChat).catch(() => [] as any[])
-          : Promise.resolve([] as any[]),
+      const [messagePayload, pinnedPayload] = await Promise.all([
         ChatApi.getMessages(conversationId, userIdForChat),
         ChatApi.getPinnedMessages(conversationId).catch(() => [] as ChatMessage[]),
       ]);
+
+      if (requestId !== activeRequestIdRef.current) return;
 
       const normalizedMessages = Array.isArray(messagePayload)
         ? messagePayload
@@ -56,25 +73,38 @@ export function useConversationMessages(conversationId: string | undefined, user
           ? (pinnedPayload as any).messages
           : [];
 
-      const matched = conversationList.find(
-        (item: any) => item.conversation._id === conversationId,
-      );
-
-      setConversation(matched?.conversation || null);
       setMessages(normalizeMessages(normalizedMessages));
       setPinnedMessages(normalizeMessages(normalizedPinned));
+
+      if (shouldLoadConversationMeta && userIdForChat) {
+        void ChatApi.getUserConversations(userIdForChat)
+          .then((conversationList) => {
+            if (requestId !== activeRequestIdRef.current) return;
+
+            const matched = conversationList.find(
+              (item: any) => item.conversation._id === conversationId,
+            );
+            if (matched?.conversation) {
+              setConversation(matched.conversation || null);
+            }
+          })
+          .catch(() => undefined);
+      }
 
       const lastMessage = normalizedMessages[normalizedMessages.length - 1];
       if (userIdForChat && lastMessage?.msg_id) {
         void ChatApi.markAsRead(conversationId, userIdForChat, lastMessage.msg_id).catch(() => undefined);
       }
     } catch (error) {
+      if (requestId !== activeRequestIdRef.current) return;
       console.error('Failed to load chat room:', error);
       Alert.alert('Lỗi', 'Không thể tải cuộc trò chuyện');
     } finally {
-      setLoading(false);
+      if (requestId === activeRequestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [conversationId, userIdForChat]);
+  }, [conversation?._id, conversationId, userIdForChat]);
 
   return {
     conversation,

@@ -14,6 +14,13 @@ export interface SendMessagePayload {
   replyToMsgId?: string;
 }
 
+export interface ChatPresignedUrlResponse {
+  uploadUrl: string;
+  fileUrl?: string;
+  key?: string;
+  fileCategory?: 'image' | 'video' | 'file' | 'audio';
+}
+
 export interface ChatMessageContextResponse {
   success: boolean;
   conversationId: string;
