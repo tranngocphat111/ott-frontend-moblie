@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList } from 'react-native';
 import { ChatApi } from '@/services/api';
 import type { ChatMessage } from '@/types/entities/chat';
@@ -22,12 +22,21 @@ export function useMessageScroll({
 }: UseMessageScrollProps) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(true);
+  const [initialScrollReady, setInitialScrollReady] = useState(false);
 
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const pendingScrollToBottomRef = useRef(false);
   const pendingPrependRef = useRef(false);
   const contentHeightRef = useRef(0);
   const lastOffsetRef = useRef(0);
+
+  useEffect(() => {
+    pendingScrollToBottomRef.current = false;
+    pendingPrependRef.current = false;
+    contentHeightRef.current = 0;
+    lastOffsetRef.current = 0;
+    setInitialScrollReady(false);
+  }, [conversationId]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!conversationId || !userIdForChat || loadingOlder || !hasMoreOlder || messages.length === 0) {
@@ -62,7 +71,10 @@ export function useMessageScroll({
         pendingScrollToBottomRef.current = false;
         requestAnimationFrame(() => {
           listRef.current?.scrollToEnd({ animated: false });
+          setInitialScrollReady(true);
         });
+      } else if (!initialScrollReady && messages.length === 0) {
+        setInitialScrollReady(true);
       }
 
       if (pendingPrependRef.current) {
@@ -76,7 +88,7 @@ export function useMessageScroll({
 
       contentHeightRef.current = height;
     },
-    [],
+    [initialScrollReady, messages.length],
   );
 
   const onScroll = useCallback((event: any) => {
@@ -94,6 +106,7 @@ export function useMessageScroll({
     listRef,
     loadingOlder,
     hasMoreOlder,
+    initialScrollReady,
     onScroll,
     handleContentSizeChange,
     setPendingScrollToBottom,

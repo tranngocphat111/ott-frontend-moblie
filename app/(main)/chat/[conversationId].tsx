@@ -4,11 +4,15 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Share,
+  Text,
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
+import * as Sharing from "expo-sharing";
 import { Audio } from "expo-av";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -32,23 +36,27 @@ import {
   ChatScreenHeader,
   ChatVoicePanel,
 } from "@/components/chat";
+import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
 import {
   getConversationAvatar,
   getConversationTitle,
+  getMessageBodyText,
+  resolveMediaUrl,
 } from "@/utils/chat";
 import {
   useChatPanels,
   useConversationMessages,
   useMessageSocket,
-  useMessageActions,
   useMessageScroll,
   useMessageHighlight,
 } from "@/hooks/chat";
 
 const getMessageKey = (message: ChatMessage) => message.msg_id || message._id;
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
-const CHAT_BROWN_DARK = '#6f4326';
-const CHAT_BROWN = '#8b5e34';
+const CHAT_BROWN_DARK = '#b78457';
+const CHAT_BROWN = '#d2a177';
+const CHAT_BROWN_SOFT = '#f5e8dc';
+const CHAT_PANEL_HEIGHT = 260;
 
 type ChatPanelMediaAsset = {
   id: string;
@@ -79,6 +87,110 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   zip: "application/zip",
   rar: "application/x-rar-compressed",
+};
+
+const sanitizeFileName = (fileName: string) =>
+  String(fileName || "file")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .slice(0, 180) || "file";
+
+const getMessageAttachmentValue = (message: ChatMessage) => {
+  const firstContent = Array.isArray(message.content) ? message.content[0] : message.content;
+
+  if (typeof firstContent === "string") {
+    return firstContent;
+  }
+
+  if (!firstContent || typeof firstContent !== "object") {
+    return "";
+  }
+
+  return String(firstContent.url || firstContent.text || firstContent.name || "");
+};
+
+const getMessageAttachmentName = (message: ChatMessage) => {
+  const content = Array.isArray(message.content) ? message.content[0] : message.content;
+
+  if (content && typeof content === "object" && content.name) {
+    return sanitizeFileName(String(content.name));
+  }
+
+  const rawValue = getMessageAttachmentValue(message);
+  const urlLike = rawValue.includes("/") ? rawValue.split("/").pop() || rawValue : rawValue;
+  const name = decodeURIComponent(urlLike.split("?")[0] || urlLike || "");
+
+  if (name) {
+    return sanitizeFileName(name);
+  }
+
+  if (message.type === "audio") return `voice_${Date.now()}.m4a`;
+  if (message.type === "video") return `video_${Date.now()}.mp4`;
+  if (message.type === "image") return `image_${Date.now()}.jpg`;
+
+  return `file_${Date.now()}`;
+};
+
+const getMessageAttachmentMimeType = (message: ChatMessage, fileName: string) => {
+  const ext = String(fileName || "")
+    .split(".")
+    .pop()
+    ?.toLowerCase();
+
+  if (ext && MIME_BY_EXTENSION[ext]) {
+    return MIME_BY_EXTENSION[ext];
+  }
+
+  if (message.type === "image") return "image/jpeg";
+  if (message.type === "video") return "video/mp4";
+  if (message.type === "audio") return "audio/mpeg";
+
+  return "application/octet-stream";
+};
+
+const getMessageAttachments = (message: ChatMessage) => {
+  if (message.type === "image" && Array.isArray(message.content)) {
+    return message.content
+      .map((item, index) => {
+        if (!item) return null;
+        if (typeof item === "string") {
+          const url = resolveMediaUrl(item);
+          return {
+            url,
+            fileName: `image_${index + 1}.jpg`,
+            mimeType: "image/jpeg",
+          };
+        }
+
+        const url = resolveMediaUrl(String(item.url || item.text || item.name || ""));
+        const fileName = sanitizeFileName(String(item.name || `image_${index + 1}.jpg`));
+        return {
+          url,
+          fileName,
+          mimeType: getMessageAttachmentMimeType(message, fileName),
+        };
+      })
+      .filter((item): item is { url: string; fileName: string; mimeType: string } => !!item?.url);
+  }
+
+  const rawValue = getMessageAttachmentValue(message);
+  if (!rawValue) return [];
+
+  const fileName = getMessageAttachmentName(message);
+  return [
+    {
+      url: resolveMediaUrl(rawValue),
+      fileName,
+      mimeType: getMessageAttachmentMimeType(message, fileName),
+    },
+  ];
+};
+
+const ensureDirectory = async (directoryUri: string) => {
+  const directory = new FileSystem.Directory(directoryUri);
+  directory.create({ intermediates: true, idempotent: true });
+  return directory;
 };
 
 const getMimeType = (fileName?: string | null, fallback?: string | null) => {
@@ -140,6 +252,7 @@ export default function ChatDetailScreen() {
   const {
     listRef,
     loadingOlder,
+    initialScrollReady,
     onScroll,
     handleContentSizeChange,
     setPendingScrollToBottom,
@@ -160,11 +273,6 @@ export default function ChatDetailScreen() {
     getMessageKey,
     listRef,
   });
-  const { handleMessageAction } = useMessageActions({
-    conversationId,
-    userIdForChat,
-    onLoadConversation: loadConversation,
-  });
 
   // Local component state
   const [messageText, setMessageText] = useState("");
@@ -174,12 +282,20 @@ export default function ChatDetailScreen() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showPinnedList, setShowPinnedList] = useState(false);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    label: string;
+    percent: number;
+  } | null>(null);
   const [mediaAssets, setMediaAssets] = useState<ChatPanelMediaAsset[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [pendingVoiceUri, setPendingVoiceUri] = useState<string | null>(null);
+  const [activeMessageMenu, setActiveMessageMenu] = useState<ChatMessage | null>(null);
+  const [activeMessageMenuPosition, setActiveMessageMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const isHoldRecordingRef = useRef(false);
+  const initialScrollConversationRef = useRef<string | null>(null);
   const {
     voicePanelVisible,
     imagePanelVisible,
@@ -200,6 +316,131 @@ export default function ChatDetailScreen() {
   const title = getConversationTitle(conversation, userIdForChat);
   const avatar = getConversationAvatar(conversation, userIdForChat);
   const isGroup = conversation?.type === "group";
+
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace("/(main)/(tabs)/home" as any);
+  }, [router]);
+
+  const dismissKeyboard = useCallback(() => {
+    Keyboard.dismiss();
+    requestAnimationFrame(() => Keyboard.dismiss());
+    setTimeout(() => Keyboard.dismiss(), 40);
+  }, []);
+
+  const openMessageMenu = useCallback((message: ChatMessage, event?: any) => {
+    dismissKeyboard();
+    setActiveMessageMenu(message);
+    setActiveMessageMenuPosition({
+      x: Number(event?.nativeEvent?.pageX || event?.nativeEvent?.locationX || 24),
+      y: Number(event?.nativeEvent?.pageY || event?.nativeEvent?.locationY || 120),
+    });
+  }, [dismissKeyboard]);
+
+  const closeMessageMenu = useCallback(() => {
+    setActiveMessageMenu(null);
+    setActiveMessageMenuPosition(null);
+  }, []);
+
+  const shareMessage = useCallback(async (message: ChatMessage) => {
+    const attachments = getMessageAttachments(message);
+    const text = getMessageBodyText(message);
+
+    if (attachments.length === 0) {
+      await Share.share({ message: text || ' ' });
+      return;
+    }
+
+    const firstAttachment = attachments[0];
+    const directory = await ensureDirectory(new FileSystem.Directory(FileSystem.Paths.cache, 'chat-share').uri);
+    const localFile = new FileSystem.File(directory, `${Date.now()}_${sanitizeFileName(firstAttachment.fileName)}`);
+    const downloaded = await FileSystem.File.downloadFileAsync(firstAttachment.url, localFile, { idempotent: true });
+
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(downloaded.uri, {
+        mimeType: firstAttachment.mimeType,
+        dialogTitle: 'Chuyển tiếp',
+      });
+      return;
+    }
+
+    await Share.share({ url: downloaded.uri, message: text || ' ' });
+  }, []);
+
+  const saveMessageToDocuments = useCallback(async (message: ChatMessage) => {
+    const attachments = getMessageAttachments(message);
+    if (attachments.length === 0) {
+      Alert.alert('Lưu vào My Documents', 'Tin nhắn này không có tệp đính kèm để lưu.');
+      return;
+    }
+
+    const directory = await ensureDirectory(new FileSystem.Directory(FileSystem.Paths.document, 'MyDocuments').uri);
+
+    for (const attachment of attachments) {
+      const localFile = new FileSystem.File(directory, `${Date.now()}_${sanitizeFileName(attachment.fileName)}`);
+      await FileSystem.File.downloadFileAsync(attachment.url, localFile, { idempotent: true });
+    }
+
+    Alert.alert('Lưu vào My Documents', 'Đã lưu tệp vào thư mục tài liệu của ứng dụng.');
+  }, []);
+
+  const saveMessageFile = useCallback(async (message: ChatMessage) => {
+    const attachments = getMessageAttachments(message);
+    if (attachments.length === 0) {
+      Alert.alert('Lưu file', 'Tin nhắn này không có tệp đính kèm để lưu.');
+      return;
+    }
+
+    const preferredAttachment = attachments[0];
+    const tempDirectory = await ensureDirectory(new FileSystem.Directory(FileSystem.Paths.cache, 'chat-save').uri);
+
+    const tempFile = new FileSystem.File(tempDirectory, `${Date.now()}_${sanitizeFileName(preferredAttachment.fileName)}`);
+    const downloaded = await FileSystem.File.downloadFileAsync(preferredAttachment.url, tempFile, { idempotent: true });
+
+    if (message.type === 'image' || message.type === 'video') {
+      try {
+        const permission = await MediaLibrary.requestPermissionsAsync();
+        if (permission.granted) {
+          await MediaLibrary.createAssetAsync(downloaded.uri);
+          Alert.alert('Lưu file', 'Đã lưu tệp vào thư viện thiết bị.');
+          return;
+        }
+      } catch (error) {
+        console.warn('Failed to save to media library:', error);
+      }
+    }
+
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(downloaded.uri, {
+        mimeType: preferredAttachment.mimeType,
+        dialogTitle: 'Lưu file',
+      });
+      return;
+    }
+
+    Alert.alert('Lưu file', `Đã tải về: ${downloaded.uri}`);
+  }, []);
+
+  useEffect(() => {
+    initialScrollConversationRef.current = null;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId || loading || messages.length === 0) {
+      return;
+    }
+
+    if (initialScrollConversationRef.current === conversationId) {
+      return;
+    }
+
+    initialScrollConversationRef.current = conversationId;
+    setPendingScrollToBottom();
+  }, [conversationId, loading, messages.length, setPendingScrollToBottom]);
 
   useEffect(() => {
     return () => {
@@ -265,6 +506,7 @@ export default function ChatDetailScreen() {
       mimeType?: string | null;
       fileSize?: number | null;
       explicitType?: "file" | "audio" | "video";
+      progressLabel?: string;
     }) => {
       if (!conversationId || !userIdForChat) return;
 
@@ -279,7 +521,16 @@ export default function ChatDetailScreen() {
         throw new Error("Không lấy được thông tin upload.");
       }
 
-      await ChatApi.uploadFileToS3(uploadUrl, params.uri, mimeType);
+      setUploadProgress({
+        label: params.progressLabel || 'Đang tải tệp...',
+        percent: 0,
+      });
+      await ChatApi.uploadFileToS3(uploadUrl, params.uri, mimeType, (percent) => {
+        setUploadProgress((current) => ({
+          label: current?.label || params.progressLabel || 'Đang tải tệp...',
+          percent,
+        }));
+      });
       await ChatApi.sendMessage({
         conversationId,
         senderId: userIdForChat,
@@ -291,6 +542,7 @@ export default function ChatDetailScreen() {
       });
       setReplyToMessage(null);
       setPendingScrollToBottom();
+      setUploadProgress(null);
     },
     [conversationId, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
   );
@@ -312,18 +564,25 @@ export default function ChatDetailScreen() {
       }
       if (validAssets.length === 0) return;
 
-      const keys = await Promise.all(
-        validAssets.map(async (asset, index) => {
-          const fileName = asset.fileName || `image_${Date.now()}_${index}.jpg`;
-          const mimeType = getMimeType(fileName, asset.mimeType || "image/jpeg");
-          const { uploadUrl, key } = await ChatApi.getMessagePresignedUrl(fileName, mimeType);
-          if (!uploadUrl || !key) {
-            throw new Error("Không lấy được thông tin upload ảnh.");
-          }
-          await ChatApi.uploadFileToS3(uploadUrl, asset.uri, mimeType);
-          return key;
-        }),
-      );
+      const keys: string[] = [];
+      for (let index = 0; index < validAssets.length; index += 1) {
+        const asset = validAssets[index];
+        const fileName = asset.fileName || `image_${Date.now()}_${index}.jpg`;
+        const mimeType = getMimeType(fileName, asset.mimeType || "image/jpeg");
+        const { uploadUrl, key } = await ChatApi.getMessagePresignedUrl(fileName, mimeType);
+        if (!uploadUrl || !key) {
+          throw new Error("Không lấy được thông tin upload ảnh.");
+        }
+
+        await ChatApi.uploadFileToS3(uploadUrl, asset.uri, mimeType, (percent) => {
+          const overall = Math.round(((index + percent / 100) / validAssets.length) * 100);
+          setUploadProgress({
+            label: `Đang tải ảnh ${index + 1}/${validAssets.length}`,
+            percent: overall,
+          });
+        });
+        keys.push(key);
+      }
 
       await ChatApi.sendMessage({
         conversationId,
@@ -334,13 +593,14 @@ export default function ChatDetailScreen() {
       });
       setReplyToMessage(null);
       setPendingScrollToBottom();
+      setUploadProgress(null);
     },
     [conversationId, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
   );
 
   const pickImagesAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
-    Keyboard.dismiss();
+    dismissKeyboard();
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -372,6 +632,7 @@ export default function ChatDetailScreen() {
           mimeType: getMimeType(videoAsset.fileName, videoAsset.mimeType || 'video/mp4'),
           explicitType: 'video',
           fileSize: videoAsset.fileSize,
+          progressLabel: 'Đang tải video...',
         });
       }
       closeImagePanel();
@@ -379,13 +640,14 @@ export default function ChatDetailScreen() {
       console.error("Failed to send images:", error);
       Alert.alert("Lỗi", "Không thể gửi ảnh. Vui lòng thử lại.");
     } finally {
+      setUploadProgress(null);
       setIsSendingAttachment(false);
     }
-  }, [closeImagePanel, conversationId, isSendingAttachment, uploadAndSendImages, userIdForChat]);
+  }, [closeImagePanel, conversationId, dismissKeyboard, isSendingAttachment, uploadAndSendImages, userIdForChat]);
 
   const takePhotoAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
-    Keyboard.dismiss();
+    dismissKeyboard();
 
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
@@ -407,47 +669,53 @@ export default function ChatDetailScreen() {
       console.error("Failed to send camera image:", error);
       Alert.alert("Lỗi", "Không thể gửi ảnh từ camera.");
     } finally {
+      setUploadProgress(null);
       setIsSendingAttachment(false);
     }
-  }, [closeImagePanel, conversationId, isSendingAttachment, uploadAndSendImages, userIdForChat]);
+  }, [closeImagePanel, conversationId, dismissKeyboard, isSendingAttachment, uploadAndSendImages, userIdForChat]);
 
   const pickFileAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
-    Keyboard.dismiss();
+    dismissKeyboard();
 
     const result = await DocumentPicker.getDocumentAsync({
       type: "*/*",
       copyToCacheDirectory: true,
-      multiple: false,
+      multiple: true,
     });
-    if (result.canceled || !result.assets?.[0]) return;
+    if (result.canceled || !result.assets?.length) return;
 
-    const asset = result.assets[0];
-    const fileSize = Number(asset.size || 0);
-    if (fileSize > MAX_UPLOAD_SIZE) {
-      Alert.alert("Tệp quá lớn", "Giới hạn kích thước tệp là 50MB.");
-      return;
+    const validAssets = result.assets.filter((asset) => Number(asset.size || 0) <= MAX_UPLOAD_SIZE || !asset.size);
+    if (validAssets.length !== result.assets.length) {
+      const skipped = result.assets.length - validAssets.length;
+      Alert.alert("Lưu ý", `${skipped} tệp vượt quá 50MB đã được bỏ qua.`);
     }
+    if (validAssets.length === 0) return;
 
     setIsSendingAttachment(true);
     try {
-      await uploadAndSendSingleFile({
-        uri: asset.uri,
-        fileName: asset.name || `file_${Date.now()}`,
-        mimeType: asset.mimeType,
-        fileSize,
-      });
+      for (let index = 0; index < validAssets.length; index += 1) {
+        const asset = validAssets[index];
+        await uploadAndSendSingleFile({
+          uri: asset.uri,
+          fileName: asset.name || `file_${Date.now()}_${index}`,
+          mimeType: asset.mimeType,
+          fileSize: Number(asset.size || 0),
+          progressLabel: `Đang tải tệp ${index + 1}/${validAssets.length}...`,
+        });
+      }
     } catch (error) {
       console.error("Failed to send file:", error);
       Alert.alert("Lỗi", "Không thể gửi tệp. Vui lòng thử lại.");
     } finally {
+      setUploadProgress(null);
       setIsSendingAttachment(false);
     }
-  }, [conversationId, isSendingAttachment, uploadAndSendSingleFile, userIdForChat]);
+  }, [conversationId, dismissKeyboard, isSendingAttachment, uploadAndSendSingleFile, userIdForChat]);
 
   const startVoiceRecording = useCallback(async () => {
     if (isRecordingVoice) return;
-    Keyboard.dismiss();
+    dismissKeyboard();
 
     const permission = await Audio.requestPermissionsAsync();
     if (!permission.granted) {
@@ -472,11 +740,12 @@ export default function ChatDetailScreen() {
       setRecording(nextRecording);
       setIsRecordingVoice(true);
       setRecordingDurationMs(0);
+      setPendingVoiceUri(null);
     } catch (error) {
       console.error("Failed to start recording:", error);
       Alert.alert("Lỗi", "Không thể bắt đầu ghi âm.");
     }
-  }, [isRecordingVoice]);
+  }, [dismissKeyboard, isRecordingVoice]);
 
   const stopVoiceRecording = useCallback(async () => {
     if (!recording) return null;
@@ -484,6 +753,7 @@ export default function ChatDetailScreen() {
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
+      setPendingVoiceUri(uri);
       return uri;
     } catch (error) {
       console.error("Failed to stop recording:", error);
@@ -495,9 +765,27 @@ export default function ChatDetailScreen() {
     }
   }, [recording]);
 
+  const stopVoiceCapture = useCallback(async () => {
+    const uri = await stopVoiceRecording();
+    if (!uri) return;
+  }, [stopVoiceRecording]);
+
+  const cancelVoiceRecording = useCallback(async () => {
+    isHoldRecordingRef.current = false;
+    setPendingVoiceUri(null);
+    setRecordingDurationMs(0);
+    if (recording) {
+      await recording.stopAndUnloadAsync().catch(() => undefined);
+    }
+    setRecording(null);
+    setIsRecordingVoice(false);
+    setVoicePanelVisible(false);
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => undefined);
+  }, [recording, setVoicePanelVisible]);
+
   const sendVoiceRecording = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
-    const uri = await stopVoiceRecording();
+    const uri = pendingVoiceUri || await stopVoiceRecording();
     if (!uri) return;
 
     setIsSendingAttachment(true);
@@ -508,16 +796,19 @@ export default function ChatDetailScreen() {
         fileName: filename,
         mimeType: "audio/mp4",
         explicitType: "audio",
+        progressLabel: 'Đang tải ghi âm...',
       });
       setVoicePanelVisible(false);
       setRecordingDurationMs(0);
+      setPendingVoiceUri(null);
     } catch (error) {
       console.error("Failed to send voice:", error);
       Alert.alert("Lỗi", "Không thể gửi ghi âm.");
     } finally {
+      setUploadProgress(null);
       setIsSendingAttachment(false);
     }
-  }, [conversationId, isSendingAttachment, stopVoiceRecording, uploadAndSendSingleFile, userIdForChat]);
+  }, [conversationId, isSendingAttachment, pendingVoiceUri, setVoicePanelVisible, stopVoiceRecording, uploadAndSendSingleFile, userIdForChat]);
   const appendEmoji = useCallback((emoji: string) => {
     setMessageText((current) => `${current}${emoji}`);
   }, []);
@@ -548,6 +839,7 @@ export default function ChatDetailScreen() {
           fileName,
           mimeType: getMimeType(fileName, 'video/mp4'),
           explicitType: 'video',
+          progressLabel: 'Đang tải video...',
         });
       }
 
@@ -557,6 +849,7 @@ export default function ChatDetailScreen() {
       console.error('Failed to send selected media:', error);
       Alert.alert('Lỗi', 'Không thể gửi ảnh/video đã chọn.');
     } finally {
+      setUploadProgress(null);
       setIsSendingAttachment(false);
     }
   }, [clearSelectedMedia, closeImagePanel, conversationId, isSendingAttachment, mediaAssets, selectedMediaIds, uploadAndSendImages, uploadAndSendSingleFile, userIdForChat]);
@@ -576,6 +869,14 @@ export default function ChatDetailScreen() {
       return cleanupHighlight;
     }, [loadConversation, cleanupHighlight, loadRecentMedia]),
   );
+
+  useEffect(() => {
+    if (!imagePanelVisible) return;
+    if (mediaLoading) return;
+    if (mediaAssets.length > 0) return;
+
+    void loadRecentMedia();
+  }, [imagePanelVisible, loadRecentMedia, mediaAssets.length, mediaLoading]);
 
   // Socket event handlers
   const handleIncomingMessage = useCallback(
@@ -705,7 +1006,7 @@ export default function ChatDetailScreen() {
           accentStart={CHAT_BROWN_DARK}
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
-          onBack={() => router.back()}
+          onBack={handleBack}
           onPhone={() => undefined}
           onVideo={() => undefined}
           onMenu={() =>
@@ -726,7 +1027,9 @@ export default function ChatDetailScreen() {
         <View className="flex-1">
           <ChatMessagesList
             loading={loading}
+            preparing={!loading && messages.length > 0 && !initialScrollReady}
             messages={messages}
+            conversation={conversation}
             listRef={listRef as any}
             onScroll={onScroll as any}
             onContentSizeChange={handleContentSizeChange}
@@ -742,38 +1045,53 @@ export default function ChatDetailScreen() {
             isGroup={isGroup}
             highlightedMessageId={highlightedMessageId}
             getMessageKey={getMessageKey}
-            onMessageLongPress={(message) => {
-              setReplyToMessage(message);
-              handleMessageAction(message);
-            }}
+            onMessageLongPress={(message) => openMessageMenu(message)}
             onReplyPress={(replyToMsgId) => highlightMessage(replyToMsgId)}
             onImagePreview={(imageUrl) => setSelectedImage(imageUrl)}
             accentColor={CHAT_BROWN}
+            mineAccentColor={CHAT_BROWN_SOFT}
           />
         </View>
 
-        {!hasSelectedMedia && (
-          <ChatComposer
-            value={messageText}
-            onChangeText={setMessageText}
-            onSend={() => void onSendMessage()}
-            onToggleEmoji={toggleEmojiPanel}
-            onToggleImagePanel={toggleImagePanel}
-            onToggleVoicePanel={toggleVoicePanel}
-            onPickFile={() => void pickFileAndSend()}
-            emojiActive={emojiPanelVisible}
-            imagePanelActive={imagePanelVisible}
-            voicePanelActive={voicePanelVisible}
-            replyToMessage={replyToMessage}
-            onCancelReply={() => setReplyToMessage(null)}
-            disabled={!conversationId || !userIdForChat || isSendingAttachment}
-            accentColor={CHAT_BROWN}
-          />
+        {uploadProgress && (
+          <View className="mx-3 mb-2 rounded-xl border border-[#ead8c7] bg-[#fff9f4] px-3 py-2">
+            <View className="mb-1 flex-row items-center justify-between">
+              <Text className="text-[12px] font-medium text-slate-600">{uploadProgress.label}</Text>
+              <Text className="text-[11px] font-semibold text-[#b78457]">{uploadProgress.percent}%</Text>
+            </View>
+            <View className="h-1.5 overflow-hidden rounded-full bg-[#efe3d7]">
+              <View
+                className="h-full rounded-full bg-[#c99267]"
+                style={{ width: `${Math.max(0, Math.min(100, uploadProgress.percent))}%` }}
+              />
+            </View>
+          </View>
         )}
+
+        <ChatComposer
+          value={messageText}
+          onChangeText={setMessageText}
+          onSend={() => void onSendMessage()}
+          onToggleEmoji={toggleEmojiPanel}
+          onToggleImagePanel={toggleImagePanel}
+          onToggleVoicePanel={toggleVoicePanel}
+          onPickFile={() => void pickFileAndSend()}
+          emojiActive={emojiPanelVisible}
+          imagePanelActive={imagePanelVisible}
+          voicePanelActive={voicePanelVisible}
+          replyToMessage={replyToMessage}
+          onCancelReply={() => setReplyToMessage(null)}
+          disabled={!conversationId || !userIdForChat || isSendingAttachment}
+          accentColor={CHAT_BROWN}
+          selectedMediaIds={selectedMediaIds}
+          onClearSelection={clearSelectedMedia}
+          onSendSelected={() => void sendSelectedPanelMedia()}
+        />
 
         {imagePanelVisible && (
           <ChatMediaPanel
             visible={imagePanelVisible}
+            height={CHAT_PANEL_HEIGHT}
             accentColor={CHAT_BROWN}
             selectedMediaIds={selectedMediaIds}
             mediaAssets={mediaAssets}
@@ -787,19 +1105,19 @@ export default function ChatDetailScreen() {
         )}
 
         {emojiPanelVisible && (
-          <ChatEmojiPanel height={360} onAppendEmoji={appendEmoji} />
+          <ChatEmojiPanel height={CHAT_PANEL_HEIGHT} onAppendEmoji={appendEmoji} />
         )}
 
         {voicePanelVisible && (
           <ChatVoicePanel
-            height={360}
+            height={CHAT_PANEL_HEIGHT}
             accentColor={CHAT_BROWN}
             recordingDurationMs={recordingDurationMs}
             isRecordingVoice={isRecordingVoice}
             isSendingAttachment={isSendingAttachment}
             onToggleRecord={async () => {
               if (isRecordingVoice) {
-                await stopVoiceRecording();
+                await stopVoiceCapture();
                 return;
               }
               await startVoiceRecording();
@@ -812,11 +1130,13 @@ export default function ChatDetailScreen() {
             onReleaseRecord={async () => {
               if (!isHoldRecordingRef.current) return;
               isHoldRecordingRef.current = false;
-              await sendVoiceRecording();
+              await stopVoiceCapture();
             }}
+            onStopRecord={() => void stopVoiceCapture()}
+            onCancelRecord={() => void cancelVoiceRecording()}
             onSendVoice={() => void sendVoiceRecording()}
             onClose={() => {
-              setVoicePanelVisible(false);
+              void cancelVoiceRecording();
               if (isRecordingVoice) {
                 void stopVoiceRecording();
               }
@@ -829,6 +1149,101 @@ export default function ChatDetailScreen() {
       <ChatImagePreviewModal
         selectedImage={selectedImage}
         onClose={() => setSelectedImage(null)}
+      />
+
+      <ChatMessageActionsModal
+        visible={!!activeMessageMenu}
+        message={activeMessageMenu}
+        isMine={String(activeMessageMenu?.sender_id || '') === String(userIdForChat || '')}
+        isPinned={!!activeMessageMenu?.is_pinned}
+        x={activeMessageMenuPosition?.x}
+        y={activeMessageMenuPosition?.y}
+        onClose={closeMessageMenu}
+        onReply={() => {
+          if (activeMessageMenu) {
+            setReplyToMessage(activeMessageMenu);
+          }
+          closeMessageMenu();
+        }}
+        onForward={async () => {
+          if (activeMessageMenu) {
+            try {
+              await shareMessage(activeMessageMenu);
+            } catch (error) {
+              console.error('Failed to forward message:', error);
+              Alert.alert('Lỗi', 'Không thể chuyển tiếp tin nhắn');
+            }
+          }
+          closeMessageMenu();
+        }}
+        onSaveToDocuments={async () => {
+          if (activeMessageMenu) {
+            try {
+              await saveMessageToDocuments(activeMessageMenu);
+            } catch (error) {
+              console.error('Failed to save message to documents:', error);
+              Alert.alert('Lỗi', 'Không thể lưu vào My Documents');
+            }
+          }
+          closeMessageMenu();
+        }}
+        onPinToggle={async () => {
+          if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
+          try {
+            await ChatApi.pinMessage(conversationId, activeMessageMenu.msg_id, userIdForChat, !activeMessageMenu.is_pinned);
+            await loadConversation();
+          } catch (error) {
+            console.error('Failed to toggle pin:', error);
+            Alert.alert('Lỗi', 'Không thể ghim/bỏ ghim tin nhắn');
+          } finally {
+            closeMessageMenu();
+          }
+        }}
+        onSaveFile={async () => {
+          if (activeMessageMenu) {
+            try {
+              await saveMessageFile(activeMessageMenu);
+            } catch (error) {
+              console.error('Failed to save message file:', error);
+              Alert.alert('Lỗi', 'Không thể lưu file');
+            }
+          }
+          closeMessageMenu();
+        }}
+        onRevoke={async () => {
+          if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
+          try {
+            await ChatApi.revokeMessage(conversationId, activeMessageMenu.msg_id, userIdForChat);
+            await loadConversation();
+          } catch (error) {
+            console.error('Failed to revoke message:', error);
+            Alert.alert('Lỗi', 'Không thể thu hồi tin nhắn');
+          } finally {
+            closeMessageMenu();
+          }
+        }}
+        onDelete={async () => {
+          if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
+          try {
+            await ChatApi.deleteMessage(conversationId, activeMessageMenu.msg_id, userIdForChat);
+            await loadConversation();
+          } catch (error) {
+            console.error('Failed to delete message:', error);
+            Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
+          } finally {
+            closeMessageMenu();
+          }
+        }}
+        onReact={async (emoji) => {
+          if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
+          try {
+            await ChatApi.reactToMessage(conversationId, activeMessageMenu.msg_id, userIdForChat, emoji);
+            await loadConversation();
+          } catch (error) {
+            console.error('Failed to react to message:', error);
+            Alert.alert('Lỗi', 'Không thể thả cảm xúc');
+          }
+        }}
       />
     </SafeAreaView>
   );

@@ -67,6 +67,40 @@ export const formatConversationTime = (value?: string | null) => {
   });
 };
 
+const startOfDay = (date: Date) => {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  return day;
+};
+
+const getDayDiff = (date: Date, reference = new Date()) => {
+  const source = startOfDay(date).getTime();
+  const target = startOfDay(reference).getTime();
+  return Math.floor((target - source) / (24 * 60 * 60 * 1000));
+};
+
+export const formatMessageTimestampLabel = (value?: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const timePart = formatConversationTime(value);
+  const dayDiff = getDayDiff(date);
+
+  if (dayDiff <= 0) return timePart;
+  if (dayDiff === 1) return `${timePart} Hôm qua`;
+  if (dayDiff > 2) {
+    const fullDate = date.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    return `${timePart} ${fullDate}`;
+  }
+
+  return timePart;
+};
+
 export const formatMessageDate = (value?: string | null) => {
   if (!value) return '';
   const date = new Date(value);
@@ -90,6 +124,42 @@ export const shouldShowTimestamp = (
   const previous = new Date(previousTime).getTime();
 
   if (Number.isNaN(current) || Number.isNaN(previous)) return true;
+
+  return Math.abs(current - previous) > 5 * 60 * 1000;
+};
+
+export const shouldShowTimestampAtClusterEnd = (
+  currentTime?: string | null,
+  nextTime?: string | null,
+) => {
+  if (!currentTime) return false;
+  if (!nextTime) return true;
+
+  const current = new Date(currentTime).getTime();
+  const next = new Date(nextTime).getTime();
+
+  if (Number.isNaN(current) || Number.isNaN(next)) return true;
+
+  return Math.abs(next - current) > 5 * 60 * 1000;
+};
+
+export const shouldBreakMessageCluster = (
+  previousTime?: string | null,
+  currentTime?: string | null,
+  previousSenderId?: string | null,
+  currentSenderId?: string | null,
+) => {
+  if (!currentTime) return true;
+  if (!previousTime) return true;
+
+  if (String(previousSenderId || '') !== String(currentSenderId || '')) {
+    return true;
+  }
+
+  const previous = new Date(previousTime).getTime();
+  const current = new Date(currentTime).getTime();
+
+  if (Number.isNaN(previous) || Number.isNaN(current)) return true;
 
   return Math.abs(current - previous) > 5 * 60 * 1000;
 };
@@ -130,4 +200,22 @@ export const getConversationAvatar = (
   );
 
   return otherParticipant?.avatar || '';
+};
+
+export const getMessageSenderAvatar = (
+  conversation?: ChatConversation | null,
+  senderId?: string | null,
+  currentUserId?: string | null,
+) => {
+  if (!conversation || !senderId) return '';
+
+  if (conversation.type === 'private') {
+    return getConversationAvatar(conversation, currentUserId);
+  }
+
+  return (
+    conversation.participants?.find(
+      (participant) => String(participant.user_id || '') === String(senderId || ''),
+    )?.avatar || ''
+  );
 };

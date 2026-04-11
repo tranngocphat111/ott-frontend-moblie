@@ -15,6 +15,7 @@ export const useChatPanels = () => {
 
   const toggleVoicePanel = useCallback(() => {
     Keyboard.dismiss();
+    setTimeout(() => Keyboard.dismiss(), 100);
     setVoicePanelVisible((current) => {
       const next = !current;
       if (next) {
@@ -27,6 +28,7 @@ export const useChatPanels = () => {
 
   const toggleImagePanel = useCallback(() => {
     Keyboard.dismiss();
+    setTimeout(() => Keyboard.dismiss(), 100);
     setImagePanelVisible((current) => {
       const next = !current;
       if (next) {
@@ -45,6 +47,7 @@ export const useChatPanels = () => {
 
   const toggleEmojiPanel = useCallback(() => {
     Keyboard.dismiss();
+    setTimeout(() => Keyboard.dismiss(), 100);
     setEmojiPanelVisible((current) => {
       const next = !current;
       if (next) {

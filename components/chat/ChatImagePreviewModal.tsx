@@ -1,6 +1,7 @@
 import React from 'react';
-import { Image, Modal, Pressable } from 'react-native';
+import { Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
 type Props = {
   selectedImage: string | null;
@@ -23,7 +24,8 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, onClose 
           <Image
             source={{ uri: selectedImage }}
             className="h-[72%] w-full rounded-3xl"
-            resizeMode="contain"
+            contentFit="contain"
+            transition={120}
           />
         )}
         <Pressable

@@ -31,19 +31,37 @@ export const chatMessageApi = {
     uploadUrl: string,
     uri: string,
     contentType: string,
+    onProgress?: (percent: number) => void,
   ): Promise<void> {
     const response = await fetch(uri);
     const blob = await response.blob();
 
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': contentType || 'application/octet-stream' },
-      body: blob,
-    });
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', uploadUrl);
+      xhr.setRequestHeader('Content-Type', contentType || 'application/octet-stream');
 
-    if (!uploadResponse.ok) {
-      throw new Error(`S3 upload failed: ${uploadResponse.status}`);
-    }
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.round((event.loaded / event.total) * 100);
+        onProgress?.(Math.max(0, Math.min(100, percent)));
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100);
+          resolve();
+          return;
+        }
+
+        reject(new Error(`S3 upload failed: ${xhr.status}`));
+      };
+
+      xhr.onerror = () => reject(new Error('S3 upload failed: network error'));
+      xhr.onabort = () => reject(new Error('S3 upload aborted'));
+
+      xhr.send(blob);
+    });
   },
 
   async getOlderMessages(

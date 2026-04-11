@@ -23,13 +23,13 @@ export const ChatPinnedMessagesBar: React.FC<Props> = ({
   const pinnedCount = pinnedMessages.length;
 
   return (
-    <View className="border-b border-slate-200 bg-white px-4 py-2">
-      <View className="flex-row items-center gap-2 rounded-2xl bg-slate-100 px-3 py-2">
+    <View className="border-b border-slate-200 bg-[#faf7f4] px-4 py-2">
+      <View className="flex-row items-center gap-2 rounded-2xl border border-[#ead8c6] bg-white px-3 py-2 shadow-sm">
         <Pressable
           onPress={() => pinnedChips[0]?.msg_id && onHighlightMessage(pinnedChips[0].msg_id)}
           className="flex-1"
         >
-          <Text className="text-[13px] font-semibold text-slate-700" numberOfLines={1}>
+          <Text className="text-[13px] font-semibold text-slate-800" numberOfLines={1}>
             {`@${pinnedChips[0]?.sender_name || 'Thành viên'}`}
           </Text>
           <Text className="text-[13px] text-slate-500" numberOfLines={1}>
@@ -39,15 +39,15 @@ export const ChatPinnedMessagesBar: React.FC<Props> = ({
 
         <Pressable
           onPress={onTogglePinnedList}
-          className="flex-row items-center rounded-full border border-slate-300 px-3 py-1"
+          className="flex-row items-center rounded-full border border-[#e7d5c4] bg-[#faf3ec] px-3 py-1"
         >
-          <Text className="mr-1 text-[12px] font-semibold text-slate-600">
+          <Text className="mr-1 text-[12px] font-semibold text-[#b78457]">
             +{pinnedCount}
           </Text>
           <Feather
             name={showPinnedList ? 'chevron-up' : 'chevron-down'}
             size={13}
-            color="#64748b"
+            color="#b78457"
           />
         </Pressable>
       </View>
@@ -58,9 +58,9 @@ export const ChatPinnedMessagesBar: React.FC<Props> = ({
             <Pressable
               key={item.msg_id || item._id}
               onPress={() => item.msg_id && onHighlightMessage(item.msg_id)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+              className="rounded-xl border border-[#ead8c6] bg-white px-3 py-2"
             >
-              <Text className="text-[12px] font-semibold text-slate-700" numberOfLines={1}>
+              <Text className="text-[12px] font-semibold text-slate-800" numberOfLines={1}>
                 {item.sender_name || 'Thành viên'}
               </Text>
               <Text className="mt-0.5 text-[13px] text-slate-500" numberOfLines={2}>

@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import React from 'react';
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
+import { Image } from 'expo-image';
 
 export type ChatPanelMediaAsset = {
   id: string;
@@ -21,8 +22,7 @@ type Props = {
   onToggleSelectMedia: (assetId: string) => void;
   onClearSelection: () => void;
   onSendSelected: () => void;
-  collapsedHeight?: number;
-  expandedHeight?: number;
+  height?: number;
 };
 
 export const ChatMediaPanel: React.FC<Props> = ({
@@ -36,102 +36,22 @@ export const ChatMediaPanel: React.FC<Props> = ({
   onToggleSelectMedia,
   onClearSelection,
   onSendSelected,
-  collapsedHeight = 360,
-  expandedHeight = 472,
+  height = 360,
 }) => {
   const { width: windowWidth } = useWindowDimensions();
   const mediaHorizontalPadding = 12;
   const mediaGap = 6;
   const mediaTileSize = Math.floor((windowWidth - mediaHorizontalPadding * 2 - mediaGap * 2) / 3);
-  const [expanded, setExpanded] = useState(false);
-  const heightAnim = useRef(new Animated.Value(collapsedHeight)).current;
-  const lastScrollOffsetRef = useRef(0);
-  const expandedRef = useRef(false);
-  const animatingRef = useRef(false);
-
-  const animateHeight = useCallback((nextExpanded: boolean) => {
-    animatingRef.current = true;
-    Animated.spring(heightAnim, {
-      toValue: nextExpanded ? expandedHeight : collapsedHeight,
-      damping: 22,
-      stiffness: 220,
-      mass: 0.9,
-      useNativeDriver: false,
-    }).start(() => {
-      animatingRef.current = false;
-    });
-  }, [collapsedHeight, expandedHeight, heightAnim]);
-
-  const setPanelExpanded = useCallback((nextExpanded: boolean) => {
-    if (expandedRef.current === nextExpanded || animatingRef.current) return;
-    expandedRef.current = nextExpanded;
-    setExpanded(nextExpanded);
-    animateHeight(nextExpanded);
-  }, [animateHeight]);
-
-  useEffect(() => {
-    if (!visible) {
-      expandedRef.current = false;
-      lastScrollOffsetRef.current = 0;
-      setExpanded(false);
-      heightAnim.setValue(collapsedHeight);
-    }
-  }, [collapsedHeight, heightAnim, visible]);
 
   if (!visible) return null;
 
   const selectedCount = selectedMediaIds.length;
 
   return (
-    <Animated.View style={{ height: heightAnim }} className="border-t border-slate-200 bg-white">
-      <View className="h-12 flex-row items-center justify-between px-3">
-        {selectedCount > 0 ? (
-          <Pressable onPress={onClearSelection} className="h-9 w-9 items-center justify-center">
-            <Feather name="chevron-left" size={24} color="#334155" />
-          </Pressable>
-        ) : (
-          <View className="h-9 w-9" />
-        )}
-
-        {selectedCount > 0 ? (
-          <Pressable onPress={onClearSelection} className="rounded-full border border-slate-300 px-4 py-1">
-            <Text className="text-[15px] font-medium text-slate-700">HD {selectedCount} x</Text>
-          </Pressable>
-        ) : (
-          <View className="rounded-full border border-slate-300 px-4 py-1">
-            <Text className="text-[15px] font-medium text-slate-700">HD</Text>
-          </View>
-        )}
-
-        {selectedCount > 0 ? (
-          <Pressable disabled={selectedCount === 0} onPress={onSendSelected} className="h-9 w-9 items-center justify-center">
-            <Feather name="send" size={26} color={accentColor} />
-          </Pressable>
-        ) : (
-          <View className="h-9 w-9" />
-        )}
-      </View>
-
-      <View className="px-4 pb-2 pt-1">
-        <Text className="text-[13px] font-semibold text-slate-700">Ảnh và video gần đây</Text>
-      </View>
-
+    <View style={{ height }} className="border-t border-slate-200 bg-white">
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: mediaHorizontalPadding, paddingBottom: 18 }}
         scrollEventThrottle={16}
-        onScroll={(event) => {
-          const offsetY = event.nativeEvent.contentOffset.y;
-          const deltaY = offsetY - lastScrollOffsetRef.current;
-          lastScrollOffsetRef.current = offsetY;
-
-          if (offsetY > 12 && deltaY > 6 && !expandedRef.current) {
-            setPanelExpanded(true);
-          }
-
-          if (offsetY <= 8 && deltaY < -6 && expandedRef.current) {
-            setPanelExpanded(false);
-          }
-        }}
       >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
           <Pressable
@@ -153,7 +73,7 @@ export const ChatMediaPanel: React.FC<Props> = ({
             <Text className="mt-2 text-[13px] text-slate-700">Chụp ảnh</Text>
           </Pressable>
 
-          {(expanded ? mediaAssets : mediaAssets.slice(0, 11)).map((asset, index) => {
+          {mediaAssets.map((asset, index) => {
             const overallIndex = index + 1;
             const isLastColumn = overallIndex % 3 === 2;
             const selectedOrder = selectedMediaIds.indexOf(asset.id);
@@ -172,7 +92,7 @@ export const ChatMediaPanel: React.FC<Props> = ({
                   backgroundColor: '#f1f5f9',
                 }}
               >
-                <Image source={{ uri: asset.uri }} className="h-full w-full" resizeMode="cover" />
+                <Image source={{ uri: asset.uri }} className="h-full w-full" contentFit="cover" transition={120} />
                 {asset.mediaType === 'video' && (
                   <View className="absolute inset-0 items-center justify-center bg-black/25">
                     <Feather name="play-circle" size={24} color="#fff" />
@@ -195,6 +115,6 @@ export const ChatMediaPanel: React.FC<Props> = ({
           <Text className="px-2 pt-2 text-[13px] text-slate-500">Đang tải thư viện...</Text>
         )}
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 };
