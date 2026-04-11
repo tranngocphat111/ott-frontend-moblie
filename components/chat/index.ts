@@ -6,3 +6,5 @@ export { ChatPinnedMessagesBar } from './ChatPinnedMessagesBar';
 export { ChatEmojiPanel } from './ChatEmojiPanel';
 export { ChatVoicePanel } from './ChatVoicePanel';
 export { ChatMediaPanel } from './ChatMediaPanel';
+export { ChatMessagesList } from './ChatMessagesList';
+export { ChatImagePreviewModal } from './ChatImagePreviewModal';

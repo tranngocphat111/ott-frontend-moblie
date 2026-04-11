@@ -1,19 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
-  Image,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Platform,
-  Pressable,
-  ScrollView,
-  Text,
   View,
-  FlatList,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
@@ -31,22 +23,21 @@ import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi } from "@/services/api";
 import type { ChatMessage, ChatMessageContent } from "@/types/entities/chat";
 import {
+  ChatImagePreviewModal,
   ChatComposer,
   ChatEmojiPanel,
   ChatMediaPanel,
-  ChatMessageBubble,
+  ChatMessagesList,
   ChatPinnedMessagesBar,
   ChatScreenHeader,
   ChatVoicePanel,
 } from "@/components/chat";
 import {
-  formatConversationTime,
   getConversationAvatar,
   getConversationTitle,
-  getMessageBodyText,
-  shouldShowTimestamp,
 } from "@/utils/chat";
 import {
+  useChatPanels,
   useConversationMessages,
   useMessageSocket,
   useMessageActions,
@@ -183,22 +174,32 @@ export default function ChatDetailScreen() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showPinnedList, setShowPinnedList] = useState(false);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
-  const [voicePanelVisible, setVoicePanelVisible] = useState(false);
-  const [imagePanelVisible, setImagePanelVisible] = useState(false);
-  const [emojiPanelVisible, setEmojiPanelVisible] = useState(false);
   const [mediaAssets, setMediaAssets] = useState<ChatPanelMediaAsset[]>([]);
-  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const isHoldRecordingRef = useRef(false);
+  const {
+    voicePanelVisible,
+    imagePanelVisible,
+    emojiPanelVisible,
+    selectedMediaIds,
+    hasSelectedMedia,
+    setVoicePanelVisible,
+    setEmojiPanelVisible,
+    clearSelectedMedia,
+    toggleVoicePanel,
+    toggleImagePanel,
+    toggleEmojiPanel,
+    closeImagePanel,
+    toggleSelectMedia,
+  } = useChatPanels();
 
   // Conversation metadata
   const title = getConversationTitle(conversation, userIdForChat);
   const avatar = getConversationAvatar(conversation, userIdForChat);
   const isGroup = conversation?.type === "group";
-  const hasSelectedMedia = selectedMediaIds.length > 0;
 
   useEffect(() => {
     return () => {
@@ -373,14 +374,14 @@ export default function ChatDetailScreen() {
           fileSize: videoAsset.fileSize,
         });
       }
-      setImagePanelVisible(false);
+      closeImagePanel();
     } catch (error) {
       console.error("Failed to send images:", error);
       Alert.alert("Lỗi", "Không thể gửi ảnh. Vui lòng thử lại.");
     } finally {
       setIsSendingAttachment(false);
     }
-  }, [conversationId, isSendingAttachment, uploadAndSendImages, userIdForChat]);
+  }, [closeImagePanel, conversationId, isSendingAttachment, uploadAndSendImages, userIdForChat]);
 
   const takePhotoAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
@@ -401,14 +402,14 @@ export default function ChatDetailScreen() {
     setIsSendingAttachment(true);
     try {
       await uploadAndSendImages(result.assets);
-      setImagePanelVisible(false);
+      closeImagePanel();
     } catch (error) {
       console.error("Failed to send camera image:", error);
       Alert.alert("Lỗi", "Không thể gửi ảnh từ camera.");
     } finally {
       setIsSendingAttachment(false);
     }
-  }, [conversationId, isSendingAttachment, uploadAndSendImages, userIdForChat]);
+  }, [closeImagePanel, conversationId, isSendingAttachment, uploadAndSendImages, userIdForChat]);
 
   const pickFileAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
@@ -517,56 +518,8 @@ export default function ChatDetailScreen() {
       setIsSendingAttachment(false);
     }
   }, [conversationId, isSendingAttachment, stopVoiceRecording, uploadAndSendSingleFile, userIdForChat]);
-
-  const toggleVoicePanel = useCallback(() => {
-    Keyboard.dismiss();
-    setVoicePanelVisible((current) => {
-      const next = !current;
-      if (next) {
-        setImagePanelVisible(false);
-        setEmojiPanelVisible(false);
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleImagePanel = useCallback(() => {
-    Keyboard.dismiss();
-    setImagePanelVisible((current) => {
-      const next = !current;
-      if (next) {
-        setVoicePanelVisible(false);
-        setEmojiPanelVisible(false);
-        setSelectedMediaIds([]);
-      } else {
-        setSelectedMediaIds([]);
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleEmojiPanel = useCallback(() => {
-    Keyboard.dismiss();
-    setEmojiPanelVisible((current) => {
-      const next = !current;
-      if (next) {
-        setVoicePanelVisible(false);
-        setImagePanelVisible(false);
-      }
-      return next;
-    });
-  }, []);
-
   const appendEmoji = useCallback((emoji: string) => {
     setMessageText((current) => `${current}${emoji}`);
-  }, []);
-
-  const toggleSelectMedia = useCallback((assetId: string) => {
-    setSelectedMediaIds((current) => (
-      current.includes(assetId)
-        ? current.filter((id) => id !== assetId)
-        : [...current, assetId]
-    ));
   }, []);
 
   const sendSelectedPanelMedia = useCallback(async () => {
@@ -598,15 +551,15 @@ export default function ChatDetailScreen() {
         });
       }
 
-      setSelectedMediaIds([]);
-      setImagePanelVisible(false);
+      clearSelectedMedia();
+      closeImagePanel();
     } catch (error) {
       console.error('Failed to send selected media:', error);
       Alert.alert('Lỗi', 'Không thể gửi ảnh/video đã chọn.');
     } finally {
       setIsSendingAttachment(false);
     }
-  }, [conversationId, isSendingAttachment, mediaAssets, selectedMediaIds, uploadAndSendImages, uploadAndSendSingleFile, userIdForChat]);
+  }, [clearSelectedMedia, closeImagePanel, conversationId, isSendingAttachment, mediaAssets, selectedMediaIds, uploadAndSendImages, uploadAndSendSingleFile, userIdForChat]);
 
   const formatVoiceDuration = useCallback((durationMs: number) => {
     const total = Math.floor(durationMs / 1000);
@@ -736,10 +689,6 @@ export default function ChatDetailScreen() {
     replyToMessage?.msg_id,
     setPendingScrollToBottom,
   ]);
-
-  const pinnedChips = pinnedMessages.slice(0, 3);
-  const pinnedCount = pinnedMessages.length;
-
   return (
     <SafeAreaView
       className="flex-1 bg-surface-sunken mb-6"
@@ -755,6 +704,7 @@ export default function ChatDetailScreen() {
           subtitle="Hoat động gần đây"
           accentStart={CHAT_BROWN_DARK}
           accentEnd={CHAT_BROWN}
+          topInset={insets.top}
           onBack={() => router.back()}
           onPhone={() => undefined}
           onVideo={() => undefined}
@@ -774,110 +724,32 @@ export default function ChatDetailScreen() {
         />
 
         <View className="flex-1">
-          {loading ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator
-                size="large"
-                color={CHAT_BROWN}
-              />
-              <Text className="mt-3 text-[14px] text-slate-500">
-                Đang tải cuộc trò chuyện...
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              ref={listRef}
-              data={messages}
-              keyExtractor={getMessageKey}
-              onScroll={onScroll}
-              scrollEventThrottle={16}
-              onContentSizeChange={handleContentSizeChange}
-              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-              contentContainerStyle={{ paddingTop: 12, paddingBottom: 16 }}
-              showsVerticalScrollIndicator={false}
-              onScrollToIndexFailed={(info) => {
-                requestAnimationFrame(() => {
-                  listRef.current?.scrollToOffset({
-                    offset: Math.max(info.averageItemLength * info.index, 0),
-                    animated: true,
-                  });
+          <ChatMessagesList
+            loading={loading}
+            messages={messages}
+            listRef={listRef as any}
+            onScroll={onScroll as any}
+            onContentSizeChange={handleContentSizeChange}
+            onScrollToIndexFailed={(info) => {
+              requestAnimationFrame(() => {
+                listRef.current?.scrollToOffset({
+                  offset: Math.max(info.averageItemLength * info.index, 0),
+                  animated: true,
                 });
-              }}
-              renderItem={({ item, index }) => {
-                const prevMessage = messages[index - 1];
-                const isMine =
-                  String(item.sender_id) === String(userIdForChat || "");
-                const showTimestamp = shouldShowTimestamp(
-                  item.createdAt || item.created_at,
-                  prevMessage?.createdAt || prevMessage?.created_at,
-                );
-                const showSenderName =
-                  isGroup &&
-                  !isMine &&
-                  (index === 0 ||
-                    prevMessage?.sender_id !== item.sender_id ||
-                    showTimestamp);
-
-                return (
-                  <View>
-                    {showTimestamp && (
-                      <View className="my-3 items-center">
-                        <View className="rounded-full bg-slate-200 px-3 py-1">
-                          <Text className="text-[11px] font-medium text-slate-600">
-                            {formatConversationTime(
-                              item.createdAt || item.created_at,
-                            )}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-
-                    <ChatMessageBubble
-                      message={item}
-                      isMine={isMine}
-                      mineAccentColor={CHAT_BROWN}
-                      showSenderName={showSenderName}
-                      highlight={highlightedMessageId === getMessageKey(item)}
-                      onLongPress={() => {
-                        setReplyToMessage(item);
-                        handleMessageAction(item);
-                      }}
-                      onReplyPress={() =>
-                        item.reply_to_msg_id &&
-                        highlightMessage(item.reply_to_msg_id)
-                      }
-                      onImagePress={(imageIndex) => {
-                        const imageItems = Array.isArray(item.content)
-                          ? item.content.filter(
-                              (content): content is ChatMessageContent =>
-                                typeof content !== "string",
-                            )
-                          : [];
-                        const selected =
-                          (imageItems[imageIndex] as any)?.url || "";
-                        if (selected) setSelectedImage(selected);
-                      }}
-                    />
-                  </View>
-                );
-              }}
-              ListEmptyComponent={
-                <View className="flex-1 items-center justify-center px-6 py-24">
-                  <Feather
-                    name="message-square"
-                    size={32}
-                    color={THEME_COLORS.neutral.slate400}
-                  />
-                  <Text className="mt-3 text-[15px] font-semibold text-slate-900">
-                    Chưa có tin nhắn
-                  </Text>
-                  <Text className="mt-2 text-center text-[13px] leading-5 text-slate-500">
-                    Hãy gửi lời chào đầu tiên để bắt đầu cuộc trò chuyện.
-                  </Text>
-                </View>
-              }
-            />
-          )}
+              });
+            }}
+            userIdForChat={userIdForChat}
+            isGroup={isGroup}
+            highlightedMessageId={highlightedMessageId}
+            getMessageKey={getMessageKey}
+            onMessageLongPress={(message) => {
+              setReplyToMessage(message);
+              handleMessageAction(message);
+            }}
+            onReplyPress={(replyToMsgId) => highlightMessage(replyToMsgId)}
+            onImagePreview={(imageUrl) => setSelectedImage(imageUrl)}
+            accentColor={CHAT_BROWN}
+          />
         </View>
 
         {!hasSelectedMedia && (
@@ -906,10 +778,10 @@ export default function ChatDetailScreen() {
             selectedMediaIds={selectedMediaIds}
             mediaAssets={mediaAssets}
             mediaLoading={mediaLoading}
-            onClose={() => setImagePanelVisible(false)}
+            onClose={closeImagePanel}
             onTakePhoto={() => void takePhotoAndSend()}
             onToggleSelectMedia={toggleSelectMedia}
-            onClearSelection={() => setSelectedMediaIds([])}
+            onClearSelection={clearSelectedMedia}
             onSendSelected={() => void sendSelectedPanelMedia()}
           />
         )}
@@ -954,31 +826,10 @@ export default function ChatDetailScreen() {
         )}
       </KeyboardAvoidingView>
 
-      <Modal
-        visible={!!selectedImage}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedImage(null)}
-      >
-        <Pressable
-          className="flex-1 items-center justify-center bg-black/90 px-4"
-          onPress={() => setSelectedImage(null)}
-        >
-          {selectedImage && (
-            <Image
-              source={{ uri: selectedImage }}
-              className="h-[72%] w-full rounded-3xl"
-              resizeMode="contain"
-            />
-          )}
-          <Pressable
-            onPress={() => setSelectedImage(null)}
-            className="absolute right-5 top-16 h-11 w-10 items-center justify-center rounded-full bg-white/10"
-          >
-            <Feather name="x" size={22} color={THEME_COLORS.neutral.white} />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <ChatImagePreviewModal
+        selectedImage={selectedImage}
+        onClose={() => setSelectedImage(null)}
+      />
     </SafeAreaView>
   );
 }

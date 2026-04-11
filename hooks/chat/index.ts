@@ -7,3 +7,4 @@ export { useConversationInfo } from './useConversationInfo';
 export { useMemberManagement } from './useMemberManagement';
 export { useConversationSettings } from './useConversationSettings';
 export { useNicknameEditor } from './useNicknameEditor';
+export { useChatPanels } from './useChatPanels';
