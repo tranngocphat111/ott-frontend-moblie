@@ -8,23 +8,40 @@ interface ChatComposerProps {
   value: string;
   onChangeText: (value: string) => void;
   onSend: () => void;
+  onToggleEmoji?: () => void;
+  onToggleImagePanel?: () => void;
+  onToggleVoicePanel?: () => void;
+  onPickFile?: () => void;
+  emojiActive?: boolean;
+  imagePanelActive?: boolean;
+  voicePanelActive?: boolean;
   replyToMessage?: ChatMessage | null;
   onCancelReply?: () => void;
   disabled?: boolean;
+  accentColor?: string;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
   value,
   onChangeText,
   onSend,
+  onToggleEmoji,
+  onToggleImagePanel,
+  onToggleVoicePanel,
+  onPickFile,
+  emojiActive = false,
+  imagePanelActive = false,
+  voicePanelActive = false,
   replyToMessage,
   onCancelReply,
   disabled = false,
+  accentColor = '#2563eb',
 }) => {
   const canSend = value.trim().length > 0 && !disabled;
+  const actionButtonClass = 'h-9 w-9 items-center justify-center rounded-full';
 
   return (
-    <View className="border-t border-slate-200 bg-white px-4 pb-3 pt-2">
+    <View className="border-t border-slate-200 bg-white px-4  py-2">
       {replyToMessage && (
         <View className="mb-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
           <View className="flex-row items-center justify-between gap-3">
@@ -41,9 +58,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         </View>
       )}
 
-      <View className="flex-row items-end gap-3 rounded-[26px] border border-slate-200 bg-slate-50 px-3 py-2.5">
-        <Pressable className="h-10 w-10 items-center justify-center rounded-full bg-white">
-          <Feather name="plus" size={18} color="#8b5e34" />
+      <View className="flex-row items-center rounded-[26px] border border-slate-200 bg-slate-50 px-3 py-2">
+        <Pressable className={actionButtonClass} onPress={onToggleEmoji} disabled={disabled}>
+          <Feather name="smile" size={18} color={emojiActive ? accentColor : '#64748b'} />
         </Pressable>
 
         <TextInput
@@ -56,13 +73,28 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           className="max-h-28 flex-1 px-1 py-2 text-[15px] text-slate-900"
         />
 
-        <Pressable
-          onPress={onSend}
-          disabled={!canSend}
-          className={`h-11 w-11 items-center justify-center rounded-full ${canSend ? 'bg-brand-600' : 'bg-slate-300'}`}
-        >
-          <Feather name="send" size={16} color="#fff" />
-        </Pressable>
+        {canSend ? (
+          <Pressable
+            onPress={onSend}
+            disabled={!canSend}
+            className="h-10 w-10 items-center justify-center rounded-full"
+            style={{ backgroundColor: accentColor }}
+          >
+            <Feather name="send" size={16} color="#fff" />
+          </Pressable>
+        ) : (
+          <View className="flex-row items-center gap-1">
+            <Pressable className={actionButtonClass} onPress={onPickFile} disabled={disabled}>
+              <Feather name="file" size={18} color="#475569" />
+            </Pressable>
+            <Pressable className={actionButtonClass} onPress={onToggleVoicePanel} disabled={disabled}>
+              <Feather name="mic" size={18} color={voicePanelActive ? accentColor : '#475569'} />
+            </Pressable>
+            <Pressable className={actionButtonClass} onPress={onToggleImagePanel} disabled={disabled}>
+              <Feather name="image" size={18} color={imagePanelActive ? accentColor : '#475569'} />
+            </Pressable>
+          </View>
+        )}
       </View>
     </View>
   );

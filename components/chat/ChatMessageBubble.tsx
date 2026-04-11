@@ -13,6 +13,7 @@ interface ChatMessageBubbleProps {
   onLongPress?: () => void;
   onReplyPress?: () => void;
   onImagePress?: (index: number) => void;
+  mineAccentColor?: string;
 }
 
 const getFileName = (message: ChatMessage) => {
@@ -24,9 +25,9 @@ const getFileName = (message: ChatMessage) => {
   return firstContent.name || firstContent.text || firstContent.url || 'Tệp đính kèm';
 };
 
-const getMediaValue = (item: string | Record<string, unknown>) => {
+const getMediaValue = (item: unknown) => {
   if (typeof item === 'string') return item;
-  const candidate = item as { url?: string; text?: string; name?: string };
+  const candidate = (item || {}) as { url?: string; text?: string; name?: string };
   return candidate.url || candidate.text || candidate.name || '';
 };
 
@@ -48,6 +49,7 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
   onLongPress,
   onReplyPress,
   onImagePress,
+  mineAccentColor = '#8b5e34',
 }) => {
   const contentText = getMessageBodyText(message);
   const reactions = useMemo(() => getReactionSummary(message), [message]);
@@ -62,9 +64,7 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
     );
   }
 
-  const bubbleStyle = isMine
-    ? 'bg-brand-600 border-brand-600'
-    : 'bg-white border-slate-200';
+  const bubbleStyle = 'bg-white border-slate-200';
 
   const textStyle = isMine ? 'text-white' : 'text-slate-900';
   const metaStyle = isMine ? 'text-white/75' : 'text-slate-400';
@@ -82,7 +82,11 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
       <Pressable
         onPress={onPress}
         onLongPress={onLongPress}
-        className={`max-w-[86%] rounded-[22px] border px-3 py-2.5 ${bubbleStyle} ${highlight ? 'ring-2 ring-brand-300' : ''}`}
+        className={`max-w-[86%] rounded-[22px] border px-3 py-2.5 ${bubbleStyle}`}
+        style={[
+          isMine ? { backgroundColor: mineAccentColor, borderColor: mineAccentColor } : undefined,
+          highlight ? { borderColor: '#b98a61', borderWidth: 2 } : undefined,
+        ]}
       >
         {message.reply_to && (
           <Pressable
@@ -141,7 +145,7 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
           </View>
         ) : message.type === 'file' ? (
           <View className={`flex-row items-center gap-3 rounded-2xl px-3 py-2 ${isMine ? 'bg-white/10' : 'bg-slate-50'}`}>
-            <View className={`h-10 w-10 items-center justify-center rounded-2xl ${isMine ? 'bg-white/15' : 'bg-brand-50'}`}>
+            <View className={`h-10 w-10 items-center justify-center rounded-2xl ${isMine ? 'bg-white/15' : 'bg-amber-100'}`}>
               <FileText size={18} color={isMine ? '#fff' : '#8b5e34'} />
             </View>
             <View className="flex-1">
@@ -153,7 +157,7 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
           </View>
         ) : message.type === 'video' ? (
           <View className={`flex-row items-center gap-3 rounded-2xl px-3 py-2 ${isMine ? 'bg-white/10' : 'bg-slate-50'}`}>
-            <View className={`h-10 w-10 items-center justify-center rounded-2xl ${isMine ? 'bg-white/15' : 'bg-brand-50'}`}>
+            <View className={`h-10 w-10 items-center justify-center rounded-2xl ${isMine ? 'bg-white/15' : 'bg-amber-100'}`}>
               <Play size={18} color={isMine ? '#fff' : '#8b5e34'} />
             </View>
             <View className="flex-1">
@@ -165,7 +169,7 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
           </View>
         ) : message.type === 'audio' ? (
           <View className={`flex-row items-center gap-3 rounded-2xl px-3 py-2 ${isMine ? 'bg-white/10' : 'bg-slate-50'}`}>
-            <View className={`h-10 w-10 items-center justify-center rounded-2xl ${isMine ? 'bg-white/15' : 'bg-brand-50'}`}>
+            <View className={`h-10 w-10 items-center justify-center rounded-2xl ${isMine ? 'bg-white/15' : 'bg-amber-100'}`}>
               <Music size={18} color={isMine ? '#fff' : '#8b5e34'} />
             </View>
             <View className="flex-1">

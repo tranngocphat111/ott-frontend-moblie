@@ -25,7 +25,6 @@ export const CategorySelectionModal: React.FC<CategorySelectionModalProps> = ({
   onManageCategories,
   onClose,
 }) => {
-  const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
   const translateY = useRef(new Animated.Value(24)).current;
 
   useEffect(() => {
@@ -56,12 +55,13 @@ export const CategorySelectionModal: React.FC<CategorySelectionModalProps> = ({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <Pressable className="flex-1 justify-end bg-black/35" onPress={onClose}>
-        <AnimatedPressable
-          style={{ transform: [{ translateY }], maxHeight: '82%' }}
-          className="rounded-t-[28px] bg-white px-4 pb-6 pt-4"
-          onPress={() => undefined}
-        >
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' }}
+          onPress={onClose}
+        />
+        <Animated.View style={{ transform: [{ translateY }], maxHeight: '82%' }}>
+          <View className="rounded-t-[28px] bg-white px-4 pb-6 pt-4">
               <View className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" />
               <View className="mb-4 flex-row items-center justify-between">
                 <Text className="text-[20px] font-bold text-slate-900">Thẻ phân loại</Text>
@@ -70,7 +70,7 @@ export const CategorySelectionModal: React.FC<CategorySelectionModalProps> = ({
                 </Pressable>
               </View>
 
-              <ScrollView className="max-h-[58vh]" showsVerticalScrollIndicator={false}>
+              <ScrollView className="max-h-[58vh]" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {categories.map((category) => {
                   const checked = selectedCategoryIds.includes(category._id);
                   return (
@@ -100,8 +100,9 @@ export const CategorySelectionModal: React.FC<CategorySelectionModalProps> = ({
                   <Text className="text-[15px] font-semibold text-white">Áp dụng</Text>
                 </Pressable>
               </View>
-        </AnimatedPressable>
-      </Pressable>
+          </View>
+        </Animated.View>
+      </View>
     </Modal>
   );
 };

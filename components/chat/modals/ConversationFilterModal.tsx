@@ -25,7 +25,7 @@ export const ConversationFilterModal: React.FC<ConversationFilterModalProps> = (
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
       <Pressable className="flex-1 bg-black/15" onPress={onClose}>
-        <View className="items-end px-4 pt-56">
+        <View className="items-end px-4 pt-40">
           <View className="w-56 rounded-[24px] bg-white px-4 py-3 shadow-2xl shadow-black/20">
             <Pressable
               onPress={() => {

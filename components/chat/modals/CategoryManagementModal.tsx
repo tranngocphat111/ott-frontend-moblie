@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Alert, Easing, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Animated, Alert, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { THEME_COLORS } from '@/constants/theme';
 import type { ChatCategory } from '@/services/api/chat';
@@ -22,7 +22,6 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
   onClose,
   onReload,
 }) => {
-  const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -123,12 +122,19 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <Pressable className="flex-1 justify-end bg-black/35" onPress={onClose}>
-        <AnimatedPressable
-          style={{ transform: [{ translateY }], maxHeight: '88%' }}
-          className="rounded-t-[28px] bg-white px-4 pb-6 pt-4"
-          onPress={() => undefined}
+      <View style={{ flex: 1 }}>
+        <Pressable
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' }}
+          onPress={onClose}
+        />
+        <KeyboardAvoidingView
+          style={{ flex: 1, justifyContent: 'flex-end' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          pointerEvents="box-none"
         >
+        <Animated.View style={{ transform: [{ translateY }], maxHeight: '88%' }}>
+          <View className="rounded-t-[28px] bg-white px-4 pb-6 pt-4">
           <View className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" />
           <View className="mb-4 flex-row items-center justify-between">
             <Text className="text-[20px] font-bold text-slate-900">Quản lý thẻ phân loại</Text>
@@ -137,7 +143,7 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
             </Pressable>
           </View>
 
-          <ScrollView className="max-h-[52vh]" showsVerticalScrollIndicator={false}>
+          <ScrollView className="max-h-[52vh]" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {categories.map((category) => (
               <View key={category._id} className="mb-2 rounded-2xl border border-slate-200 px-3 py-3">
                 <View className="flex-row items-center justify-between gap-3">
@@ -198,8 +204,10 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
               <Text className="ml-2 text-[15px] font-semibold text-slate-600">Thêm thẻ phân loại</Text>
             </Pressable>
           )}
-        </AnimatedPressable>
-      </Pressable>
+          </View>
+        </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 };

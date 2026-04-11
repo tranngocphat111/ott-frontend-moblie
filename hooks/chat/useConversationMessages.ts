@@ -18,10 +18,11 @@ export function useConversationMessages(conversationId: string | undefined, user
 
       if (leftTime !== rightTime) return leftTime - rightTime;
 
-      const leftId = Number(left.msg_id || 0);
-      const rightId = Number(right.msg_id || 0);
+      const leftId = BigInt(String(left.msg_id || 0));
+      const rightId = BigInt(String(right.msg_id || 0));
 
-      return leftId - rightId;
+      if (leftId === rightId) return 0;
+      return leftId < rightId ? -1 : 1;
     });
   };
 
@@ -34,10 +35,16 @@ export function useConversationMessages(conversationId: string | undefined, user
       return;
     }
 
-    setLoading(true);
+    if (messages.length === 0) {
+      setLoading(true);
+    }
+
+    const shouldLoadConversationMeta =
+      !conversation || String(conversation._id || '') !== String(conversationId || '');
+
     try {
       const [conversationList, messagePayload, pinnedPayload] = await Promise.all([
-        userIdForChat
+        shouldLoadConversationMeta && userIdForChat
           ? ChatApi.getUserConversations(userIdForChat).catch(() => [] as any[])
           : Promise.resolve([] as any[]),
         ChatApi.getMessages(conversationId, userIdForChat),
@@ -56,11 +63,14 @@ export function useConversationMessages(conversationId: string | undefined, user
           ? (pinnedPayload as any).messages
           : [];
 
-      const matched = conversationList.find(
-        (item: any) => item.conversation._id === conversationId,
-      );
-
-      setConversation(matched?.conversation || null);
+      if (shouldLoadConversationMeta) {
+        const matched = conversationList.find(
+          (item: any) => item.conversation._id === conversationId,
+        );
+        if (matched?.conversation) {
+          setConversation(matched.conversation || null);
+        }
+      }
       setMessages(normalizeMessages(normalizedMessages));
       setPinnedMessages(normalizeMessages(normalizedPinned));
 
@@ -74,7 +84,7 @@ export function useConversationMessages(conversationId: string | undefined, user
     } finally {
       setLoading(false);
     }
-  }, [conversationId, userIdForChat]);
+  }, [conversation?._id, conversationId, messages.length, userIdForChat]);
 
   return {
     conversation,

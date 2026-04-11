@@ -46,6 +46,25 @@
       "expo-router",
       "expo-web-browser",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép truy cập thư viện ảnh để gửi hình ảnh trong cuộc trò chuyện",
+          "cameraPermission": "Cho phép truy cập camera để chụp ảnh và gửi trong cuộc trò chuyện"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Cho phép truy cập micro để ghi âm và gửi tin nhắn thoại"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Cho phép truy cập thư viện để hiển thị ảnh/video gần đây và gửi trong cuộc trò chuyện"
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

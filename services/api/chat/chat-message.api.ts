@@ -7,6 +7,7 @@ import type {
 import type {
   ChatLinkMessage,
   ChatMessageContextResponse,
+  ChatPresignedUrlResponse,
   SendMessagePayload,
 } from './chat.types';
 
@@ -16,7 +17,33 @@ export const chatMessageApi = {
     userId?: string,
   ): Promise<ChatMessagesResponse> {
     const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-    return await chatApiClient.get(`/messages/${conversationId}${query}`);
+    return await chatApiClient.get(`/conversations/${conversationId}/messages${query}`);
+  },
+
+  async getMessagePresignedUrl(
+    fileName: string,
+    fileType: string,
+  ): Promise<ChatPresignedUrlResponse> {
+    return await chatApiClient.post('/messages/presigned-url', { fileName, fileType });
+  },
+
+  async uploadFileToS3(
+    uploadUrl: string,
+    uri: string,
+    contentType: string,
+  ): Promise<void> {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType || 'application/octet-stream' },
+      body: blob,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`S3 upload failed: ${uploadResponse.status}`);
+    }
   },
 
   async getOlderMessages(
