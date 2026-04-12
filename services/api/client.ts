@@ -139,7 +139,7 @@ chatApiClient.interceptors.response.use(
     return response.data;
   },
   async (error: AxiosError<ApiResponse>) => {
-    const errorPayload = String(error.response?.data?.error || error.response?.data?.message || '');
+    const errorPayload = String(error.response?.data?.message || error.response?.data?.message || '');
     const isPinLimitError =
       error.config?.url?.includes('/pin') &&
       error.response?.status === 400 &&
