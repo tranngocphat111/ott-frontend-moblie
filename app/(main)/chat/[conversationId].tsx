@@ -3,6 +3,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   Share,
@@ -24,6 +25,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from "@/context/Authcontext";
 import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi } from "@/services/api";
@@ -62,6 +64,7 @@ const CHAT_BROWN = '#d2a177';
 const CHAT_BROWN_SOFT = '#f5e8dc';
 const CHAT_PANEL_HEIGHT = 260;
 const MAX_PINNED_MESSAGES = 3;
+const WEB_CALL_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL || 'http://localhost:5173';
 
 type ChatPanelMediaAsset = {
   id: string;
@@ -353,6 +356,9 @@ export default function ChatDetailScreen() {
   const [pendingPinMessage, setPendingPinMessage] = useState<ChatMessage | null>(null);
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
+  const initialMediaReadyRef = useRef<Set<string>>(new Set());
+  const initialMediaTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [initialMediaReady, setInitialMediaReady] = useState(false);
   const {
     voicePanelVisible,
     imagePanelVisible,
@@ -374,19 +380,29 @@ export default function ChatDetailScreen() {
   const avatar = getConversationAvatar(conversation, userIdForChat);
   const isGroup = conversation?.type === "group";
 
-  const openCallScreen = useCallback((type: 'voice' | 'video') => {
+  const openWebCall = useCallback(async (type: 'voice' | 'video') => {
     if (!conversationId) return;
 
-    router.push({
-      pathname: '/call',
-      params: {
-        conversationId: String(conversationId),
-        type,
-        action: 'start',
-        name: title || 'Cuộc gọi',
-      },
-    } as any);
-  }, [conversationId, router, title]);
+    const callName = encodeURIComponent(title || 'Cuoc goi');
+    const base = String(WEB_CALL_BASE_URL || '').replace(/\/$/, '');
+    const callUrl = `${base}/call?conversationId=${encodeURIComponent(String(conversationId))}&type=${type}&action=start&name=${callName}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(callUrl);
+      if (!canOpen) {
+        Alert.alert('Lỗi', 'Không thể mở trang gọi của web.');
+        return;
+      }
+
+      await WebBrowser.openBrowserAsync(callUrl, {
+        showTitle: true,
+        enableDefaultShareMenuItem: false,
+      });
+    } catch (error) {
+      console.error('Failed to open web call:', error);
+      Alert.alert('Lỗi', 'Không thể mở cuộc gọi web. Vui lòng kiểm tra EXPO_PUBLIC_WEB_URL.');
+    }
+  }, [conversationId, title]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -523,7 +539,91 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     initialScrollConversationRef.current = null;
+    initialMediaReadyRef.current = new Set();
+    setInitialMediaReady(false);
+
+    if (initialMediaTimeoutRef.current) {
+      clearTimeout(initialMediaTimeoutRef.current);
+      initialMediaTimeoutRef.current = null;
+    }
   }, [conversationId]);
+
+  useEffect(() => {
+    return () => {
+      if (initialMediaTimeoutRef.current) {
+        clearTimeout(initialMediaTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!conversationId || loading || messages.length === 0) {
+      return;
+    }
+
+    if (initialMediaReady) {
+      return;
+    }
+
+    const pendingMediaIds = messages
+      .slice(-16)
+      .filter((message) => !message.is_deleted && !message.is_revoked)
+      .filter((message) => message.type === 'image' || message.type === 'video')
+      .map((message) => getMessageKey(message))
+      .filter(Boolean);
+
+    if (pendingMediaIds.length === 0) {
+      setInitialMediaReady(true);
+      return;
+    }
+
+    initialMediaReadyRef.current = new Set(pendingMediaIds);
+
+    if (initialMediaTimeoutRef.current) {
+      clearTimeout(initialMediaTimeoutRef.current);
+    }
+
+    initialMediaTimeoutRef.current = setTimeout(() => {
+      setInitialMediaReady(true);
+      initialMediaTimeoutRef.current = null;
+    }, 1200);
+  }, [conversationId, getMessageKey, initialMediaReady, loading, messages]);
+
+  const handleInitialMediaReady = useCallback((messageId: string) => {
+    if (!messageId || initialMediaReady) {
+      return;
+    }
+
+    if (initialMediaReadyRef.current.size === 0) {
+      return;
+    }
+
+    initialMediaReadyRef.current.delete(String(messageId));
+
+    if (initialMediaReadyRef.current.size === 0) {
+      if (initialMediaTimeoutRef.current) {
+        clearTimeout(initialMediaTimeoutRef.current);
+        initialMediaTimeoutRef.current = null;
+      }
+      setInitialMediaReady(true);
+    }
+  }, [initialMediaReady]);
+
+  useEffect(() => {
+    if (!conversationId || loading || messages.length === 0) {
+      return;
+    }
+
+    if (!initialScrollReady || !initialMediaReady) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
+    });
+  }, [conversationId, initialMediaReady, initialScrollReady, loading, messages.length, scrollToBottom]);
 
   useEffect(() => {
     if (!conversationId || loading || messages.length === 0) {
@@ -1103,8 +1203,8 @@ export default function ChatDetailScreen() {
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
           onBack={handleBack}
-          onPhone={() => openCallScreen('voice')}
-          onVideo={() => openCallScreen('video')}
+          onPhone={() => void openWebCall('voice')}
+          onVideo={() => void openWebCall('video')}
           onMenu={() =>
             router.push({
               pathname: "/chat/info/[conversationId]",
@@ -1161,7 +1261,7 @@ export default function ChatDetailScreen() {
         <View className="flex-1">
           <ChatMessagesList
             loading={loading}
-            preparing={!loading && messages.length > 0 && !initialScrollReady}
+            preparing={!loading && messages.length > 0 && (!initialScrollReady || !initialMediaReady)}
             messages={messages}
             conversation={conversation}
             listRef={listRef as any}
@@ -1183,6 +1283,7 @@ export default function ChatDetailScreen() {
             onReplyPress={(replyToMsgId) => highlightMessage(replyToMsgId)}
             onImagePreview={(imageUrl) => setSelectedImage(imageUrl)}
             onReactionPress={(message) => setReactionDetailsMessage(message)}
+            onMediaReady={handleInitialMediaReady}
             accentColor={CHAT_BROWN}
             mineAccentColor={CHAT_BROWN_SOFT}
           />

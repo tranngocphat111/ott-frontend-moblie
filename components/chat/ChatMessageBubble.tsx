@@ -30,6 +30,7 @@ interface ChatMessageBubbleProps {
   onReplyPress?: () => void;
   onImagePress?: (index: number) => void;
   onReactionPress?: (message: ChatMessage, emoji: string) => void;
+  onMediaReady?: (messageId: string) => void;
   mineAccentColor?: string;
 }
 
@@ -120,6 +121,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   onReplyPress,
   onImagePress,
   onReactionPress,
+  onMediaReady,
   mineAccentColor = "#dff0ff",
 }) => {
   const contentText = getMessageBodyText(message);
@@ -224,6 +226,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               message={message}
               onImagePress={onImagePress}
               onLongPress={onLongPress}
+              onMediaReady={onMediaReady}
             />
           ) : message.type === "file" ? (
             <ChatFileMessage
@@ -236,6 +239,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               message={message}
               onPress={onPress}
               onLongPress={onLongPress}
+              onMediaReady={onMediaReady}
             />
           ) : message.type === "audio" ? (
             <ChatAudioMessage

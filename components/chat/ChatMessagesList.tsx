@@ -43,6 +43,7 @@ type Props = {
   onReplyPress: (replyToMsgId: string) => void;
   onImagePreview: (imageUrl: string) => void;
   onReactionPress?: (message: ChatMessage, emoji: string) => void;
+  onMediaReady?: (messageId: string) => void;
   accentColor: string;
   mineAccentColor: string;
 };
@@ -63,6 +64,7 @@ export const ChatMessagesList: React.FC<Props> = ({
   onReplyPress,
   onImagePreview,
   onReactionPress,
+  onMediaReady,
   accentColor,
   mineAccentColor,
   conversation,
@@ -86,9 +88,12 @@ export const ChatMessagesList: React.FC<Props> = ({
         data={messages}
         keyExtractor={getMessageKey}
         onScroll={onScroll}
+        removeClippedSubviews
+        drawDistance={560}
         scrollEventThrottle={16}
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 16 }}
+        style={preparing ? { opacity: 0 } : undefined}
         // showsVerticalScrollIndicator={false}
         renderItem={({ item, index }) => {
         const prevMessage = messages[index - 1];
@@ -182,6 +187,7 @@ export const ChatMessagesList: React.FC<Props> = ({
                   showSenderName={false}
                   highlight={isHighlighted}
                   onReactionPress={onReactionPress}
+                  onMediaReady={onMediaReady}
                   onPress={
                     item.type === 'video'
                       ? () => {
