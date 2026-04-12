@@ -7,6 +7,7 @@ import { resolveMediaUrl } from '@/utils/chat';
 type Props = {
   message: ChatMessage;
   onImagePress?: (index: number) => void;
+  onLongPress?: (event: any) => void;
 };
 
 type MediaItem = {
@@ -44,7 +45,7 @@ const fitSize = (sourceWidth: number, sourceHeight: number) => {
   return { width, height };
 };
 
-const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress }) => {
+const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPress }) => {
   const imageUrls = useMemo(() => getImageUrls(message), [message]);
   const [singleSize, setSingleSize] = useState({ width: 260, height: 200 });
 
@@ -54,7 +55,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress }) => {
 
   if (imageUrls.length === 1) {
     return (
-      <Pressable onPress={() => onImagePress?.(0)} className="overflow-hidden rounded-xl">
+      <Pressable onPress={() => onImagePress?.(0)} onLongPress={onLongPress} delayLongPress={150} className="overflow-hidden rounded-xl">
           <Image source={{ uri: imageUrls[0] }} style={singleSize} contentFit="cover" transition={120} onLoad={(event) => {
             const width = event.source?.width || 0;
             const height = event.source?.height || 0;
@@ -68,7 +69,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress }) => {
     return (
       <View className="w-[260px] flex-row overflow-hidden rounded-xl">
         {imageUrls.map((url, index) => (
-          <Pressable key={`${message._id}-${index}`} onPress={() => onImagePress?.(index)} className="h-[150px] flex-1 overflow-hidden border-r border-white">
+          <Pressable key={`${message._id}-${index}`} onPress={() => onImagePress?.(index)} onLongPress={onLongPress} delayLongPress={150} className="h-[150px] flex-1 overflow-hidden border-r border-white">
             <Image source={{ uri: url }} className="h-full w-full" contentFit="cover" transition={120} />
           </Pressable>
         ))}
@@ -79,7 +80,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress }) => {
   if (imageUrls.length === 3) {
     return (
       <View className="h-[300px] w-[260px] flex-row overflow-hidden rounded-xl">
-        <Pressable onPress={() => onImagePress?.(0)} className="h-full w-[58%] overflow-hidden border-r border-white">
+        <Pressable onPress={() => onImagePress?.(0)} onLongPress={onLongPress} delayLongPress={150} className="h-full w-[58%] overflow-hidden border-r border-white">
           <Image source={{ uri: imageUrls[0] }} className="h-full w-full" contentFit="cover" transition={120} />
         </Pressable>
         <View className="w-[42%]">
@@ -87,6 +88,8 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress }) => {
             <Pressable
               key={`${message._id}-${index + 1}`}
               onPress={() => onImagePress?.(index + 1)}
+              onLongPress={onLongPress}
+              delayLongPress={150}
               className={`h-1/2 overflow-hidden ${index === 0 ? 'border-b border-white' : ''}`}
             >
               <Image source={{ uri: url }} className="h-full w-full" contentFit="cover" transition={120} />
@@ -108,6 +111,8 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress }) => {
           <Pressable
             key={`${message._id}-${index}`}
             onPress={() => onImagePress?.(index)}
+            onLongPress={onLongPress}
+            delayLongPress={150}
             className="relative h-[86px] w-1/3 overflow-hidden border-b border-r border-white"
           >
             <Image source={{ uri: url }} className="h-full w-full" contentFit="cover" transition={120} />

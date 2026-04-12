@@ -1,11 +1,11 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import type { ChatConversation, ChatMessage, ChatMessageContent } from '@/types/entities/chat';
 import {
   formatMessageTimestampLabel,
+  getMessageSenderName,
   getMessageSenderAvatar,
   resolveMediaUrl,
   shouldBreakMessageCluster,
@@ -13,6 +13,18 @@ import {
 } from '@/utils/chat';
 import { ChatMessageBubble } from './ChatMessageBubble';
 import { useAuth } from '@/context/Authcontext';
+
+const getInitials = (value: string) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '?';
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) {
+    return tokens[0].slice(0, 1).toUpperCase();
+  }
+
+  return `${tokens[0].slice(0, 1)}${tokens[tokens.length - 1].slice(0, 1)}`.toUpperCase();
+};
 
 type Props = {
   loading: boolean;
@@ -30,6 +42,7 @@ type Props = {
   onMessageLongPress: (message: ChatMessage, event?: any) => void;
   onReplyPress: (replyToMsgId: string) => void;
   onImagePreview: (imageUrl: string) => void;
+  onReactionPress?: (message: ChatMessage, emoji: string) => void;
   accentColor: string;
   mineAccentColor: string;
 };
@@ -49,6 +62,7 @@ export const ChatMessagesList: React.FC<Props> = ({
   onMessageLongPress,
   onReplyPress,
   onImagePreview,
+  onReactionPress,
   accentColor,
   mineAccentColor,
   conversation,
@@ -75,7 +89,7 @@ export const ChatMessagesList: React.FC<Props> = ({
         scrollEventThrottle={16}
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 16 }}
-        showsVerticalScrollIndicator={false}
+        // showsVerticalScrollIndicator={false}
         renderItem={({ item, index }) => {
         const prevMessage = messages[index - 1];
         const nextMessage = messages[index + 1];
@@ -91,7 +105,36 @@ export const ChatMessagesList: React.FC<Props> = ({
           nextMessage?.createdAt || nextMessage?.created_at,
         );
         const showSenderName = isGroup && !isMine && clusterStart;
-        const senderAvatar = getMessageSenderAvatar(conversation, item.sender_id, currentUserId);
+        const senderName = getMessageSenderName(item, conversation);
+        const senderAvatar = item.sender_avatar || getMessageSenderAvatar(conversation, item.sender_id, currentUserId, item.sender_avatar);
+        const isHighlighted = highlightedMessageId === getMessageKey(item);
+
+        if (item.type === 'system_add') {
+          return (
+            <View className="px-2">
+              {showTimestamp && (
+                <View className="my-2 w-full items-center">
+                  <View className="rounded-full bg-slate-200 px-3 py-1">
+                    <Text className="text-[11px] font-medium text-slate-600">
+                      {formatMessageTimestampLabel(item.createdAt || item.created_at)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View className="w-full items-center px-2">
+                <ChatMessageBubble
+                  message={item}
+                  isMine={false}
+                  mineAccentColor={mineAccentColor}
+                  showSenderName={false}
+                  highlight={highlightedMessageId === getMessageKey(item)}
+                  onReactionPress={onReactionPress}
+                />
+              </View>
+            </View>
+          );
+        }
 
         return (
           <View className="px-2">
@@ -105,14 +148,19 @@ export const ChatMessagesList: React.FC<Props> = ({
               </View>
             )}
 
-            <View className={`flex-row px-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
+            <View
+              className={`flex-row rounded-2xl px-2 ${isMine ? 'justify-end' : 'justify-start'} ${isHighlighted ? 'bg-[#f5ece4]' : ''}`}
+              style={isHighlighted ? { paddingVertical: 4 } : undefined}
+            >
               {!isMine && clusterStart ? (
-                <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-slate-200">
+                <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
                   {senderAvatar ? (
-                    <Image source={{ uri: resolveMediaUrl(senderAvatar) }} className="h-full w-full" contentFit="cover" transition={120} />
+                    <Image source={{ uri: senderAvatar }} className="h-full w-full object-cover" />
                   ) : (
-                    <View className="h-full w-full items-center justify-center">
-                      <Feather name="user" size={15} color="#8b5e34" />
+                    <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+                      <Text className="text-[12px] font-bold text-[#8b5e34]">
+                        {getInitials(senderName)}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -123,7 +171,7 @@ export const ChatMessagesList: React.FC<Props> = ({
               <View className={`${isMine ? 'items-end' : 'items-start'} max-w-[80%]`}>
                 {showSenderName && !isMine && (
                   <Text className="mb-1 ml-1 text-[12px] font-semibold text-slate-500">
-                    {item.sender_name || 'Thành viên'}
+                    {senderName}
                   </Text>
                 )}
 
@@ -132,7 +180,24 @@ export const ChatMessagesList: React.FC<Props> = ({
                   isMine={isMine}
                   mineAccentColor={mineAccentColor}
                   showSenderName={false}
-                  highlight={highlightedMessageId === getMessageKey(item)}
+                  highlight={isHighlighted}
+                  onReactionPress={onReactionPress}
+                  onPress={
+                    item.type === 'video'
+                      ? () => {
+                          const firstContent = Array.isArray(item.content) ? item.content[0] : item.content;
+                          const raw = typeof firstContent === 'string'
+                            ? firstContent
+                            : firstContent && typeof firstContent === 'object'
+                              ? firstContent.url || firstContent.text || firstContent.name || ''
+                              : '';
+                          const selected = resolveMediaUrl(String(raw || ''));
+                          if (selected) {
+                            onImagePreview(selected);
+                          }
+                        }
+                      : undefined
+                  }
                   onLongPress={(event) => onMessageLongPress(item, event)}
                   onReplyPress={() => item.reply_to_msg_id && onReplyPress(item.reply_to_msg_id)}
                   onImagePress={(imageIndex) => {

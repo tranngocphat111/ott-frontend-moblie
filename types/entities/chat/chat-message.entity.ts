@@ -37,6 +37,7 @@ export interface ChatMessage {
   conversation_id?: string;
   size?: number;
   sender_name?: string;
+  sender_avatar?: string;
   reply_to_msg_id?: string | null;
   reply_to?: ChatMessageReplyPreview | null;
   reactions?: ChatMessageReaction[];

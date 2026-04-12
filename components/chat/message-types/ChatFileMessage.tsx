@@ -1,11 +1,12 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { CheckCircle2, FileArchive, FileAudio2, FileCode2, FileImage, FileSpreadsheet, FileText, FileVideo } from 'lucide-react-native';
 import type { ChatMessage } from '@/types';
 
 type Props = {
   message: ChatMessage;
   isMine: boolean;
+  onLongPress?: (event: any) => void;
 };
 
 const getFirstContent = (message: ChatMessage) => {
@@ -72,7 +73,7 @@ const getTypeVisual = (ext: string) => {
   return { label: 'FILE', bg: '#7d93aa', fg: '#ffffff', icon: FileText };
 };
 
-export const ChatFileMessage: React.FC<Props> = ({ message, isMine }) => {
+export const ChatFileMessage: React.FC<Props> = ({ message, isMine, onLongPress }) => {
   const fileName = getFileName(message);
   const ext = getExt(fileName);
   const content = getFirstContent(message);
@@ -80,7 +81,7 @@ export const ChatFileMessage: React.FC<Props> = ({ message, isMine }) => {
   const visual = getTypeVisual(ext);
 
   return (
-    <View className={`w-[260px] rounded-xl  p-2 py-1.5`}>
+    <Pressable className={`w-[260px] rounded-xl p-2 py-1.5`} onLongPress={onLongPress} delayLongPress={150}>
       <View className="flex-row items-center gap-3">
         <View
           className="h-12 w-12 items-center justify-center rounded-md"
@@ -101,6 +102,6 @@ export const ChatFileMessage: React.FC<Props> = ({ message, isMine }) => {
 
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 };

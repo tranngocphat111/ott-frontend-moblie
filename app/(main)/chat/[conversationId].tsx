@@ -4,6 +4,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   Share,
   Text,
   View,
@@ -15,6 +16,7 @@ import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import { Audio } from "expo-av";
 import { StatusBar } from "expo-status-bar";
+import { Feather } from "@expo/vector-icons";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -35,8 +37,10 @@ import {
   ChatPinnedMessagesBar,
   ChatScreenHeader,
   ChatVoicePanel,
+  MessageReactionsModal,
 } from "@/components/chat";
 import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
+import { ReplacePinnedModal } from "@/components/chat/modals/ReplacePinnedModal";
 import {
   getConversationAvatar,
   getConversationTitle,
@@ -57,6 +61,7 @@ const CHAT_BROWN_DARK = '#b78457';
 const CHAT_BROWN = '#d2a177';
 const CHAT_BROWN_SOFT = '#f5e8dc';
 const CHAT_PANEL_HEIGHT = 260;
+const MAX_PINNED_MESSAGES = 3;
 
 type ChatPanelMediaAsset = {
   id: string;
@@ -222,12 +227,40 @@ const patchMessageById = (
   }
 
   if (idx >= 0) {
-    next[idx] = incoming;
+    next[idx] = {
+      ...next[idx],
+      ...incoming,
+    };
   } else {
     next.push(incoming);
   }
 
   return normalizeMessages ? normalizeMessages(next) : next;
+};
+
+const mergeMessagesByKey = (
+  current: ChatMessage[],
+  incoming: ChatMessage[],
+  normalizeMessages: (messages: ChatMessage[]) => ChatMessage[],
+) => {
+  if (!incoming.length) return current;
+
+  const map = new Map<string, ChatMessage>();
+
+  current.forEach((item) => {
+    const id = getMessageKey(item);
+    if (!id) return;
+    map.set(id, item);
+  });
+
+  incoming.forEach((item) => {
+    const id = getMessageKey(item);
+    if (!id) return;
+    const existing = map.get(id);
+    map.set(id, existing ? { ...existing, ...item } : item);
+  });
+
+  return normalizeMessages(Array.from(map.values()));
 };
 
 export default function ChatDetailScreen() {
@@ -247,15 +280,19 @@ export default function ChatDetailScreen() {
     setPinnedMessages,
     loadConversation,
     normalizeMessages,
+    normalizePinnedMessages,
     PAGE_SIZE,
   } = useConversationMessages(conversationId, userIdForChat);
   const {
     listRef,
     loadingOlder,
     initialScrollReady,
+    showScrollToBottom,
     onScroll,
     handleContentSizeChange,
     setPendingScrollToBottom,
+    setHasMoreNewer,
+    scrollToBottom,
   } = useMessageScroll({
     conversationId,
     userIdForChat,
@@ -264,6 +301,23 @@ export default function ChatDetailScreen() {
     normalizeMessages,
     PAGE_SIZE,
   });
+  const resolveMissingMessageForHighlight = useCallback(async (messageId: string) => {
+    if (!conversationId || !userIdForChat || !messageId) return false;
+
+    try {
+      const payload = await ChatApi.getMessageContext(conversationId, messageId, 30, 30, userIdForChat);
+      const contextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
+      if (!contextMessages.length) return false;
+
+      setMessages((current) => mergeMessagesByKey(current, contextMessages, normalizeMessages));
+      setHasMoreNewer(Boolean(payload?.hasMoreAfter));
+      return true;
+    } catch (error) {
+      console.error('Failed to load message context for jump:', error);
+      return false;
+    }
+  }, [conversationId, normalizeMessages, setHasMoreNewer, setMessages, userIdForChat]);
+
   const {
     highlightedMessageId,
     highlightMessage,
@@ -272,6 +326,7 @@ export default function ChatDetailScreen() {
     messages,
     getMessageKey,
     listRef,
+    onResolveMissingMessage: resolveMissingMessageForHighlight,
   });
 
   // Local component state
@@ -293,7 +348,9 @@ export default function ChatDetailScreen() {
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const [pendingVoiceUri, setPendingVoiceUri] = useState<string | null>(null);
   const [activeMessageMenu, setActiveMessageMenu] = useState<ChatMessage | null>(null);
-  const [activeMessageMenuPosition, setActiveMessageMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [reactionDetailsMessage, setReactionDetailsMessage] = useState<ChatMessage | null>(null);
+  const [replacePinModalVisible, setReplacePinModalVisible] = useState(false);
+  const [pendingPinMessage, setPendingPinMessage] = useState<ChatMessage | null>(null);
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
   const {
@@ -317,6 +374,20 @@ export default function ChatDetailScreen() {
   const avatar = getConversationAvatar(conversation, userIdForChat);
   const isGroup = conversation?.type === "group";
 
+  const openCallScreen = useCallback((type: 'voice' | 'video') => {
+    if (!conversationId) return;
+
+    router.push({
+      pathname: '/call',
+      params: {
+        conversationId: String(conversationId),
+        type,
+        action: 'start',
+        name: title || 'Cuộc gọi',
+      },
+    } as any);
+  }, [conversationId, router, title]);
+
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
@@ -332,19 +403,44 @@ export default function ChatDetailScreen() {
     setTimeout(() => Keyboard.dismiss(), 40);
   }, []);
 
-  const openMessageMenu = useCallback((message: ChatMessage, event?: any) => {
+  const openMessageMenu = useCallback((message: ChatMessage) => {
     dismissKeyboard();
-    setActiveMessageMenu(message);
-    setActiveMessageMenuPosition({
-      x: Number(event?.nativeEvent?.pageX || event?.nativeEvent?.locationX || 24),
-      y: Number(event?.nativeEvent?.pageY || event?.nativeEvent?.locationY || 120),
+    const key = getMessageKey(message);
+    const latestMessage = messages.find((item) => getMessageKey(item) === key) || message;
+    const isPinnedNow = pinnedMessages.some((item) => getMessageKey(item) === key);
+    setActiveMessageMenu({
+      ...latestMessage,
+      is_pinned: isPinnedNow,
     });
-  }, [dismissKeyboard]);
+  }, [dismissKeyboard, messages, pinnedMessages]);
 
   const closeMessageMenu = useCallback(() => {
     setActiveMessageMenu(null);
-    setActiveMessageMenuPosition(null);
   }, []);
+
+  const handleConfirmReplacePinned = useCallback(async (messageToUnpin: ChatMessage) => {
+    if (!conversationId || !userIdForChat || !pendingPinMessage?.msg_id || !messageToUnpin?.msg_id) {
+      return;
+    }
+
+    try {
+      const unpinned = await ChatApi.pinMessage(conversationId, messageToUnpin.msg_id, userIdForChat, false);
+      const pinned = await ChatApi.pinMessage(conversationId, pendingPinMessage.msg_id, userIdForChat, true);
+
+      setMessages((current) => patchMessageById(current, unpinned, undefined, normalizeMessages));
+      setPinnedMessages((current) => patchMessageById(current, unpinned, { remove: true }, normalizeMessages));
+
+      setMessages((current) => patchMessageById(current, pinned, undefined, normalizeMessages));
+      setPinnedMessages((current) => patchMessageById(current, pinned, undefined, normalizeMessages));
+
+      setReplacePinModalVisible(false);
+      setPendingPinMessage(null);
+    } catch (error) {
+      console.error('Failed to replace pinned message:', error);
+      const message = error instanceof Error ? error.message : 'Không thể cập nhật ghim';
+      Alert.alert('Lỗi', message);
+    }
+  }, [conversationId, normalizeMessages, pendingPinMessage, userIdForChat]);
 
   const shareMessage = useCallback(async (message: ChatMessage) => {
     const attachments = getMessageAttachments(message);
@@ -914,11 +1010,11 @@ export default function ChatDetailScreen() {
           current,
           payload,
           { remove: !payload.is_pinned },
-          normalizeMessages,
+          normalizePinnedMessages,
         );
       });
     },
-    [conversationId, normalizeMessages],
+    [conversationId, normalizeMessages, normalizePinnedMessages],
   );
 
   const handleMessageRevoked = useCallback(
@@ -940,10 +1036,10 @@ export default function ChatDetailScreen() {
         patchMessageById(current, payload, { remove: true }, normalizeMessages),
       );
       setPinnedMessages((current) =>
-        patchMessageById(current, payload, { remove: true }, normalizeMessages),
+        patchMessageById(current, payload, { remove: true }, normalizePinnedMessages),
       );
     },
-    [conversationId, normalizeMessages],
+    [conversationId, normalizeMessages, normalizePinnedMessages],
   );
 
   // Setup socket listeners
@@ -1007,8 +1103,8 @@ export default function ChatDetailScreen() {
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
           onBack={handleBack}
-          onPhone={() => undefined}
-          onVideo={() => undefined}
+          onPhone={() => openCallScreen('voice')}
+          onVideo={() => openCallScreen('video')}
           onMenu={() =>
             router.push({
               pathname: "/chat/info/[conversationId]",
@@ -1021,7 +1117,45 @@ export default function ChatDetailScreen() {
           pinnedMessages={pinnedMessages}
           showPinnedList={showPinnedList}
           onTogglePinnedList={() => setShowPinnedList((prev) => !prev)}
+          overlayTopOffset={insets.top + 98}
           onHighlightMessage={(messageId: string) => highlightMessage(messageId)}
+          onDeletePin={async (messageId: string) => {
+            if (!conversationId || !userIdForChat) return;
+            try {
+              const updated = await ChatApi.pinMessage(conversationId, messageId, userIdForChat, false);
+              setMessages((current) => patchMessageById(current, updated, undefined, normalizeMessages));
+              setPinnedMessages((current) => patchMessageById(current, updated, { remove: true }, normalizePinnedMessages));
+            } catch (error) {
+              console.error('Failed to delete pin:', error);
+              Alert.alert('Lỗi', 'Không thể xóa ghim');
+            }
+          }}
+          onReorderPins={async (reorderedMessages: ChatMessage[]) => {
+            if (!conversationId || !userIdForChat) return;
+            try {
+              const updates: ChatMessage[] = [];
+
+              const orderedIds = reorderedMessages
+                .map((item) => item.msg_id)
+                .filter((id): id is string => !!id);
+
+              // Re-pin in reverse order to refresh pinned_at without triggering pin-limit checks.
+              for (const messageId of [...orderedIds].reverse()) {
+                const updated = await ChatApi.pinMessage(conversationId, messageId, userIdForChat, true);
+                updates.push(updated);
+              }
+
+              updates.forEach((payload) => {
+                setMessages((current) => patchMessageById(current, payload, undefined, normalizeMessages));
+                setPinnedMessages((current) =>
+                  patchMessageById(current, payload, { remove: !payload.is_pinned }, normalizePinnedMessages),
+                );
+              });
+            } catch (error) {
+              console.error('Failed to reorder pins:', error);
+              Alert.alert('Lỗi', 'Không thể cập nhật thứ tự ghim');
+            }
+          }}
         />
 
         <View className="flex-1">
@@ -1048,9 +1182,19 @@ export default function ChatDetailScreen() {
             onMessageLongPress={(message) => openMessageMenu(message)}
             onReplyPress={(replyToMsgId) => highlightMessage(replyToMsgId)}
             onImagePreview={(imageUrl) => setSelectedImage(imageUrl)}
+            onReactionPress={(message) => setReactionDetailsMessage(message)}
             accentColor={CHAT_BROWN}
             mineAccentColor={CHAT_BROWN_SOFT}
           />
+
+          {showScrollToBottom && (
+            <Pressable
+              onPress={scrollToBottom}
+              className="absolute bottom-4 right-4 h-11 w-11 items-center justify-center rounded-full border border-[#d8b79a] bg-[#b78457] shadow-lg"
+            >
+              <Feather name="chevron-down" size={20} color="#ffffff" />
+            </Pressable>
+          )}
         </View>
 
         {uploadProgress && (
@@ -1148,6 +1292,7 @@ export default function ChatDetailScreen() {
 
       <ChatImagePreviewModal
         selectedImage={selectedImage}
+        messages={messages}
         onClose={() => setSelectedImage(null)}
       />
 
@@ -1156,8 +1301,7 @@ export default function ChatDetailScreen() {
         message={activeMessageMenu}
         isMine={String(activeMessageMenu?.sender_id || '') === String(userIdForChat || '')}
         isPinned={!!activeMessageMenu?.is_pinned}
-        x={activeMessageMenuPosition?.x}
-        y={activeMessageMenuPosition?.y}
+        currentUserId={String(userIdForChat || '')}
         onClose={closeMessageMenu}
         onReply={() => {
           if (activeMessageMenu) {
@@ -1189,12 +1333,49 @@ export default function ChatDetailScreen() {
         }}
         onPinToggle={async () => {
           if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
+
+          const tryingToPin = !activeMessageMenu.is_pinned;
+          if (tryingToPin && pinnedMessages.length >= MAX_PINNED_MESSAGES) {
+            setPendingPinMessage(activeMessageMenu);
+            setReplacePinModalVisible(true);
+            closeMessageMenu();
+            return;
+          }
+
           try {
-            await ChatApi.pinMessage(conversationId, activeMessageMenu.msg_id, userIdForChat, !activeMessageMenu.is_pinned);
-            await loadConversation();
+            const updated = await ChatApi.pinMessage(
+              conversationId,
+              activeMessageMenu.msg_id,
+              userIdForChat,
+              !activeMessageMenu.is_pinned,
+            );
+            setMessages((current) => patchMessageById(current, updated, undefined, normalizeMessages));
+            setPinnedMessages((current) =>
+              patchMessageById(current, updated, { remove: !updated.is_pinned }, normalizePinnedMessages),
+            );
+            setActiveMessageMenu((current) =>
+              current && getMessageKey(current) === getMessageKey(updated)
+                ? { ...current, ...updated }
+                : current,
+            );
           } catch (error) {
-            console.error('Failed to toggle pin:', error);
-            Alert.alert('Lỗi', 'Không thể ghim/bỏ ghim tin nhắn');
+            const errorMessage = String(
+              (error as any)?.details?.error ||
+              (error as any)?.details?.message ||
+              (error as any)?.message ||
+              '',
+            );
+            const isPinLimit =
+              !activeMessageMenu.is_pinned &&
+              /toi da 3|tối đa 3|gioi han 3|giới hạn 3/i.test(String(errorMessage));
+
+            if (isPinLimit) {
+              setPendingPinMessage(activeMessageMenu);
+              setReplacePinModalVisible(true);
+            } else {
+              console.error('Failed to toggle pin:', error);
+              Alert.alert('Lỗi', errorMessage || 'Không thể ghim/bỏ ghim tin nhắn');
+            }
           } finally {
             closeMessageMenu();
           }
@@ -1213,8 +1394,9 @@ export default function ChatDetailScreen() {
         onRevoke={async () => {
           if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
           try {
-            await ChatApi.revokeMessage(conversationId, activeMessageMenu.msg_id, userIdForChat);
-            await loadConversation();
+            const updated = await ChatApi.revokeMessage(conversationId, activeMessageMenu.msg_id, userIdForChat);
+            setMessages((current) => patchMessageById(current, updated, undefined, normalizeMessages));
+            setPinnedMessages((current) => patchMessageById(current, updated, { remove: true }, normalizePinnedMessages));
           } catch (error) {
             console.error('Failed to revoke message:', error);
             Alert.alert('Lỗi', 'Không thể thu hồi tin nhắn');
@@ -1225,8 +1407,9 @@ export default function ChatDetailScreen() {
         onDelete={async () => {
           if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
           try {
-            await ChatApi.deleteMessage(conversationId, activeMessageMenu.msg_id, userIdForChat);
-            await loadConversation();
+            const deleted = await ChatApi.deleteMessage(conversationId, activeMessageMenu.msg_id, userIdForChat);
+            setMessages((current) => patchMessageById(current, deleted, { remove: true }, normalizeMessages));
+            setPinnedMessages((current) => patchMessageById(current, deleted, { remove: true }, normalizePinnedMessages));
           } catch (error) {
             console.error('Failed to delete message:', error);
             Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
@@ -1237,13 +1420,38 @@ export default function ChatDetailScreen() {
         onReact={async (emoji) => {
           if (!activeMessageMenu?.msg_id || !conversationId || !userIdForChat) return;
           try {
-            await ChatApi.reactToMessage(conversationId, activeMessageMenu.msg_id, userIdForChat, emoji);
-            await loadConversation();
+            const updated = await ChatApi.reactToMessage(conversationId, activeMessageMenu.msg_id, userIdForChat, emoji);
+            setMessages((current) => patchMessageById(current, updated, undefined, normalizeMessages));
+            setPinnedMessages((current) => patchMessageById(current, updated, undefined, normalizePinnedMessages));
+            setActiveMessageMenu((current) =>
+              current && getMessageKey(current) === getMessageKey(updated)
+                ? { ...current, ...updated }
+                : current,
+            );
           } catch (error) {
             console.error('Failed to react to message:', error);
             Alert.alert('Lỗi', 'Không thể thả cảm xúc');
           }
         }}
+      />
+
+      <ReplacePinnedModal
+        visible={replacePinModalVisible}
+        pendingMessage={pendingPinMessage}
+        pinnedMessages={pinnedMessages}
+        conversation={conversation}
+        onClose={() => {
+          setReplacePinModalVisible(false);
+          setPendingPinMessage(null);
+        }}
+        onConfirm={handleConfirmReplacePinned}
+      />
+
+      <MessageReactionsModal
+        visible={!!reactionDetailsMessage}
+        message={reactionDetailsMessage}
+        conversation={conversation}
+        onClose={() => setReactionDetailsMessage(null)}
       />
     </SafeAreaView>
   );

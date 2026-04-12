@@ -8,6 +8,7 @@ import { resolveMediaUrl } from '@/utils/chat';
 type Props = {
   message: ChatMessage;
   onPress?: () => void;
+  onLongPress?: (event: any) => void;
 };
 
 const getVideoUrl = (message: ChatMessage) => {
@@ -38,14 +39,14 @@ const fitVideoSize = (sourceWidth: number, sourceHeight: number) => {
   };
 };
 
-const ChatVideoMessageBase: React.FC<Props> = ({ message, onPress }) => {
+const ChatVideoMessageBase: React.FC<Props> = ({ message, onPress, onLongPress }) => {
   const uri = getVideoUrl(message);
   const [size, setSize] = useState({ width: 260, height: 200 });
 
   if (!uri) return null;
 
   return (
-    <Pressable onPress={onPress} className="relative overflow-hidden rounded-xl">
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={150} className="relative overflow-hidden rounded-xl">
       <Video
         source={{ uri }}
         style={size}

@@ -1,8 +1,7 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
-import { Image } from 'expo-image';
 
 export type ChatPanelMediaAsset = {
   id: string;
@@ -53,7 +52,8 @@ export const ChatMediaPanel: React.FC<Props> = ({
         contentContainerStyle={{ paddingHorizontal: mediaHorizontalPadding, paddingBottom: 18 }}
         scrollEventThrottle={16}
       >
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
           <Pressable
             onPress={onTakePhoto}
             style={{
@@ -83,6 +83,8 @@ export const ChatMediaPanel: React.FC<Props> = ({
                 key={asset.id}
                 onPress={() => onToggleSelectMedia(asset.id)}
                 style={{
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
                   width: mediaTileSize,
                   height: mediaTileSize,
                   marginBottom: mediaGap,
@@ -92,7 +94,7 @@ export const ChatMediaPanel: React.FC<Props> = ({
                   backgroundColor: '#f1f5f9',
                 }}
               >
-                <Image source={{ uri: asset.uri }} className="h-full w-full" contentFit="cover" transition={120} />
+                <Image source={{ uri: asset.uri }} className="h-full w-full" resizeMode="cover" />
                 {asset.mediaType === 'video' && (
                   <View className="absolute inset-0 items-center justify-center bg-black/25">
                     <Feather name="play-circle" size={24} color="#fff" />

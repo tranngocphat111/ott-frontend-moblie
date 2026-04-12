@@ -187,6 +187,27 @@ export const getConversationTitle = (
   );
 };
 
+const normalizeId = (value?: string | null) => String(value || '').trim();
+
+const findParticipantByUserId = (
+  conversation?: ChatConversation | null,
+  userId?: string | null,
+) => {
+  if (!conversation?.participants?.length || !userId) return undefined;
+
+  const normalized = normalizeId(userId);
+  return conversation.participants.find((participant) => {
+    const participantAny = participant as any;
+    const candidateIds = [
+      normalizeId(participant.user_id),
+      normalizeId(participantAny?.id),
+      normalizeId(participantAny?.userId),
+      normalizeId(participantAny?._id),
+    ];
+    return candidateIds.some((candidate) => candidate && candidate === normalized);
+  });
+};
+
 export const getConversationAvatar = (
   conversation?: ChatConversation | null,
   currentUserId?: string | null,
@@ -196,26 +217,40 @@ export const getConversationAvatar = (
   if (conversation.avatar) return conversation.avatar;
 
   const otherParticipant = conversation.participants?.find(
-    (participant) => String(participant.user_id || '') !== String(currentUserId || ''),
+    (participant) => normalizeId(participant.user_id) !== normalizeId(currentUserId || ''),
   );
 
   return otherParticipant?.avatar || '';
+};
+
+export const getMessageSenderName = (
+  message: ChatMessage,
+  conversation?: ChatConversation | null,
+) => {
+  const participant = findParticipantByUserId(conversation, message.sender_id);
+
+  return (
+    message.sender_name ||
+    participant?.display_name ||
+    participant?.nickname ||
+    participant?.name ||
+    message.sender_id ||
+    'Thành viên'
+  );
 };
 
 export const getMessageSenderAvatar = (
   conversation?: ChatConversation | null,
   senderId?: string | null,
   currentUserId?: string | null,
+  fallbackAvatar?: string | null,
 ) => {
+  if (fallbackAvatar) return fallbackAvatar;
   if (!conversation || !senderId) return '';
 
   if (conversation.type === 'private') {
     return getConversationAvatar(conversation, currentUserId);
   }
 
-  return (
-    conversation.participants?.find(
-      (participant) => String(participant.user_id || '') === String(senderId || ''),
-    )?.avatar || ''
-  );
+  return findParticipantByUserId(conversation, senderId)?.avatar || '';
 };

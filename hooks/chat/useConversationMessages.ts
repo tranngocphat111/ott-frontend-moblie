@@ -33,6 +33,23 @@ export function useConversationMessages(conversationId: string | undefined, user
     });
   };
 
+  const normalizePinnedMessages = (messageList: ChatMessage[]) => {
+    return [...messageList]
+      .filter((message) => !!message?.is_pinned)
+      .sort((left, right) => {
+        const leftPinnedAt = new Date(left.pinned_at || left.createdAt || left.created_at || 0).getTime();
+        const rightPinnedAt = new Date(right.pinned_at || right.createdAt || right.created_at || 0).getTime();
+
+        if (leftPinnedAt !== rightPinnedAt) return rightPinnedAt - leftPinnedAt;
+
+        const leftId = BigInt(String(left.msg_id || 0));
+        const rightId = BigInt(String(right.msg_id || 0));
+
+        if (leftId === rightId) return 0;
+        return leftId > rightId ? -1 : 1;
+      });
+  };
+
   const loadConversation = useCallback(async () => {
     if (!conversationId) {
       setLoading(false);
@@ -74,7 +91,7 @@ export function useConversationMessages(conversationId: string | undefined, user
           : [];
 
       setMessages(normalizeMessages(normalizedMessages));
-      setPinnedMessages(normalizeMessages(normalizedPinned));
+      setPinnedMessages(normalizePinnedMessages(normalizedPinned));
 
       if (shouldLoadConversationMeta && userIdForChat) {
         void ChatApi.getUserConversations(userIdForChat)
@@ -115,6 +132,7 @@ export function useConversationMessages(conversationId: string | undefined, user
     setPinnedMessages,
     loadConversation,
     normalizeMessages,
+    normalizePinnedMessages,
     PAGE_SIZE,
   };
 }

@@ -60,8 +60,12 @@ export function useMessageActions({
               await ChatApi.pinMessage(conversationId, message.msg_id, userIdForChat, !isPinned);
               await onLoadConversation();
             } catch (error) {
-              console.error('Failed to toggle pin:', error);
               const errorMessage = error instanceof Error ? error.message : 'Không thể ghim tin nhắn';
+              if (/toi da 3|tối đa 3|gioi han 3|giới hạn 3/i.test(errorMessage)) {
+                return;
+              }
+
+              console.error('Failed to toggle pin:', error);
               Alert.alert('Lỗi', errorMessage);
             }
           },
