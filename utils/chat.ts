@@ -17,15 +17,63 @@ const getFilenameFromValue = (value: string) => {
 
 export const resolveMediaUrl = (value?: string | null) => {
   if (!value) return '';
-  if (/^https?:\/\//i.test(value)) return value;
+  if (/^https?:\/\//i.test(value)) return encodeURI(value);
+  if (/^(file:|content:|ph:|assets-library:|blob:|data:)/i.test(value)) return value;
 
   const base = String(MEDIA_CONFIG.BASE_URL || '').replace(/\/$/, '');
   const suffix = String(value).replace(/^\//, '');
 
-  if (!base) return `/${suffix}`;
+  const [rawPath, rawQuery = ''] = suffix.split('?');
+  const encodedPath = rawPath
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return encodeURIComponent(decodeURIComponent(segment));
+      } catch {
+        return encodeURIComponent(segment);
+      }
+    })
+    .join('/');
+  const encodedSuffix = rawQuery ? `${encodedPath}?${rawQuery}` : encodedPath;
 
-  return `${base}/${suffix}`;
+  if (!base) return `/${encodedSuffix}`;
+
+  return `${base}/${encodedSuffix}`;
 };
+
+type ImageQualityPreset = 'avatar' | 'thumbnail' | 'message' | 'preview';
+
+const IMAGE_QUALITY_PRESETS: Record<ImageQualityPreset, { width: number; quality: number }> = {
+  avatar: { width: 128, quality: 20 },
+  thumbnail: { width: 180, quality: 20 },
+  message: { width: 760, quality: 20 },
+  preview: { width: 1360, quality: 35 },
+};
+
+export const getOptimizedImageUrl = (
+  value?: string | null,
+  preset: ImageQualityPreset = 'message',
+) => {
+  const resolved = resolveMediaUrl(value);
+  if (!resolved) return '';
+
+  if (/^(blob:|data:|file:|content:|ph:|assets-library:)/i.test(resolved)) {
+    return resolved;
+  }
+
+  // Avoid mutating signed URLs or URLs that already include transform params.
+  if (/X-Amz-Signature=/i.test(resolved) || /[?&](q|quality|w|width|fmt)=/i.test(resolved)) {
+    return resolved;
+  }
+
+  const { width, quality } = IMAGE_QUALITY_PRESETS[preset];
+  const separator = resolved.includes('?') ? '&' : '?';
+  return `${resolved}${separator}w=${width}&q=${quality}&fmt=webp`;
+};
+
+export const isSystemMessageType = (type?: string | null) =>
+  String(type || '').toLowerCase().startsWith('system');
 
 export const getMessageBodyText = (message: ChatMessage) => {
   if (message.is_deleted) return 'Tin nhắn đã bị xóa';
@@ -41,6 +89,10 @@ export const getMessageBodyText = (message: ChatMessage) => {
       : firstContent && typeof firstContent === 'object'
         ? firstContent.text || firstContent.url || firstContent.name || ''
         : '';
+
+  if (isSystemMessageType(message.type)) {
+    return String(rawValue || '').trim() || 'Thông báo hệ thống';
+  }
 
   if (message.type === 'image') {
     const count = Array.isArray(message.content)
@@ -87,15 +139,20 @@ export const formatMessageTimestampLabel = (value?: string | null) => {
   const timePart = formatConversationTime(value);
   const dayDiff = getDayDiff(date);
 
-  if (dayDiff <= 0) return timePart;
-  if (dayDiff === 1) return `${timePart} Hôm qua`;
-  if (dayDiff > 2) {
+  if (dayDiff <= 0) return `Hôm nay, ${timePart}`;
+  if (dayDiff === 1) return `Hôm qua, ${timePart}`;
+  if (dayDiff < 7) {
+    const dayName = date.toLocaleDateString('vi-VN', { weekday: 'long' });
+    return `${dayName}, ${timePart}`;
+  }
+
+  if (dayDiff >= 7) {
     const fullDate = date.toLocaleDateString('vi-VN', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
     });
-    return `${timePart} ${fullDate}`;
+    return `${fullDate}, ${timePart}`;
   }
 
   return timePart;

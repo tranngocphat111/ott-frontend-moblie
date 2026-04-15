@@ -181,8 +181,8 @@ export function HomeSearchPanel({
             </View>
 
             {!isEditingHistory ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View className="flex-row gap-4 pb-1">
+              <ScrollView  horizontal  showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View className="flex-row pt-2 gap-4 pb-1">
                   {recentContactHistory.map((item) => (
                     <Pressable
                       key={item.user_id}
@@ -205,7 +205,7 @@ export function HomeSearchPanel({
               </ScrollView>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View className="flex-row gap-4 pb-1">
+                <View className="flex-row pt-2 gap-4 pb-1">
                   {recentContactHistory.map((item) => (
                     <View key={item.user_id} className="items-center">
                       <View className="relative h-16 w-16">

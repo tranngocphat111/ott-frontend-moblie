@@ -7,7 +7,7 @@ interface UseMessageScrollProps {
   conversationId: string | undefined;
   userIdForChat: string | undefined;
   messages: ChatMessage[];
-  setMessages: (messages: ChatMessage[]) => void;
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   normalizeMessages: (messages: ChatMessage[]) => ChatMessage[];
   PAGE_SIZE: number;
 }
@@ -32,6 +32,7 @@ export function useMessageScroll({
   const pendingPrependRef = useRef(false);
   const contentHeightRef = useRef(0);
   const lastOffsetRef = useRef(0);
+  const showScrollToBottomRef = useRef(false);
 
   useEffect(() => {
     pendingScrollToBottomRef.current = false;
@@ -40,8 +41,15 @@ export function useMessageScroll({
     lastOffsetRef.current = 0;
     setInitialScrollReady(false);
     setShowScrollToBottom(false);
+    showScrollToBottomRef.current = false;
     setHasMoreNewer(false);
   }, [conversationId]);
+
+  const setScrollToBottomVisible = useCallback((next: boolean) => {
+    if (showScrollToBottomRef.current === next) return;
+    showScrollToBottomRef.current = next;
+    setShowScrollToBottom(next);
+  }, []);
 
   const compareIds = useCallback((left?: string, right?: string) => {
     const l = String(left || '0');
@@ -73,7 +81,7 @@ export function useMessageScroll({
       const nextMessages = normalizeMessages(payload.messages || []);
 
       if (nextMessages.length > 0) {
-        setMessages(normalizeMessages([...nextMessages, ...messages]));
+        setMessages((current) => normalizeMessages([...nextMessages, ...current]));
       }
 
       setHasMoreOlder(payload.hasMore);
@@ -123,16 +131,17 @@ export function useMessageScroll({
     try {
       const payload = await ChatApi.getMessageContext(conversationId, anchorId, 0, PAGE_SIZE, userIdForChat);
       const contextMessages = normalizeMessages(payload.messages || []);
-      const currentMap = new Map(messages.map((item) => [String(item.msg_id || item._id || ''), item]));
-      const appendable = contextMessages.filter((item) => {
-        const id = String(item.msg_id || item._id || '');
-        if (!id || currentMap.has(id)) return false;
-        return compareIds(id, String(anchorId)) > 0;
-      });
+      setMessages((current) => {
+        const currentMap = new Map(current.map((item) => [String(item.msg_id || item._id || ''), item]));
+        const appendable = contextMessages.filter((item) => {
+          const id = String(item.msg_id || item._id || '');
+          if (!id || currentMap.has(id)) return false;
+          return compareIds(id, String(anchorId)) > 0;
+        });
 
-      if (appendable.length > 0) {
-        setMessages(normalizeMessages([...messages, ...appendable]));
-      }
+        if (appendable.length === 0) return current;
+        return normalizeMessages([...current, ...appendable]);
+      });
 
       setHasMoreNewer(Boolean(payload?.hasMoreAfter));
     } catch (error) {
@@ -151,9 +160,9 @@ export function useMessageScroll({
       (event.nativeEvent.layoutMeasurement.height + currentOffset);
 
     if (distanceToBottom < 120) {
-      setShowScrollToBottom(false);
+      setScrollToBottomVisible(false);
     } else if (isScrollingUp) {
-      setShowScrollToBottom(true);
+      setScrollToBottomVisible(true);
     }
 
     lastOffsetRef.current = currentOffset;
@@ -165,17 +174,17 @@ export function useMessageScroll({
     if (isScrollingDown && distanceToBottom < 120 && hasMoreNewer) {
       void loadNewerMessages();
     }
-  }, [hasMoreNewer, loadNewerMessages, loadOlderMessages]);
+  }, [hasMoreNewer, loadNewerMessages, loadOlderMessages, setScrollToBottomVisible]);
 
   const setPendingScrollToBottom = useCallback(() => {
     pendingScrollToBottomRef.current = true;
-    setShowScrollToBottom(false);
-  }, []);
+    setScrollToBottomVisible(false);
+  }, [setScrollToBottomVisible]);
 
   const scrollToBottom = useCallback(() => {
-    listRef.current?.scrollToEnd({ animated: true });
-    setShowScrollToBottom(false);
-  }, []);
+    listRef.current?.scrollToEnd({ animated: false });
+    setScrollToBottomVisible(false);
+  }, [setScrollToBottomVisible]);
 
   return {
     listRef,

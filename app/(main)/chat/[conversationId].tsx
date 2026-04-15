@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
@@ -212,6 +213,56 @@ const getMimeType = (fileName?: string | null, fallback?: string | null) => {
   return MIME_BY_EXTENSION[ext] || "application/octet-stream";
 };
 
+const getFileExtension = (fileName?: string | null) => {
+  return String(fileName || "")
+    .split(".")
+    .pop()
+    ?.toLowerCase() || "";
+};
+
+const replaceFileExtension = (fileName: string, newExt: string) => {
+  const sanitized = sanitizeFileName(fileName);
+  const dotIndex = sanitized.lastIndexOf(".");
+  const base = dotIndex > 0 ? sanitized.slice(0, dotIndex) : sanitized;
+  return `${base}.${newExt}`;
+};
+
+const isHeicLike = (fileName?: string | null, mimeType?: string | null) => {
+  const ext = getFileExtension(fileName);
+  const mime = String(mimeType || "").toLowerCase();
+  return ext === "heic" || ext === "heif" || mime.includes("heic") || mime.includes("heif");
+};
+
+const buildOptimisticImageMessage = (params: {
+  localId: string;
+  conversationId: string;
+  senderId: string;
+  assets: Array<{ uri: string; fileName?: string | null; fileSize?: number | null }>;
+  replyToMsgId?: string | null;
+}) => {
+  const now = new Date().toISOString();
+
+  return {
+    _id: params.localId,
+    local_temp_id: params.localId,
+    local_status: 'uploading' as const,
+    local_upload_progress: 0,
+    content: params.assets.map((asset, index) => ({
+      type: 'image' as const,
+      url: asset.uri,
+      name: sanitizeFileName(asset.fileName || `image_${Date.now()}_${index}.jpg`),
+      size: Number(asset.fileSize || 0),
+    })),
+    type: 'image' as const,
+    created_at: now,
+    createdAt: now,
+    sender_id: params.senderId,
+    conversation_id: params.conversationId,
+    reply_to_msg_id: params.replyToMsgId || null,
+    reactions: [],
+  } as ChatMessage;
+};
+
 const patchMessageById = (
   source: ChatMessage[],
   incoming: ChatMessage,
@@ -368,6 +419,7 @@ export default function ChatDetailScreen() {
     setVoicePanelVisible,
     setEmojiPanelVisible,
     clearSelectedMedia,
+    closeAllPanels,
     toggleVoicePanel,
     toggleImagePanel,
     toggleEmojiPanel,
@@ -418,6 +470,24 @@ export default function ChatDetailScreen() {
     requestAnimationFrame(() => Keyboard.dismiss());
     setTimeout(() => Keyboard.dismiss(), 40);
   }, []);
+
+  const handleComposerInputFocus = useCallback(() => {
+    closeAllPanels({ clearMediaSelection: true });
+  }, [closeAllPanels]);
+
+  const handleComposerInputPressIn = useCallback(() => {
+    closeAllPanels({ clearMediaSelection: true });
+  }, [closeAllPanels]);
+
+  useEffect(() => {
+    const keyboardShowSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      closeAllPanels({ clearMediaSelection: true });
+    });
+
+    return () => {
+      keyboardShowSubscription.remove();
+    };
+  }, [closeAllPanels]);
 
   const openMessageMenu = useCallback((message: ChatMessage) => {
     dismissKeyboard();
@@ -760,38 +830,113 @@ export default function ChatDetailScreen() {
       }
       if (validAssets.length === 0) return;
 
-      const keys: string[] = [];
-      for (let index = 0; index < validAssets.length; index += 1) {
-        const asset = validAssets[index];
-        const fileName = asset.fileName || `image_${Date.now()}_${index}.jpg`;
-        const mimeType = getMimeType(fileName, asset.mimeType || "image/jpeg");
-        const { uploadUrl, key } = await ChatApi.getMessagePresignedUrl(fileName, mimeType);
-        if (!uploadUrl || !key) {
-          throw new Error("Không lấy được thông tin upload ảnh.");
-        }
-
-        await ChatApi.uploadFileToS3(uploadUrl, asset.uri, mimeType, (percent) => {
-          const overall = Math.round(((index + percent / 100) / validAssets.length) * 100);
-          setUploadProgress({
-            label: `Đang tải ảnh ${index + 1}/${validAssets.length}`,
-            percent: overall,
-          });
-        });
-        keys.push(key);
-      }
-
-      await ChatApi.sendMessage({
+      const localTempId = `local-image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const optimisticMessage = buildOptimisticImageMessage({
+        localId: localTempId,
         conversationId,
         senderId: userIdForChat,
-        content: keys,
-        type: "image",
+        assets: validAssets,
         replyToMsgId: replyToMessage?.msg_id,
       });
-      setReplyToMessage(null);
+
+      setMessages((current) => normalizeMessages([...current, optimisticMessage]));
       setPendingScrollToBottom();
-      setUploadProgress(null);
+
+      const keys: string[] = [];
+      try {
+        for (let index = 0; index < validAssets.length; index += 1) {
+          const asset = validAssets[index];
+          const baseFileName = asset.fileName || `image_${Date.now()}_${index}.jpg`;
+
+          let uploadUri = asset.uri;
+          let fileName = sanitizeFileName(baseFileName);
+          let mimeType = getMimeType(fileName, asset.mimeType || "image/jpeg");
+
+          try {
+            // Normalize all outgoing images to low-quality JPEG to reduce transfer and render cost.
+            const converted = await ImageManipulator.manipulateAsync(
+              asset.uri,
+              [],
+              {
+                compress: 0.2,
+                format: ImageManipulator.SaveFormat.JPEG,
+              },
+            );
+            uploadUri = converted.uri;
+            fileName = replaceFileExtension(fileName, "jpg");
+            mimeType = "image/jpeg";
+          } catch (error) {
+            console.warn('Failed to pre-compress image before upload, fallback to original:', error);
+
+            if (isHeicLike(fileName, mimeType)) {
+              fileName = replaceFileExtension(fileName, "jpg");
+              mimeType = "image/jpeg";
+            } else if (mimeType === "image/jpeg" && !["jpg", "jpeg"].includes(getFileExtension(fileName))) {
+              fileName = replaceFileExtension(fileName, "jpg");
+            }
+          }
+
+          const { uploadUrl, key } = await ChatApi.getMessagePresignedUrl(fileName, mimeType);
+          if (!uploadUrl || !key) {
+            throw new Error("Không lấy được thông tin upload ảnh.");
+          }
+
+          await ChatApi.uploadFileToS3(uploadUrl, uploadUri, mimeType, (percent) => {
+            const overall = Math.round(((index + percent / 100) / validAssets.length) * 100);
+            setUploadProgress({
+              label: `Đang tải ảnh ${index + 1}/${validAssets.length}`,
+              percent: overall,
+            });
+            setMessages((current) =>
+              current.map((item) =>
+                (item._id === localTempId || item.local_temp_id === localTempId)
+                  ? {
+                      ...item,
+                      local_upload_progress: overall,
+                    }
+                  : item,
+              ),
+            );
+          });
+          keys.push(key);
+        }
+
+        const createdMessage = await ChatApi.sendMessage({
+          conversationId,
+          senderId: userIdForChat,
+          content: keys,
+          type: "image",
+          replyToMsgId: replyToMessage?.msg_id,
+        });
+
+        setMessages((current) =>
+          normalizeMessages(
+            current.map((item) =>
+              (item._id === localTempId || item.local_temp_id === localTempId)
+                ? createdMessage
+                : item,
+            ),
+          ),
+        );
+        setReplyToMessage(null);
+        setPendingScrollToBottom();
+        setUploadProgress(null);
+      } catch (error) {
+        setMessages((current) =>
+          current.map((item) =>
+            (item._id === localTempId || item.local_temp_id === localTempId)
+              ? {
+                  ...item,
+                  local_status: 'error',
+                  local_error: 'Không thể gửi ảnh',
+                }
+              : item,
+          ),
+        );
+        throw error;
+      }
     },
-    [conversationId, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
+    [conversationId, normalizeMessages, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
   );
 
   const pickImagesAndSend = useCallback(async () => {
@@ -1261,7 +1406,7 @@ export default function ChatDetailScreen() {
         <View className="flex-1">
           <ChatMessagesList
             loading={loading}
-            preparing={!loading && messages.length > 0 && (!initialScrollReady || !initialMediaReady)}
+            preparing={false}
             messages={messages}
             conversation={conversation}
             listRef={listRef as any}
@@ -1316,6 +1461,8 @@ export default function ChatDetailScreen() {
         <ChatComposer
           value={messageText}
           onChangeText={setMessageText}
+          onInputFocus={handleComposerInputFocus}
+          onInputPressIn={handleComposerInputPressIn}
           onSend={() => void onSendMessage()}
           onToggleEmoji={toggleEmojiPanel}
           onToggleImagePanel={toggleImagePanel}

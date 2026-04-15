@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, Modal, Pressable, Text, View } from 'react-native';
+import { Alert, Animated, Easing, Image, Modal, Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import DraggableFlatList, { type RenderItemParams } from 'react-native-draggable-flatlist';
 import type { ChatMessage } from '@/types';
@@ -81,6 +81,9 @@ const getInitials = (value: string) => {
 
   return `${tokens[0].slice(0, 1)}${tokens[tokens.length - 1].slice(0, 1)}`.toUpperCase();
 };
+
+const getMessageStableId = (message?: ChatMessage | null) =>
+  String(message?.msg_id || message?._id || '').trim();
 
 // Max 3 pinned messages per conversation
 const MAX_PINNED = 3;
@@ -174,6 +177,25 @@ export const ChatPinnedMessagesBar: React.FC<Props> = ({
     }
   };
 
+  const handleHighlightPinnedMessage = (message?: ChatMessage | null) => {
+    if (!message) return false;
+
+    if (message.is_deleted) {
+      Alert.alert('Thông báo', 'Tin nhắn đã bị xóa');
+      return false;
+    }
+
+    if (message.is_revoked) {
+      Alert.alert('Thông báo', 'Tin nhắn đã được thu hồi');
+      return false;
+    }
+
+    const messageId = getMessageStableId(message);
+    if (!messageId) return false;
+    onHighlightMessage(messageId);
+    return true;
+  };
+
   if (!hasPinnedMessages) return null;
 
   return (
@@ -197,7 +219,7 @@ export const ChatPinnedMessagesBar: React.FC<Props> = ({
           </View>
 
           <Pressable
-            onPress={() => firstMessage?.msg_id && onHighlightMessage(firstMessage.msg_id)}
+            onPress={() => handleHighlightPinnedMessage(firstMessage)}
             className="flex-1"
           >
             <Text className="text-[13px] font-semibold text-slate-800" numberOfLines={1}>
@@ -274,10 +296,10 @@ export const ChatPinnedMessagesBar: React.FC<Props> = ({
                 <Pressable
                   key={item.msg_id || item._id}
                   onPress={() => {
-                    if (item.msg_id) {
-                      onHighlightMessage(item.msg_id);
+                    const didHighlight = handleHighlightPinnedMessage(item);
+                    if (didHighlight) {
+                      onTogglePinnedList();
                     }
-                    onTogglePinnedList();
                   }}
                   className="mb-2 rounded-xl border border-[#ead8c6] bg-[#fffdfa] px-3 py-2"
                 >

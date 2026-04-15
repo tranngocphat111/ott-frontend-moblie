@@ -1,7 +1,8 @@
 import React from 'react';
-import { Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
+import { Image } from 'expo-image';
 
 export type ChatPanelMediaAsset = {
   id: string;
@@ -9,6 +10,10 @@ export type ChatPanelMediaAsset = {
   filename?: string;
   uri: string;
 };
+
+type ChatMediaGridItem =
+  | { id: '__camera__'; kind: 'camera' }
+  | { id: string; kind: 'asset'; asset: ChatPanelMediaAsset };
 
 type Props = {
   visible: boolean;
@@ -41,82 +46,95 @@ export const ChatMediaPanel: React.FC<Props> = ({
   const mediaHorizontalPadding = 12;
   const mediaGap = 6;
   const mediaTileSize = Math.floor((windowWidth - mediaHorizontalPadding * 2 - mediaGap * 2) / 3);
+  const gridData: ChatMediaGridItem[] = [
+    { id: '__camera__', kind: 'camera' },
+    ...mediaAssets.map((asset) => ({ id: asset.id, kind: 'asset' as const, asset })),
+  ];
 
   if (!visible) return null;
 
-  const selectedCount = selectedMediaIds.length;
-
   return (
     <View style={{ height }} className="border-t border-slate-200 bg-white">
-      <ScrollView
-        contentContainerStyle={{ paddingHorizontal: mediaHorizontalPadding, paddingBottom: 18 }}
-        scrollEventThrottle={16}
-      >
-              
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-          <Pressable
-            onPress={onTakePhoto}
-            style={{
-              width: mediaTileSize,
-              height: mediaTileSize,
-              marginBottom: mediaGap,
-              marginRight: mediaGap,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: '#e2e8f0',
-              backgroundColor: '#f8fafc',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Feather name="camera" size={22} color="#334155" />
-            <Text className="mt-2 text-[13px] text-slate-700">Chụp ảnh</Text>
-          </Pressable>
-
-          {mediaAssets.map((asset, index) => {
-            const overallIndex = index + 1;
-            const isLastColumn = overallIndex % 3 === 2;
-            const selectedOrder = selectedMediaIds.indexOf(asset.id);
-
+      <FlatList
+        data={gridData}
+        keyExtractor={(item) => item.id}
+        numColumns={3}
+        removeClippedSubviews
+        initialNumToRender={18}
+        windowSize={8}
+        maxToRenderPerBatch={24}
+        updateCellsBatchingPeriod={40}
+        contentContainerStyle={{ paddingHorizontal: mediaHorizontalPadding, paddingBottom: 18, paddingTop: 4 }}
+        columnWrapperStyle={{ gap: mediaGap }}
+        ListFooterComponent={
+          mediaLoading ? (
+            <Text className="px-2 pt-2 text-[13px] text-slate-500">Đang tải thư viện...</Text>
+          ) : null
+        }
+        renderItem={({ item, index }) => {
+          if (item.kind === 'camera') {
             return (
               <Pressable
-                key={asset.id}
-                onPress={() => onToggleSelectMedia(asset.id)}
+                onPress={onTakePhoto}
                 style={{
-                  borderWidth: 1,
-                  borderColor: '#e2e8f0',
                   width: mediaTileSize,
                   height: mediaTileSize,
                   marginBottom: mediaGap,
-                  marginRight: isLastColumn ? 0 : mediaGap,
                   borderRadius: 12,
-                  overflow: 'hidden',
-                  backgroundColor: '#f1f5f9',
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  backgroundColor: '#f8fafc',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <Image source={{ uri: asset.uri }} className="h-full w-full" resizeMode="cover" />
-                {asset.mediaType === 'video' && (
-                  <View className="absolute inset-0 items-center justify-center bg-black/25">
-                    <Feather name="play-circle" size={24} color="#fff" />
-                  </View>
-                )}
-                <View
-                  className="absolute right-2 top-2 h-6 w-6 items-center justify-center rounded-full border-2"
-                  style={selectedOrder >= 0 ? { borderColor: accentColor, backgroundColor: accentColor } : { borderColor: '#ffffff', backgroundColor: 'rgba(0,0,0,0.3)' }}
-                >
-                  {selectedOrder >= 0 ? (
-                    <Text className="text-[12px] font-bold text-white">{selectedOrder + 1}</Text>
-                  ) : null}
-                </View>
+                <Feather name="camera" size={22} color="#334155" />
+                <Text className="mt-2 text-[13px] text-slate-700">Chụp ảnh</Text>
               </Pressable>
             );
-          })}
-        </View>
+          }
 
-        {mediaLoading && (
-          <Text className="px-2 pt-2 text-[13px] text-slate-500">Đang tải thư viện...</Text>
-        )}
-      </ScrollView>
+          const asset = item.asset;
+          const selectedOrder = selectedMediaIds.indexOf(asset.id);
+
+          return (
+            <Pressable
+              onPress={() => onToggleSelectMedia(asset.id)}
+              style={{
+                borderWidth: 1,
+                borderColor: '#e2e8f0',
+                width: mediaTileSize,
+                height: mediaTileSize,
+                marginBottom: mediaGap,
+                borderRadius: 12,
+                overflow: 'hidden',
+                backgroundColor: '#f1f5f9',
+              }}
+            >
+              <Image
+                source={{ uri: asset.uri }}
+                style={{ width: '100%', height: '100%' }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={80}
+              />
+              {asset.mediaType === 'video' && (
+                <View className="absolute inset-0 items-center justify-center bg-black/25">
+                  <Feather name="play-circle" size={24} color="#fff" />
+                </View>
+              )}
+              <View
+                className="absolute right-2 top-2 h-6 w-6 items-center justify-center rounded-full border-2"
+                style={selectedOrder >= 0 ? { borderColor: accentColor, backgroundColor: accentColor } : { borderColor: '#ffffff', backgroundColor: 'rgba(0,0,0,0.3)' }}
+              >
+                {selectedOrder >= 0 ? (
+                  <Text className="text-[12px] font-bold text-white">{selectedOrder + 1}</Text>
+                ) : null}
+              </View>
+            </Pressable>
+          );
+        }}
+      />
     </View>
   );
 };

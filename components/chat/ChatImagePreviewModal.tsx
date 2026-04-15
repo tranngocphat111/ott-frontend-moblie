@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, Modal, Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image as RNImage, Modal, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ResizeMode, Video } from 'expo-av';
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react-native';
 import type { ChatMessage } from '@/types';
 import { resolveMediaUrl } from '@/utils/chat';
+
+const MEDIA_WINDOW_SIZE = 40;
+const MEDIA_WINDOW_STEP = 20;
+const THUMB_ITEM_WIDTH = 72;
 
 type Props = {
   selectedImage: string | null;
@@ -26,63 +30,233 @@ const getRawValue = (item: unknown) => {
   return candidate.url || candidate.text || candidate.name || '';
 };
 
-const buildMediaItems = (messages: ChatMessage[]) => {
+const resolveSelectedUri = (value?: string | null) => resolveMediaUrl(String(value || '').trim());
+
+const normalizeUriForCompare = (value?: string | null) => {
+  const resolved = resolveSelectedUri(value);
+  if (!resolved) return '';
+
+  const noQuery = resolved.split('?')[0] || '';
+  try {
+    return decodeURIComponent(noQuery).toLowerCase();
+  } catch {
+    return noQuery.toLowerCase();
+  }
+};
+
+const getMessageMediaItems = (message: ChatMessage) => {
   const items: MediaItem[] = [];
 
-  messages.forEach((message) => {
-    if (message.is_deleted || message.is_revoked) return;
+  if (message.is_deleted || message.is_revoked) return items;
 
-    if (message.type === 'image' && Array.isArray(message.content)) {
-      message.content.forEach((content, index) => {
-        const url = resolveMediaUrl(String(getRawValue(content) || ''));
-        if (!url) return;
-        items.push({
-          id: `${message.msg_id || message._id}-image-${index}`,
-          url,
-          type: 'image',
-          label: 'Ảnh',
-        });
-      });
-      return;
-    }
+  if (message.type === 'image') {
+    const imageContents = Array.isArray(message.content)
+      ? message.content
+      : [message.content];
 
-    if (message.type === 'video' || message.type === 'audio') {
-      const first = Array.isArray(message.content) ? message.content[0] : message.content;
-      const url = resolveMediaUrl(String(getRawValue(first) || ''));
+    imageContents.forEach((content, index) => {
+      const url = resolveMediaUrl(String(getRawValue(content) || ''));
       if (!url) return;
       items.push({
-        id: `${message.msg_id || message._id}-${message.type}`,
+        id: `${message.msg_id || message._id}-image-${index}`,
         url,
-        type: 'video',
-        label: message.type === 'video' ? 'Video' : 'Âm thanh',
+        type: 'image',
+        label: 'Ảnh',
       });
-    }
-  });
+    });
+
+    return items;
+  }
+
+  if (message.type === 'video') {
+    const first = Array.isArray(message.content) ? message.content[0] : message.content;
+    const url = resolveMediaUrl(String(getRawValue(first) || ''));
+    if (!url) return items;
+
+    items.push({
+      id: `${message.msg_id || message._id}-${message.type}`,
+      url,
+      type: 'video',
+      label: 'Video',
+    });
+  }
 
   return items;
+};
+
+const buildMediaItems = (messages: ChatMessage[]) => {
+  const items: MediaItem[] = [];
+  messages.forEach((message) => {
+    items.push(...getMessageMediaItems(message));
+  });
+  return items;
+};
+
+const ensureCurrentVisible = (
+  listRef: React.RefObject<FlatList<MediaItem> | null>,
+  targetIndex: number,
+  animated: boolean,
+) => {
+  requestAnimationFrame(() => {
+    listRef.current?.scrollToIndex({ index: targetIndex, animated });
+  });
 };
 
 export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages, onClose }) => {
   const { width, height } = useWindowDimensions();
   const listRef = useRef<FlatList<MediaItem>>(null);
+  const thumbListRef = useRef<FlatList<MediaItem>>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loadingImageIds, setLoadingImageIds] = useState<Record<string, boolean>>({});
+  const [failedImageIds, setFailedImageIds] = useState<Record<string, string>>({});
+  const [windowRange, setWindowRange] = useState<{ start: number; end: number }>({ start: 0, end: -1 });
+
+  const resolvedSelected = useMemo(() => resolveSelectedUri(selectedImage), [selectedImage]);
+  const selectedCompareKey = useMemo(() => normalizeUriForCompare(selectedImage), [selectedImage]);
 
   const mediaItems = useMemo(() => buildMediaItems(messages), [messages]);
 
+  const displayRange = useMemo(() => {
+    if (mediaItems.length === 0) return { start: 0, end: -1 };
+    const safeStart = Math.max(0, Math.min(windowRange.start, mediaItems.length - 1));
+    const safeEnd = Math.max(safeStart, Math.min(windowRange.end, mediaItems.length - 1));
+    return { start: safeStart, end: safeEnd };
+  }, [mediaItems.length, windowRange.end, windowRange.start]);
+
+  const displayedMediaItems = useMemo(() => {
+    if (displayRange.end < displayRange.start) return [];
+    return mediaItems.slice(displayRange.start, displayRange.end + 1);
+  }, [displayRange.end, displayRange.start, mediaItems]);
+
+  const currentDisplayIndex = useMemo(() => {
+    return Math.max(0, currentIndex - displayRange.start);
+  }, [currentIndex, displayRange.start]);
+
+  const initialIndex = useMemo(() => {
+    if (!resolvedSelected || mediaItems.length === 0) return 0;
+
+    const exactIndex = mediaItems.findIndex((item) => item.url === resolvedSelected);
+    if (exactIndex >= 0) return exactIndex;
+
+    const normalizedIndex = mediaItems.findIndex(
+      (item) => normalizeUriForCompare(item.url) === selectedCompareKey,
+    );
+    return normalizedIndex >= 0 ? normalizedIndex : 0;
+  }, [mediaItems, resolvedSelected, selectedCompareKey]);
+
+  useEffect(() => {
+    if (!selectedImage) return;
+
+    const half = Math.floor(MEDIA_WINDOW_SIZE / 2);
+    const start = Math.max(0, initialIndex - half);
+    const end = Math.min(mediaItems.length - 1, start + MEDIA_WINDOW_SIZE - 1);
+
+    setCurrentIndex(initialIndex);
+    setWindowRange({ start, end });
+    setLoadingImageIds({});
+    setFailedImageIds({});
+
+    requestAnimationFrame(() => {
+      if (displayedMediaItems.length > 0) {
+        const localInitialIndex = Math.max(0, initialIndex - start);
+        ensureCurrentVisible(listRef, localInitialIndex, false);
+      }
+    });
+
+    console.log('[ChatImagePreviewModal] open', {
+      selectedImage,
+      resolvedSelected,
+      selectedCompareKey,
+      messagesCount: messages.length,
+      mediaItemsCount: mediaItems.length,
+      initialIndex,
+      initialWindow: { start, end },
+      firstItems: mediaItems.slice(0, 5).map((item) => ({ id: item.id, type: item.type, url: item.url })),
+    });
+  }, [displayedMediaItems.length, initialIndex, mediaItems, messages.length, resolvedSelected, selectedCompareKey, selectedImage]);
+
   useEffect(() => {
     if (!selectedImage || mediaItems.length === 0) return;
-    const nextIndex = mediaItems.findIndex((item) => item.url === selectedImage);
-    if (nextIndex >= 0) {
-      setCurrentIndex(nextIndex);
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToIndex({ index: nextIndex, animated: false });
+
+    if (currentIndex <= displayRange.start + 2 && displayRange.start > 0) {
+      setWindowRange((prev) => {
+        const nextStart = Math.max(0, prev.start - MEDIA_WINDOW_STEP);
+        return { start: nextStart, end: prev.end };
+      });
+      return;
+    }
+
+    if (currentIndex >= displayRange.end - 2 && displayRange.end < mediaItems.length - 1) {
+      setWindowRange((prev) => {
+        const nextEnd = Math.min(mediaItems.length - 1, prev.end + MEDIA_WINDOW_STEP);
+        return { start: prev.start, end: nextEnd };
       });
     }
-  }, [mediaItems, selectedImage]);
+  }, [currentIndex, displayRange.end, displayRange.start, mediaItems.length, selectedImage]);
 
-  if (!selectedImage || mediaItems.length === 0) return null;
+  useEffect(() => {
+    if (!selectedImage || mediaItems.length === 0) return;
+    requestAnimationFrame(() => {
+      try {
+        thumbListRef.current?.scrollToIndex({
+          index: currentIndex,
+          animated: true,
+          viewPosition: 0.5,
+        });
+      } catch (error) {
+        console.warn('[ChatImagePreviewModal] thumb scroll fallback', {
+          currentIndex,
+          mediaItemsCount: mediaItems.length,
+          error,
+        });
+        thumbListRef.current?.scrollToOffset({
+          offset: Math.max(0, currentIndex * THUMB_ITEM_WIDTH - width / 2 + THUMB_ITEM_WIDTH),
+          animated: true,
+        });
+      }
+    });
+  }, [currentIndex, mediaItems.length, selectedImage, width]);
+
+  if (!selectedImage) return null;
+
+  if (mediaItems.length === 0) {
+    console.warn('[ChatImagePreviewModal] no media items found for current message list', {
+      selectedImage,
+      messagesCount: messages.length,
+    });
+
+    return (
+      <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+        <View className="flex-1 items-center justify-center bg-black/95 px-6">
+          <Pressable onPress={onClose} className="absolute right-4 top-14 h-10 w-10 items-center justify-center rounded-full bg-white/10">
+            <Feather name="x" size={22} color="#fff" />
+          </Pressable>
+          <Text className="text-center text-[14px] text-white/90">Không tìm thấy dữ liệu ảnh/video để hiển thị</Text>
+        </View>
+      </Modal>
+    );
+  }
 
   const currentItem = mediaItems[currentIndex] || mediaItems[0];
+
+  const handleGoPrev = () => {
+    if (currentIndex <= 0) return;
+    const prevIndex = currentIndex - 1;
+    setCurrentIndex(prevIndex);
+    const nextDisplayIndex = Math.max(0, prevIndex - displayRange.start);
+    listRef.current?.scrollToIndex({ index: nextDisplayIndex, animated: true });
+  };
+
+  const handleGoNext = () => {
+    if (currentIndex >= mediaItems.length - 1) return;
+    const nextIndex = currentIndex + 1;
+    setCurrentIndex(nextIndex);
+    const nextDisplayIndex = Math.max(0, nextIndex - displayRange.start);
+    listRef.current?.scrollToIndex({ index: nextDisplayIndex, animated: true });
+  };
+
+  const canGoPrev = currentIndex > 0;
+  const canGoNext = currentIndex < mediaItems.length - 1;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -91,31 +265,20 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
           <Pressable onPress={onClose} className="h-10 w-10 items-center justify-center rounded-full bg-white/10">
             <Feather name="x" size={22} color="#fff" />
           </Pressable>
-          <View className="rounded-full bg-white/10 px-3 py-1">
-            <Text className="text-[13px] font-medium text-white">{currentIndex + 1} / {mediaItems.length}</Text>
-          </View>
         </View>
 
-        {currentIndex > 0 && (
+        {canGoPrev && (
           <Pressable
-            onPress={() => {
-              const next = Math.max(currentIndex - 1, 0);
-              setCurrentIndex(next);
-              listRef.current?.scrollToIndex({ index: next, animated: true });
-            }}
+            onPress={handleGoPrev}
             className="absolute left-3 top-1/2 z-20 h-11 w-11 items-center justify-center rounded-full bg-white/10"
           >
             <ChevronLeft size={22} color="#fff" />
           </Pressable>
         )}
 
-        {currentIndex < mediaItems.length - 1 && (
+        {canGoNext && (
           <Pressable
-            onPress={() => {
-              const next = Math.min(currentIndex + 1, mediaItems.length - 1);
-              setCurrentIndex(next);
-              listRef.current?.scrollToIndex({ index: next, animated: true });
-            }}
+            onPress={handleGoNext}
             className="absolute right-3 top-1/2 z-20 h-11 w-11 items-center justify-center rounded-full bg-white/10"
           >
             <ChevronRight size={22} color="#fff" />
@@ -124,7 +287,7 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
 
         <FlatList
           ref={listRef}
-          data={mediaItems}
+          data={displayedMediaItems}
           keyExtractor={(item) => item.id}
           horizontal
           pagingEnabled
@@ -132,13 +295,53 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
           getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
           onMomentumScrollEnd={(event) => {
             const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
-            setCurrentIndex(Math.max(0, Math.min(mediaItems.length - 1, nextIndex)));
+            const clampedLocal = Math.max(0, Math.min(displayedMediaItems.length - 1, nextIndex));
+            setCurrentIndex(displayRange.start + clampedLocal);
           }}
           renderItem={({ item }) => (
             <View style={{ width, height }} className="items-center justify-center px-4 pt-20 pb-28">
               <View className="h-full w-full items-center justify-center">
                 {item.type === 'image' ? (
-                  <Image source={{ uri: item.url }} className="h-full w-full"  />
+                  <>
+                    <RNImage
+                      source={{ uri: item.url }}
+                      style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                      onLoadStart={() => {
+                        setLoadingImageIds((prev) => ({ ...prev, [item.id]: true }));
+                        console.log('[ChatImagePreviewModal] image load start', { id: item.id, url: item.url });
+                      }}
+                      onLoad={() => {
+                        setLoadingImageIds((prev) => ({ ...prev, [item.id]: false }));
+                        setFailedImageIds((prev) => {
+                          if (!prev[item.id]) return prev;
+                          const next = { ...prev };
+                          delete next[item.id];
+                          return next;
+                        });
+                        console.log('[ChatImagePreviewModal] image load success', { id: item.id, url: item.url });
+                      }}
+                      onError={(event) => {
+                        setLoadingImageIds((prev) => ({ ...prev, [item.id]: false }));
+                        const errorText = JSON.stringify(event?.nativeEvent || {});
+                        setFailedImageIds((prev) => ({ ...prev, [item.id]: errorText }));
+                        console.error('[ChatImagePreviewModal] image load error', {
+                          id: item.id,
+                          url: item.url,
+                          error: event?.nativeEvent,
+                        });
+                      }}
+                    />
+                    {loadingImageIds[item.id] && (
+                      <View className="absolute inset-0 items-center justify-center">
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    )}
+                    {failedImageIds[item.id] && (
+                      <View className="absolute bottom-6 left-4 right-4 rounded-xl bg-red-900/60 px-3 py-2">
+                        <Text className="text-[12px] text-white">Lỗi tải ảnh. Xem log console với tag [ChatImagePreviewModal].</Text>
+                      </View>
+                    )}
+                  </>
                 ) : (
                   <View className="h-full w-full overflow-hidden rounded-2xl bg-black">
                     <Video
@@ -164,21 +367,41 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
         <View className="absolute bottom-0 left-0 right-0 bg-black/72 px-3 pb-5 pt-3">
           <Text className="mb-3 text-center text-[13px] font-medium text-white/90">{currentItem?.label || 'Media'}</Text>
           <FlatList
+            ref={thumbListRef}
             data={mediaItems}
             keyExtractor={(item) => `${item.id}-thumb`}
             horizontal
             showsHorizontalScrollIndicator={false}
+            getItemLayout={(_, index) => ({ length: THUMB_ITEM_WIDTH, offset: THUMB_ITEM_WIDTH * index, index })}
+            onScrollToIndexFailed={(info) => {
+              thumbListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+            }}
             renderItem={({ item, index }) => {
-              const isActive = index === currentIndex;
+                const isActive = index === currentIndex;
               return (
                 <Pressable
                   onPress={() => {
-                    setCurrentIndex(index);
-                    listRef.current?.scrollToIndex({ index, animated: true });
+                      setCurrentIndex(index);
+                    if (index >= displayRange.start && index <= displayRange.end) {
+                      listRef.current?.scrollToIndex({ index: index - displayRange.start, animated: true });
+                      return;
+                    }
+
+                    const half = Math.floor(MEDIA_WINDOW_SIZE / 2);
+                    const nextStart = Math.max(0, index - half);
+                    const nextEnd = Math.min(mediaItems.length - 1, nextStart + MEDIA_WINDOW_SIZE - 1);
+                    setWindowRange({ start: nextStart, end: nextEnd });
+
+                    requestAnimationFrame(() => {
+                      listRef.current?.scrollToIndex({
+                        index: Math.max(0, index - nextStart),
+                        animated: false,
+                      });
+                    });
                   }}
                   className={`mr-2 h-16 w-16 overflow-hidden rounded-xl border-2 ${isActive ? 'border-white' : 'border-transparent'}`}
                 >
-                  <Image source={{ uri: item.url }} className="h-full w-full object-cover"  />
+                    <RNImage source={{ uri: item.url }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                   {item.type === 'video' && (
                     <View className="absolute inset-0 items-center justify-center bg-black/25">
                       <View className="h-7 w-7 items-center justify-center rounded-full bg-black/45">

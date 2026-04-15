@@ -8,7 +8,7 @@ export interface SendMessagePayload {
   conversationId: string;
   senderId: string;
   content: string | string[];
-  type?: 'text' | 'link' | 'image' | 'file' | 'video' | 'audio' | 'system_add';
+  type?: ChatMessage['type'];
   size?: number;
   fileName?: string;
   replyToMsgId?: string;

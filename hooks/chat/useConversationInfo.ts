@@ -15,13 +15,14 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
   const [mediaMessages, setMediaMessages] = useState<ChatMessage[]>([]);
   const [fileMessages, setFileMessages] = useState<ChatMessage[]>([]);
   const [linkMessages, setLinkMessages] = useState<ChatLinkMessage[]>([]);
+  const [voiceMessages, setVoiceMessages] = useState<ChatMessage[]>([]);
 
   const loadInfo = useCallback(async () => {
     if (!conversationId || !userIdForChat) return;
 
     setLoading(true);
     try {
-      const [conversations, membersData, pinnedData, mediaData, filesData, linksData, categoriesData, usersData] = await Promise.all([
+      const [conversations, membersData, pinnedData, mediaData, filesData, linksData, categoriesData, usersData, messagePayload] = await Promise.all([
         ChatApi.getUserConversations(userIdForChat),
         ChatApi.getConversationMembers(conversationId),
         ChatApi.getPinnedMessages(conversationId).catch(() => []),
@@ -30,6 +31,7 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
         ChatApi.getLinkMessages(conversationId).catch(() => []),
         ChatApi.getUserCategories(userIdForChat).catch(() => []),
         ChatApi.getAllUsers().catch(() => []),
+        ChatApi.getMessages(conversationId, userIdForChat).catch(() => ({ messages: [] })),
       ]);
 
       const selected = (conversations || []).find(
@@ -45,6 +47,11 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
       setMediaMessages(Array.isArray(mediaData) ? mediaData : []);
       setFileMessages(Array.isArray(filesData) ? filesData : []);
       setLinkMessages(Array.isArray(linksData) ? linksData : []);
+
+      const allMessages = Array.isArray((messagePayload as any)?.messages)
+        ? ((messagePayload as any).messages as ChatMessage[])
+        : [];
+      setVoiceMessages(allMessages.filter((message) => String(message?.type || '').toLowerCase() === 'audio'));
     } catch (error) {
       console.error('Failed to load chat info:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin hội thoại');
@@ -64,12 +71,14 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
     mediaMessages,
     fileMessages,
     linkMessages,
+    voiceMessages,
     loadInfo,
     setCategories,
     setPinnedMessages,
     setMediaMessages,
     setFileMessages,
     setLinkMessages,
+    setVoiceMessages,
     setMembers,
   };
 }

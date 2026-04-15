@@ -6,6 +6,16 @@ export interface ChatMessageContent {
   size?: number;
 }
 
+export type ChatSystemMessageType = `system_${string}`;
+export type ChatMessageType =
+  | 'text'
+  | 'link'
+  | 'image'
+  | 'file'
+  | 'video'
+  | 'audio'
+  | ChatSystemMessageType;
+
 export interface ChatMessageReaction {
   user_id: string;
   type: string;
@@ -15,7 +25,7 @@ export interface ChatMessageReplyPreview {
   msg_id?: string;
   sender_id: string;
   sender_name?: string;
-  type: 'text' | 'link' | 'image' | 'video' | 'file' | 'audio' | 'system_add';
+  type: ChatMessageType;
   content: string;
   raw_content?: string;
   file_name?: string;
@@ -30,7 +40,7 @@ export interface ChatMessage {
   _id: string;
   msg_id?: string;
   content: Array<string | ChatMessageContent>;
-  type: 'text' | 'link' | 'image' | 'file' | 'video' | 'audio' | 'system_add';
+  type: ChatMessageType;
   created_at: string;
   createdAt?: string;
   sender_id: string;
@@ -53,4 +63,8 @@ export interface ChatMessage {
   is_pinned?: boolean;
   pinned_at?: string | null;
   pinned_by?: string | null;
+  local_temp_id?: string;
+  local_status?: 'uploading' | 'success' | 'error';
+  local_upload_progress?: number;
+  local_error?: string;
 }

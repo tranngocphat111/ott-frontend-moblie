@@ -11,6 +11,7 @@ export function useConversationMessages(conversationId: string | undefined, user
   const [pinnedMessages, setPinnedMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const activeRequestIdRef = useRef(0);
+  const loadedConversationIdRef = useRef<string>('');
 
   useEffect(() => {
     return () => {
@@ -18,7 +19,7 @@ export function useConversationMessages(conversationId: string | undefined, user
     };
   }, []);
 
-  const normalizeMessages = (messageList: ChatMessage[]) => {
+  const normalizeMessages = useCallback((messageList: ChatMessage[]) => {
     return [...messageList].sort((left, right) => {
       const leftTime = new Date(left.createdAt || left.created_at || 0).getTime();
       const rightTime = new Date(right.createdAt || right.created_at || 0).getTime();
@@ -31,9 +32,9 @@ export function useConversationMessages(conversationId: string | undefined, user
       if (leftId === rightId) return 0;
       return leftId < rightId ? -1 : 1;
     });
-  };
+  }, []);
 
-  const normalizePinnedMessages = (messageList: ChatMessage[]) => {
+  const normalizePinnedMessages = useCallback((messageList: ChatMessage[]) => {
     return [...messageList]
       .filter((message) => !!message?.is_pinned)
       .sort((left, right) => {
@@ -48,7 +49,11 @@ export function useConversationMessages(conversationId: string | undefined, user
         if (leftId === rightId) return 0;
         return leftId > rightId ? -1 : 1;
       });
-  };
+  }, []);
+
+  useEffect(() => {
+    loadedConversationIdRef.current = String(conversation?._id || '');
+  }, [conversation?._id]);
 
   const loadConversation = useCallback(async () => {
     if (!conversationId) {
@@ -63,11 +68,12 @@ export function useConversationMessages(conversationId: string | undefined, user
     activeRequestIdRef.current = requestId;
     setLoading(true);
 
-    const shouldLoadConversationMeta =
-      !conversation || String(conversation._id || '') !== String(conversationId || '');
+    const normalizedConversationId = String(conversationId || '');
+    const shouldLoadConversationMeta = loadedConversationIdRef.current !== normalizedConversationId;
 
     if (shouldLoadConversationMeta) {
       setConversation(null);
+      loadedConversationIdRef.current = '';
     }
 
     try {
@@ -103,6 +109,7 @@ export function useConversationMessages(conversationId: string | undefined, user
             );
             if (matched?.conversation) {
               setConversation(matched.conversation || null);
+              loadedConversationIdRef.current = normalizedConversationId;
             }
           })
           .catch(() => undefined);
@@ -121,7 +128,7 @@ export function useConversationMessages(conversationId: string | undefined, user
         setLoading(false);
       }
     }
-  }, [conversation?._id, conversationId, userIdForChat]);
+  }, [conversationId, normalizeMessages, normalizePinnedMessages, userIdForChat]);
 
   return {
     conversation,

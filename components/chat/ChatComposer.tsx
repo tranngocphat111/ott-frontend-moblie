@@ -22,6 +22,8 @@ interface ChatComposerProps {
   selectedMediaIds?: string[];
   onClearSelection?: () => void;
   onSendSelected?: () => void;
+  onInputFocus?: () => void;
+  onInputPressIn?: () => void;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -42,6 +44,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   selectedMediaIds = [],
   onClearSelection,
   onSendSelected,
+  onInputFocus,
+  onInputPressIn,
 }) => {
   const textInputRef = useRef<TextInput>(null);
   const canSend = value.trim().length > 0 && !disabled;
@@ -94,6 +98,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             ref={textInputRef}
             value={value}
             onChangeText={onChangeText}
+            onFocus={onInputFocus}
+            onPressIn={onInputPressIn}
             placeholder="Nhập tin nhắn"
             placeholderTextColor="#94a3b8"
             multiline
