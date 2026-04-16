@@ -163,16 +163,6 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
       }
     });
 
-    console.log('[ChatImagePreviewModal] open', {
-      selectedImage,
-      resolvedSelected,
-      selectedCompareKey,
-      messagesCount: messages.length,
-      mediaItemsCount: mediaItems.length,
-      initialIndex,
-      initialWindow: { start, end },
-      firstItems: mediaItems.slice(0, 5).map((item) => ({ id: item.id, type: item.type, url: item.url })),
-    });
   }, [displayedMediaItems.length, initialIndex, mediaItems, messages.length, resolvedSelected, selectedCompareKey, selectedImage]);
 
   useEffect(() => {
@@ -308,7 +298,6 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
                       style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
                       onLoadStart={() => {
                         setLoadingImageIds((prev) => ({ ...prev, [item.id]: true }));
-                        console.log('[ChatImagePreviewModal] image load start', { id: item.id, url: item.url });
                       }}
                       onLoad={() => {
                         setLoadingImageIds((prev) => ({ ...prev, [item.id]: false }));
@@ -318,7 +307,6 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
                           delete next[item.id];
                           return next;
                         });
-                        console.log('[ChatImagePreviewModal] image load success', { id: item.id, url: item.url });
                       }}
                       onError={(event) => {
                         setLoadingImageIds((prev) => ({ ...prev, [item.id]: false }));

@@ -75,6 +75,18 @@ export const getOptimizedImageUrl = (
 export const isSystemMessageType = (type?: string | null) =>
   String(type || '').toLowerCase().startsWith('system');
 
+export const isCallMessageType = (type?: string | null) => {
+  const normalizedType = String(type || '').toLowerCase();
+  return [
+    'call_start',
+    'call_join',
+    'call_end',
+    'call_missed',
+    'call_cancel',
+    'call_no_answer',
+  ].includes(normalizedType);
+};
+
 export const getMessageBodyText = (message: ChatMessage) => {
   if (message.is_deleted) return 'Tin nhắn đã bị xóa';
   if (message.is_revoked) return 'Tin nhắn đã được thu hồi';
@@ -92,6 +104,22 @@ export const getMessageBodyText = (message: ChatMessage) => {
 
   if (isSystemMessageType(message.type)) {
     return String(rawValue || '').trim() || 'Thông báo hệ thống';
+  }
+
+  if (isCallMessageType(message.type)) {
+    const normalizedType = String(message.type || '').toLowerCase();
+    const normalizedRaw = String(rawValue || '').toLowerCase();
+    const isVideoCall = /video/i.test(normalizedRaw);
+
+    if (normalizedType === 'call_missed' || normalizedType === 'call_cancel' || normalizedType === 'call_no_answer') {
+      return `Đã bỏ lỡ cuộc gọi ${isVideoCall ? 'video' : 'thoại'}`;
+    }
+
+    if (normalizedType === 'call_end') {
+      return `Cuộc gọi ${isVideoCall ? 'video' : 'thoại'} đã kết thúc`;
+    }
+
+    return `Cuộc gọi ${isVideoCall ? 'video' : 'thoại'}`;
   }
 
   if (message.type === 'image') {

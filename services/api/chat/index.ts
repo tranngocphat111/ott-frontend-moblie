@@ -11,6 +11,7 @@ export const ChatApi = {
 };
 
 export type {
+  ChatForwardMessageResponse,
   ChatPresignedUrlResponse,
   ChatCategory,
   ChatLinkMessage,

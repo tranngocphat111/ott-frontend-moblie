@@ -106,9 +106,9 @@ export function HomeTopSection({
                 flex: 1,
                 flexDirection: 'row',
                 alignItems: 'center',
+                height: 40,
                 borderRadius: 14,
                 paddingHorizontal: 14,
-                paddingVertical: 8,
                 backgroundColor: 'rgba(255,255,255,0.22)',
               }}
             >
@@ -123,6 +123,8 @@ export function HomeTopSection({
                 style={{
                   marginLeft: 12,
                   flex: 1,
+                  height: 40,
+                  paddingVertical: 0,
                   fontSize: 14,
                   color: THEME_COLORS.neutral.white,
                 }}
@@ -145,9 +147,9 @@ export function HomeTopSection({
                 flex: 1,
                 flexDirection: 'row',
                 alignItems: 'center',
+                height: 40,
                 borderRadius: 14,
                 paddingHorizontal: 14,
-                paddingVertical: 8,
                 backgroundColor: 'white',
               }}
             >
@@ -162,6 +164,8 @@ export function HomeTopSection({
                 style={{
                   marginLeft: 12,
                   flex: 1,
+                  height: 40,
+                  paddingVertical: 0,
                   fontSize: 14,
                   color: THEME_COLORS.primary[900],
                 }}

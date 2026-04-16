@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import {
   getOptimizedImageUrl,
   getMessageSenderName,
   getMessageSenderAvatar,
+  isCallMessageType,
   isSystemMessageType,
   resolveMediaUrl,
   shouldBreakMessageCluster,
@@ -29,6 +30,31 @@ const getInitials = (value: string) => {
   return `${tokens[0].slice(0, 1)}${tokens[tokens.length - 1].slice(0, 1)}`.toUpperCase();
 };
 
+const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ name, avatarUrl }) => {
+  const [hasError, setHasError] = useState(false);
+  const showImage = !!avatarUrl && !hasError;
+
+  return (
+    <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
+      {showImage ? (
+        <ExpoImage
+          source={{ uri: avatarUrl }}
+          cachePolicy="memory-disk"
+          className="h-full w-full"
+          contentFit="cover"
+          onError={() => setHasError(true)}
+        />
+      ) : (
+        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+          <Text className="text-[12px] font-bold text-[#8b5e34]">
+            {getInitials(name)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 type Props = {
   loading: boolean;
   preparing?: boolean;
@@ -45,6 +71,7 @@ type Props = {
   onMessageLongPress: (message: ChatMessage, event?: any) => void;
   onReplyPress: (replyToMsgId: string) => void;
   onImagePreview: (imageUrl: string) => void;
+  onCallPress?: (message: ChatMessage) => void;
   onReactionPress?: (message: ChatMessage, emoji: string) => void;
   onMediaReady?: (messageId: string) => void;
   accentColor: string;
@@ -66,6 +93,7 @@ export const ChatMessagesList: React.FC<Props> = ({
   onMessageLongPress,
   onReplyPress,
   onImagePreview,
+  onCallPress,
   onReactionPress,
   onMediaReady,
   accentColor,
@@ -152,17 +180,7 @@ export const ChatMessagesList: React.FC<Props> = ({
               style={isHighlighted ? { paddingVertical: 4 } : undefined}
             >
               {!isMine && clusterStart ? (
-                <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
-                  {senderAvatarUrl ? (
-                    <ExpoImage source={{ uri: senderAvatarUrl }} cachePolicy="memory-disk" className="h-full w-full" contentFit="cover" />
-                  ) : (
-                    <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
-                      <Text className="text-[12px] font-bold text-[#8b5e34]">
-                        {getInitials(senderName)}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                <SenderAvatar name={senderName} avatarUrl={senderAvatarUrl} />
               ) : !isMine ? (
                 <View className="mr-2 h-8 w-8" />
               ) : null}
@@ -196,6 +214,8 @@ export const ChatMessagesList: React.FC<Props> = ({
                             onImagePreview(selected);
                           }
                         }
+                      : isCallMessageType(item.type)
+                        ? () => onCallPress?.(item)
                       : undefined
                   }
                   onLongPress={(event) => onMessageLongPress(item, event)}

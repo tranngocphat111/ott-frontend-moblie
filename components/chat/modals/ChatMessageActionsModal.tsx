@@ -3,7 +3,7 @@ import { Image, Modal, Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Forward, Pin, Reply, Trash2, Download, CornerDownLeft, XCircle } from 'lucide-react-native';
 import type { ChatMessage } from '@/types';
-import { getMessageBodyText } from '@/utils/chat';
+import { getMessageBodyText, isCallMessageType, resolveMediaUrl } from '@/utils/chat';
 
 type Props = {
   visible: boolean;
@@ -44,9 +44,11 @@ export const ChatMessageActionsModal: React.FC<Props> = ({
 }) => {
   if (!visible || !message) return null;
 
-  const senderAvatar = message.sender_avatar;
+  const senderAvatar = resolveMediaUrl(message.sender_avatar || '');
   const senderName = message.sender_name || message.sender_id || 'Thành viên';
   const isRevokedMessage = !!message.is_revoked;
+  const isCallMessage = isCallMessageType(message.type);
+  const onlyDeleteAction = isRevokedMessage || isCallMessage;
   const canSaveFile = ['image', 'file', 'video', 'audio'].includes(message.type);
   const canRevoke = isMine && !message.is_deleted && !message.is_revoked;
   const canPinMessage = !message.is_deleted && !message.is_revoked;
@@ -85,7 +87,7 @@ export const ChatMessageActionsModal: React.FC<Props> = ({
             </View>
           </View>
 
-          {!isRevokedMessage && (
+          {!onlyDeleteAction && (
             <View className="mb-5 flex-row items-center w-full gap-3">
               {/* Container Emoji (Dùng flex-1 và justify-between để giãn đều) */}
               <View className="flex-1 flex-row items-center justify-between rounded-full bg-white px-4 py-2 shadow-sm border border-slate-100">
@@ -127,7 +129,7 @@ export const ChatMessageActionsModal: React.FC<Props> = ({
 
           {/* 3. DANH SÁCH HÀNH ĐỘNG */}
           <View className="flex-row flex-wrap justify-between">
-            {isRevokedMessage ? (
+            {onlyDeleteAction ? (
               <View className="w-full">
                 <Pressable onPress={onDelete} className="mb-2 flex-row items-center gap-3 rounded-2xl border border-error-border bg-error-bg px-4 py-3 active:bg-slate-100">
                   <Trash2 size={18} color="#dc2626" />

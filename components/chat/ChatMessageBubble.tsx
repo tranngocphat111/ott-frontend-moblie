@@ -8,12 +8,15 @@ import {
   View,
 } from "react-native";
 import type { ChatMessage } from "@/types";
-import { getMessageBodyText, isSystemMessageType } from "@/utils/chat";
+import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
 import {
   CornerUpLeft,
   ImageIcon,
   Music2,
   PlayCircle,
+  Phone,
+  PhoneMissed,
+  PhoneOff,
   FileText,
   UserPlus,
   Ban,
@@ -21,6 +24,7 @@ import {
   Pin,
   PinOff,
   Settings,
+  Video,
 } from "lucide-react-native";
 import { ChatFileMessage } from "./message-types/ChatFileMessage";
 import { ChatImageMessage } from "./message-types/ChatImageMessage";
@@ -174,6 +178,67 @@ const getSystemNotificationUi = (type?: string | null) => {
   };
 };
 
+const getCallRawContent = (message: ChatMessage) => {
+  const firstContent = Array.isArray(message.content) ? message.content[0] : undefined;
+  if (typeof firstContent === "string") return String(firstContent);
+  if (!firstContent || typeof firstContent !== "object") return "";
+  return String(firstContent.text || firstContent.url || firstContent.name || "");
+};
+
+const getCallTypeUi = (type?: string | null) => {
+  const normalizedType = String(type || "").toLowerCase();
+
+  if (normalizedType === "call_end") {
+    return { Icon: PhoneOff, label: "Cuộc gọi đã kết thúc" };
+  }
+
+  if (
+    normalizedType === "call_missed" ||
+    normalizedType === "call_cancel" ||
+    normalizedType === "call_no_answer" ||
+    normalizedType === "call_start" ||
+    normalizedType === "call_join"
+  ) {
+    return { Icon: PhoneMissed, label: "Cuộc gọi nhỡ" };
+  }
+
+  return { Icon: Phone, label: "Cuộc gọi" };
+};
+
+const getCallDisplayCopy = (message: ChatMessage) => {
+  const normalizedType = String(message.type || "").toLowerCase();
+  const rawContent = getCallRawContent(message);
+  const isVideoCall = /video/i.test(rawContent);
+  const isMissedCall =
+    normalizedType === "call_missed" ||
+    normalizedType === "call_cancel" ||
+    normalizedType === "call_no_answer";
+
+  const callDate = new Date(String(message.createdAt || message.created_at || ""));
+  const callTimeLabel = Number.isNaN(callDate.getTime())
+    ? ""
+    : callDate.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+  const durationText = rawContent
+    .split(" - ")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(1)
+    .pop() || "";
+
+  return {
+    title: isMissedCall
+      ? `Đã bỏ lỡ cuộc gọi ${isVideoCall ? "video" : "thoại"}`
+      : `Cuộc gọi ${isVideoCall ? "video" : "thoại"}`,
+    subtitle: isMissedCall ? callTimeLabel : durationText || callTimeLabel,
+    isMissedCall,
+    isVideoCall,
+  };
+};
+
 const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   message,
   isMine,
@@ -219,11 +284,18 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
     : "bg-white border-slate-200";
 
   const textStyle = isMine ? "text-slate-800" : "text-slate-900";
-  const metaStyle = isMine ? "text-slate-500" : "text-slate-400";
   const isMediaVisual =
-    message.type === "image" ||
-    message.type === "video" ||
-    message.type === "audio";
+    !message.is_revoked &&
+    !isCallMessageType(message.type) &&
+    (message.type === "image" ||
+      message.type === "video" ||
+      message.type === "audio");
+  const isCallMessage = isCallMessageType(message.type);
+  const normalizedCallType = String(message.type || "").toLowerCase();
+  const hideCallMessageBubble = normalizedCallType === "call_start" || normalizedCallType === "call_join";
+  const callCopy = isCallMessage ? getCallDisplayCopy(message) : null;
+  const callTypeUi = getCallTypeUi(message.type);
+  const CallStatusIcon = callTypeUi.Icon;
 
   const isReplyTargetDeleted = Boolean(message.reply_to?.is_deleted);
   const isReplyTargetRevoked = Boolean(message.reply_to?.is_revoked);
@@ -232,6 +304,10 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
     : isReplyTargetRevoked
       ? "Tin nhắn đã được thu hồi"
       : null;
+
+  if (hideCallMessageBubble) {
+    return null;
+  }
 
   return (
     <View className={`mb-3 ${isMine ? "items-end" : "items-start"}`}>
@@ -316,7 +392,42 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               : undefined,
           ]}
         >
-          {message.type === "image" ? (
+          {message.is_revoked ? (
+            <Text className="text-[15px] italic leading-5 text-slate-500">
+              {contentText || (isMine ? "Bạn đã thu hồi một tin nhắn" : "Tin nhắn đã được thu hồi")}
+            </Text>
+          ) : isCallMessage && callCopy ? (
+            <View className="min-w-[190px] max-w-[280px] p-1">
+              <View className="flex-row items-center gap-3">
+                <View className={`h-9 w-9 items-center justify-center rounded-full ${callCopy.isMissedCall ? "bg-[#fee2e2]" : isMine ? "bg-white/40" : "bg-[#f3e8dc]"}`}>
+                  {callCopy.isVideoCall ? (
+                    <Video size={18} color={callCopy.isMissedCall ? "#dc2626" : "#8b6642"} />
+                  ) : (
+                    <CallStatusIcon size={18} color={callCopy.isMissedCall ? "#dc2626" : "#8b6642"} />
+                  )}
+                </View>
+
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[14px] font-semibold leading-tight text-slate-900">
+                    {callCopy.title}
+                  </Text>
+                  <Text className="mt-0.5 text-[12px] text-slate-500" numberOfLines={1}>
+                    {callCopy.subtitle || callTypeUi.label}
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                onPress={onPress}
+                disabled={!onPress}
+                className={`mt-2.5 items-center rounded-xl py-2 ${isMine ? "bg-[#bc9369]" : "bg-[#ded7d1]"} ${!onPress ? "opacity-50" : "active:opacity-85"}`}
+              >
+                <Text className={`text-[14px] font-semibold ${isMine ? "text-white" : "text-[#8b6642]"}`}>
+                  Gọi lại
+                </Text>
+              </Pressable>
+            </View>
+          ) : message.type === "image" ? (
             <ChatImageMessage
               message={message}
               onImagePress={onImagePress}
@@ -343,13 +454,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               accentColor={mineAccentColor}
             />
           ) : (
-            <Text
-              className={`text-[15px] leading-5 ${message.is_revoked ? "italic text-slate-500" : textStyle}`}
-            >
-              {message.is_revoked
-                ? (contentText || (isMine ? "Bạn đã thu hồi một tin nhắn" : "Tin nhắn đã được thu hồi"))
-                : contentText}
-            </Text>
+            <Text className={`text-[15px] leading-5 ${textStyle}`}>{contentText}</Text>
           )}
         </Pressable>
 

@@ -33,6 +33,17 @@ export interface ChatMessageContextResponse {
   hasMoreAfter?: boolean;
 }
 
+export interface ChatForwardMessageResponse {
+  success?: boolean;
+  message?: string;
+  results?: Array<{
+    conversationId?: string;
+    msgId?: string;
+    success?: boolean;
+    error?: string;
+  }>;
+}
+
 export interface ChatServiceUser {
   _id?: string;
   user_id: string;

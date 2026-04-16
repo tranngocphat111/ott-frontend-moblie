@@ -30,7 +30,11 @@ import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from "@/context/Authcontext";
 import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi } from "@/services/api";
-import type { ChatMessage, ChatMessageContent } from "@/types/entities/chat";
+import type {
+  ChatConversationWithParticipant,
+  ChatMessage,
+  ChatMessageContent,
+} from "@/types/entities/chat";
 import {
   ChatImagePreviewModal,
   ChatComposer,
@@ -43,6 +47,7 @@ import {
   MessageReactionsModal,
 } from "@/components/chat";
 import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
+import { ForwardMessageModal } from "@/components/chat/modals/ForwardMessageModal";
 import { ReplacePinnedModal } from "@/components/chat/modals/ReplacePinnedModal";
 import {
   getConversationAvatar,
@@ -59,6 +64,7 @@ import {
 } from "@/hooks/chat";
 
 const getMessageKey = (message: ChatMessage) => message.msg_id || message._id;
+const normalizeMessageId = (value?: string | null) => String(value || "").trim();
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const CHAT_BROWN_DARK = '#b78457';
 const CHAT_BROWN = '#d2a177';
@@ -405,6 +411,11 @@ export default function ChatDetailScreen() {
   const [reactionDetailsMessage, setReactionDetailsMessage] = useState<ChatMessage | null>(null);
   const [replacePinModalVisible, setReplacePinModalVisible] = useState(false);
   const [pendingPinMessage, setPendingPinMessage] = useState<ChatMessage | null>(null);
+  const [forwardModalVisible, setForwardModalVisible] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
+  const [forwardConversations, setForwardConversations] = useState<ChatConversationWithParticipant[]>([]);
+  const [forwardLoading, setForwardLoading] = useState(false);
+  const [isForwarding, setIsForwarding] = useState(false);
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
   const initialMediaReadyRef = useRef<Set<string>>(new Set());
@@ -456,6 +467,18 @@ export default function ChatDetailScreen() {
     }
   }, [conversationId, title]);
 
+  const handleCallMessagePress = useCallback((message: ChatMessage) => {
+    const firstContent = Array.isArray(message.content) ? message.content[0] : message.content;
+    const raw = typeof firstContent === 'string'
+      ? firstContent
+      : firstContent && typeof firstContent === 'object'
+        ? firstContent.text || firstContent.url || firstContent.name || ''
+        : '';
+
+    const isVideoCall = /video/i.test(String(raw || ''));
+    void openWebCall(isVideoCall ? 'video' : 'voice');
+  }, [openWebCall]);
+
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
@@ -503,6 +526,79 @@ export default function ChatDetailScreen() {
   const closeMessageMenu = useCallback(() => {
     setActiveMessageMenu(null);
   }, []);
+
+  const openForwardModal = useCallback(async (message: ChatMessage) => {
+    if (!userIdForChat) {
+      Alert.alert('Lỗi', 'Không xác định được người dùng hiện tại');
+      return;
+    }
+
+    setForwardingMessage(message);
+    setForwardModalVisible(true);
+
+    if (forwardConversations.length > 0) {
+      return;
+    }
+
+    setForwardLoading(true);
+    try {
+      const list = await ChatApi.getUserConversations(userIdForChat);
+      setForwardConversations(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('Failed to load forward conversations:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách hội thoại để chuyển tiếp.');
+    } finally {
+      setForwardLoading(false);
+    }
+  }, [forwardConversations.length, userIdForChat]);
+
+  const closeForwardModal = useCallback(() => {
+    if (isForwarding) return;
+    setForwardModalVisible(false);
+    setForwardingMessage(null);
+  }, [isForwarding]);
+
+  const handleConfirmForward = useCallback(async (targetConversationIds: string[]) => {
+    if (!conversationId || !userIdForChat || !forwardingMessage) return;
+
+    const originalMsgId = normalizeMessageId(forwardingMessage.msg_id || forwardingMessage._id);
+    if (!originalMsgId) {
+      Alert.alert('Lỗi', 'Không thể xác định tin nhắn cần chuyển tiếp');
+      return;
+    }
+
+    setIsForwarding(true);
+    try {
+      const response = await ChatApi.forwardMessage(
+        originalMsgId,
+        conversationId,
+        targetConversationIds,
+        userIdForChat,
+      );
+
+      const successfulResults = Array.isArray(response?.results)
+        ? response.results.filter((item) => item?.success !== false)
+        : [];
+
+      if (Array.isArray(response?.results) && successfulResults.length < targetConversationIds.length) {
+        Alert.alert('Thông báo', `Đã chuyển tiếp ${successfulResults.length}/${targetConversationIds.length} hội thoại`);
+      }
+
+      if (targetConversationIds.includes(String(conversationId))) {
+        await loadConversation();
+        setPendingScrollToBottom();
+      }
+
+      setForwardModalVisible(false);
+      setForwardingMessage(null);
+    } catch (error) {
+      console.error('Failed to forward message:', error);
+      const message = error instanceof Error ? error.message : 'Không thể chuyển tiếp tin nhắn';
+      Alert.alert('Lỗi', message);
+    } finally {
+      setIsForwarding(false);
+    }
+  }, [conversationId, forwardingMessage, loadConversation, setPendingScrollToBottom, userIdForChat]);
 
   const handleConfirmReplacePinned = useCallback(async (messageToUnpin: ChatMessage) => {
     if (!conversationId || !userIdForChat || !pendingPinMessage?.msg_id || !messageToUnpin?.msg_id) {
@@ -1264,13 +1360,62 @@ export default function ChatDetailScreen() {
 
   const handleMessageRevoked = useCallback(
     (payload: ChatMessage) => {
-      if (String(payload?.conversation_id || "") !== String(conversationId))
+      const payloadConversationId = String(
+        (payload as any)?.conversation_id || (payload as any)?.conversationId || "",
+      );
+
+      if (payloadConversationId !== String(conversationId))
         return;
+      const revokedMsgId = normalizeMessageId(payload?.msg_id || payload?._id);
+      const revokedContent = Array.isArray(payload?.content)
+        ? payload.content
+        : ["Tin nhắn đã được thu hồi"];
+
       setMessages((current) =>
-        patchMessageById(current, payload, undefined, normalizeMessages),
+        normalizeMessages(
+          current.map((message) => {
+            const messageId = normalizeMessageId(getMessageKey(message));
+            const replyTargetId = normalizeMessageId(
+              message.reply_to_msg_id || message.reply_to?.msg_id,
+            );
+
+            if (replyTargetId && replyTargetId === revokedMsgId) {
+              return {
+                ...message,
+                reply_to: {
+                  ...(message.reply_to || {
+                    sender_id: '',
+                    type: 'text' as const,
+                    content: '',
+                  }),
+                  msg_id: revokedMsgId,
+                  is_revoked: true,
+                  is_deleted: false,
+                  content: 'Tin nhắn đã được thu hồi',
+                },
+              };
+            }
+
+            if (!revokedMsgId || messageId !== revokedMsgId) {
+              return message;
+            }
+
+            return {
+              ...message,
+              ...payload,
+              content: revokedContent,
+              is_revoked: true,
+              reactions: [],
+            };
+          }),
+        ),
+      );
+
+      setPinnedMessages((current) =>
+        current.filter((message) => normalizeMessageId(getMessageKey(message)) !== revokedMsgId),
       );
     },
-    [conversationId, normalizeMessages],
+    [conversationId, normalizeMessages, setPinnedMessages],
   );
 
   const handleMessageDeleted = useCallback(
@@ -1427,6 +1572,7 @@ export default function ChatDetailScreen() {
             onMessageLongPress={(message) => openMessageMenu(message)}
             onReplyPress={(replyToMsgId) => highlightMessage(replyToMsgId)}
             onImagePreview={(imageUrl) => setSelectedImage(imageUrl)}
+            onCallPress={handleCallMessagePress}
             onReactionPress={(message) => setReactionDetailsMessage(message)}
             onMediaReady={handleInitialMediaReady}
             accentColor={CHAT_BROWN}
@@ -1557,16 +1703,16 @@ export default function ChatDetailScreen() {
           }
           closeMessageMenu();
         }}
-        onForward={async () => {
-          if (activeMessageMenu) {
-            try {
-              await shareMessage(activeMessageMenu);
-            } catch (error) {
-              console.error('Failed to forward message:', error);
-              Alert.alert('Lỗi', 'Không thể chuyển tiếp tin nhắn');
-            }
-          }
+        onForward={() => {
+          const selectedMessage = activeMessageMenu;
           closeMessageMenu();
+
+          if (!selectedMessage) return;
+
+          // Open forward modal on next frame to avoid modal stacking freeze on iOS.
+          requestAnimationFrame(() => {
+            void openForwardModal(selectedMessage);
+          });
         }}
         onSaveToDocuments={async () => {
           if (activeMessageMenu) {
@@ -1700,6 +1846,18 @@ export default function ChatDetailScreen() {
         message={reactionDetailsMessage}
         conversation={conversation}
         onClose={() => setReactionDetailsMessage(null)}
+      />
+
+      <ForwardMessageModal
+        visible={forwardModalVisible}
+        message={forwardingMessage}
+        conversations={forwardConversations}
+        currentConversationId={conversationId}
+        currentUserId={userIdForChat}
+        isLoadingConversations={forwardLoading}
+        isSubmitting={isForwarding}
+        onClose={closeForwardModal}
+        onConfirm={handleConfirmForward}
       />
     </SafeAreaView>
   );

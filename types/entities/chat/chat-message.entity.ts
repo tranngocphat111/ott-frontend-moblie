@@ -7,6 +7,14 @@ export interface ChatMessageContent {
 }
 
 export type ChatSystemMessageType = `system_${string}`;
+export type ChatCallMessageType =
+  | 'call_start'
+  | 'call_join'
+  | 'call_end'
+  | 'call_missed'
+  | 'call_cancel'
+  | 'call_no_answer';
+
 export type ChatMessageType =
   | 'text'
   | 'link'
@@ -14,6 +22,7 @@ export type ChatMessageType =
   | 'file'
   | 'video'
   | 'audio'
+  | ChatCallMessageType
   | ChatSystemMessageType;
 
 export interface ChatMessageReaction {
