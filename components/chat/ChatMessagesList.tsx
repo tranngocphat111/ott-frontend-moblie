@@ -74,6 +74,7 @@ type Props = {
   onMediaReady?: (messageId: string) => void;
   accentColor: string;
   mineAccentColor: string;
+  footerComponent?: React.ReactNode;
 };
 
 export const ChatMessagesList: React.FC<Props> = ({
@@ -96,6 +97,7 @@ export const ChatMessagesList: React.FC<Props> = ({
   onMediaReady,
   accentColor,
   mineAccentColor,
+  footerComponent,
   conversation,
 }) => {
   const { user, chatUserId } = useAuth();
@@ -112,7 +114,7 @@ export const ChatMessagesList: React.FC<Props> = ({
         drawDistance={560}
         scrollEventThrottle={16}
         onContentSizeChange={onContentSizeChange}
-        contentContainerStyle={{ paddingTop: 12, paddingBottom: 16 }}
+        contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
         // showsVerticalScrollIndicator={false}
         renderItem={({ item, index }) => {
         const prevMessage = messages[index - 1];
@@ -245,6 +247,9 @@ export const ChatMessagesList: React.FC<Props> = ({
               Hãy gửi lời chào đầu tiên để bắt đầu cuộc trò chuyện.
             </Text>
           </View>
+        }
+        ListFooterComponent={
+          footerComponent ? <View className="pb-2 pt-1">{footerComponent}</View> : null
         }
       />
 

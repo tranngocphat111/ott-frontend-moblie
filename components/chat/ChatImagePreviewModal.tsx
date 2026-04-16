@@ -340,11 +340,7 @@ export const ChatImagePreviewModal: React.FC<Props> = ({ selectedImage, messages
                       shouldPlay={false}
                       isLooping={false}
                     />
-                    <View className="absolute inset-0 items-center justify-center" pointerEvents="none">
-                      <View className="h-14 w-14 items-center justify-center rounded-full bg-black/30">
-                        <Play size={22} color="#fff" fill="#fff" />
-                      </View>
-                    </View>
+                    
                   </View>
                 )}
               </View>

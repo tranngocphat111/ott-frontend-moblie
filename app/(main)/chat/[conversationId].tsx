@@ -3,6 +3,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -54,6 +55,7 @@ import {
   getConversationAvatar,
   getConversationTitle,
   getMessageBodyText,
+  getMessageSenderAvatar,
   resolveMediaUrl,
 } from "@/utils/chat";
 import {
@@ -64,7 +66,7 @@ import {
   useMessageHighlight,
 } from "@/hooks/chat";
 
-const getMessageKey = (message: ChatMessage) => message.msg_id || message._id;
+const getMessageKey = (message: ChatMessage) => message.local_temp_id || message.msg_id || message._id;
 const normalizeMessageId = (value?: string | null) => String(value || "").trim();
 const isSameMessageById = (left: ChatMessage, right: ChatMessage) => {
   const leftMsgId = normalizeMessageId(left?.msg_id);
@@ -348,12 +350,56 @@ const mergeMessagesByKey = (
   return normalizeMessages(Array.from(map.values()));
 };
 
-const TYPING_INDICATOR_LEFT = 48;
+const TYPING_INDICATOR_LEFT = 12;
+
+const getInitials = (value: string) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "?";
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) {
+    return tokens[0].slice(0, 1).toUpperCase();
+  }
+
+  return `${tokens[0].slice(0, 1)}${tokens[tokens.length - 1].slice(0, 1)}`.toUpperCase();
+};
+
+const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({
+  name,
+  avatarUrl,
+}) => {
+  const [hasError, setHasError] = useState(false);
+  const showImage = !!avatarUrl && !hasError;
+
+  return (
+    <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
+      {showImage ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          className="h-full w-full"
+          onError={() => setHasError(true)}
+        />
+      ) : (
+        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+          <Text className="text-[12px] font-bold text-[#8b5e34]">
+            {getInitials(name)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 const ChatTypingIndicator = ({
   typingUserNames,
+  senderName,
+  senderAvatarUrl,
+  isGroup,
 }: {
   typingUserNames: string[];
+  senderName: string;
+  senderAvatarUrl?: string;
+  isGroup: boolean;
 }) => {
   const visible = typingUserNames.length > 0;
 
@@ -405,10 +451,7 @@ const ChatTypingIndicator = ({
 
   if (!visible) return null;
 
-  const label =
-    typingUserNames.length === 1
-      ? `${typingUserNames[0]} đang nhập`
-      : "Đang nhập";
+  const label = senderName ? `${senderName} đang nhập` : "Đang nhập";
 
   const dotStyle = (value: Animated.Value) => ({
     opacity: value,
@@ -434,27 +477,35 @@ const ChatTypingIndicator = ({
       pointerEvents="none"
       accessible
       accessibilityLabel={label}
-      style={{
-        position: "absolute",
-        left: TYPING_INDICATOR_LEFT,
-        bottom: 12,
-      }}
+      className="px-3"
     >
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          backgroundColor: "#ffffff",
-          borderRadius: 999,
-          borderWidth: 1,
-          borderColor: "#e2e8f0",
-        }}
-      >
-        <Animated.View style={[dotBase, { marginRight: 6 }, dotStyle(dot1)]} />
-        <Animated.View style={[dotBase, { marginRight: 6 }, dotStyle(dot2)]} />
-        <Animated.View style={[dotBase, dotStyle(dot3)]} />
+      <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+        <SenderAvatar name={senderName} avatarUrl={senderAvatarUrl} />
+
+        <View>
+          {isGroup && !!senderName && (
+            <Text className="mb-1 text-[12px] font-semibold text-slate-700">
+              {senderName}
+            </Text>
+          )}
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              backgroundColor: "#ffffff",
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: "#e2e8f0",
+            }}
+          >
+            <Animated.View style={[dotBase, { marginRight: 6 }, dotStyle(dot1)]} />
+            <Animated.View style={[dotBase, { marginRight: 6 }, dotStyle(dot2)]} />
+            <Animated.View style={[dotBase, dotStyle(dot3)]} />
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -596,6 +647,34 @@ export default function ChatDetailScreen() {
     })
     .filter(Boolean);
 
+  const typingIndicatorSenderId = typingUserIdList[0];
+
+  const typingIndicatorSenderName =
+    typingUserNames.length === 1
+      ? typingUserNames[0]
+      : typingUserNames.length > 1
+        ? "Nhiều người"
+        : "";
+
+  const typingIndicatorSenderParticipant = conversation?.participants?.find(
+    (item) =>
+      typingIndicatorSenderId &&
+      String(item.user_id || item._id || "") === String(typingIndicatorSenderId),
+  );
+
+  const typingIndicatorSenderAvatarRaw = getMessageSenderAvatar(
+    conversation,
+    typingIndicatorSenderId ? String(typingIndicatorSenderId) : null,
+    userIdForChat ? String(userIdForChat) : null,
+    typingIndicatorSenderParticipant?.avatar || null,
+  );
+
+  const typingIndicatorSenderAvatarUrl = typingIndicatorSenderAvatarRaw
+    ? resolveMediaUrl(typingIndicatorSenderAvatarRaw)
+    : undefined;
+  const hasTypingUsers = typingUserIdList.length > 0;
+  const hadTypingUsersRef = useRef(false);
+
   const headerSubtitle = "Hoạt động gần đây";
 
   const stopTyping = useCallback(() => {
@@ -677,6 +756,27 @@ export default function ChatDetailScreen() {
       stopTyping();
     };
   }, [stopTyping]);
+
+  useEffect(() => {
+    if (!conversationId || loading) {
+      hadTypingUsersRef.current = hasTypingUsers;
+      return;
+    }
+
+    const justStartedTyping = hasTypingUsers && !hadTypingUsersRef.current;
+    hadTypingUsersRef.current = hasTypingUsers;
+
+    if (!hasTypingUsers) {
+      return;
+    }
+
+    // Keep typing indicator visible at the bottom when it appears.
+    if (justStartedTyping || !showScrollToBottom) {
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
+    }
+  }, [conversationId, hasTypingUsers, loading, scrollToBottom, showScrollToBottom]);
 
   const openWebCall = useCallback(async (type: 'voice' | 'video') => {
     if (!conversationId) return;
@@ -1280,7 +1380,10 @@ export default function ChatDetailScreen() {
           normalizeMessages(
             current.map((item) =>
               (item._id === localTempId || item.local_temp_id === localTempId)
-                ? createdMessage
+                ? {
+                    ...createdMessage,
+                    local_temp_id: item.local_temp_id || localTempId,
+                  }
                 : item,
             ),
           ),
@@ -1869,7 +1972,7 @@ export default function ChatDetailScreen() {
           }}
         />
 
-        <View className="flex-1">
+        <View className="flex-1 po">
           <ChatMessagesList
             loading={loading}
             preparing={false}
@@ -1898,6 +2001,14 @@ export default function ChatDetailScreen() {
             onMediaReady={handleInitialMediaReady}
             accentColor={CHAT_BROWN}
             mineAccentColor={CHAT_BROWN_SOFT}
+            footerComponent={
+              <ChatTypingIndicator
+                typingUserNames={typingUserNames}
+                senderName={typingIndicatorSenderName}
+                senderAvatarUrl={typingIndicatorSenderAvatarUrl}
+                isGroup={isGroup}
+              />
+            }
           />
 
           {showScrollToBottom && (
@@ -1908,8 +2019,7 @@ export default function ChatDetailScreen() {
               <Feather name="chevron-down" size={20} color="#ffffff" />
             </Pressable>
           )}
-           
-          <ChatTypingIndicator typingUserNames={typingUserNames} />
+ 
         </View>
 
         {uploadProgress && (
