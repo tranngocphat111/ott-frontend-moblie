@@ -13,6 +13,15 @@ export const useChatPanels = () => {
     setSelectedMediaIds([]);
   }, []);
 
+  const closeAllPanels = useCallback((options?: { clearMediaSelection?: boolean }) => {
+    setVoicePanelVisible(false);
+    setImagePanelVisible(false);
+    setEmojiPanelVisible(false);
+    if (options?.clearMediaSelection !== false) {
+      setSelectedMediaIds([]);
+    }
+  }, []);
+
   const toggleVoicePanel = useCallback(() => {
     Keyboard.dismiss();
     setTimeout(() => Keyboard.dismiss(), 100);
@@ -77,6 +86,7 @@ export const useChatPanels = () => {
     setEmojiPanelVisible,
     setSelectedMediaIds,
     clearSelectedMedia,
+    closeAllPanels,
     toggleVoicePanel,
     toggleImagePanel,
     toggleEmojiPanel,

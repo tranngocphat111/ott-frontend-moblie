@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { THEME_COLORS } from '@/constants/theme';
 
 type ChatScreenHeaderProps = {
   title: string;
@@ -17,7 +18,7 @@ type ChatScreenHeaderProps = {
 
 export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
   title,
-  subtitle = 'Hoat động gần đây',
+  subtitle = 'Hoạt động gần đây',
   accentStart,
   accentEnd,
   topInset = 0,
@@ -26,13 +27,17 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
   onVideo,
   onMenu,
 }) => {
+  
   return (
     <LinearGradient
-      colors={[accentStart, accentEnd]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      className="px-6 pb-3"
-      style={{ paddingTop: topInset + 4 }}
+        colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{
+          paddingHorizontal: 2,
+          paddingBottom: 1,
+          paddingTop: 40,
+        }}
     >
       <View className="flex-row items-center gap-3 px-4 py-2">
         <Pressable onPress={onBack} className="h-11 w-10 items-center justify-center">

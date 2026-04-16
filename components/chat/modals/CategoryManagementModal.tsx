@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Alert, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Animated, Alert, Easing, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { THEME_COLORS } from '@/constants/theme';
 import type { ChatCategory } from '@/services/api/chat';
@@ -97,6 +97,7 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
   useEffect(() => {
     if (!visible) {
       translateY.setValue(24);
+      resetForm();
       return;
     }
 
@@ -127,86 +128,91 @@ export const CategoryManagementModal: React.FC<CategoryManagementModalProps> = (
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' }}
           onPress={onClose}
         />
-        <KeyboardAvoidingView
-          style={{ flex: 1, justifyContent: 'flex-end' }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-          pointerEvents="box-none"
-        >
-        <Animated.View style={{ transform: [{ translateY }], maxHeight: '88%' }}>
-          <View className="rounded-t-[28px] bg-white px-4 pb-6 pt-4">
-          <View className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" />
-          <View className="mb-4 flex-row items-center justify-between">
-            <Text className="text-[20px] font-bold text-slate-900">Quản lý thẻ phân loại</Text>
-            <Pressable onPress={onClose} className="h-10 w-10 items-center justify-center rounded-full bg-slate-100">
-              <Feather name="x" size={18} color={THEME_COLORS.neutral.slate700} />
-            </Pressable>
-          </View>
 
-          <ScrollView className="max-h-[52vh]" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            {categories.map((category) => (
-              <View key={category._id} className="mb-2 rounded-2xl border border-slate-200 px-3 py-3">
-                <View className="flex-row items-center justify-between gap-3">
-                  <View className="flex-row flex-1 items-center gap-3">
-                    <View className="h-4 w-4 rounded-sm" style={{ backgroundColor: category.color || THEME_COLORS.neutral.slate400 }} />
-                    <View className="flex-1">
-                      <Text className="text-[15px] font-semibold text-slate-900">{category.name}</Text>
-                      <Text className="text-[12px] text-slate-500">Màu {category.color || THEME_COLORS.neutral.slate400}</Text>
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            transform: [{ translateY }],
+            maxHeight: '88%',
+          }}
+        >
+          <View className="rounded-t-[28px] bg-white px-4 pb-6 pt-4">
+            <View className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" />
+            <View className="mb-4 flex-row items-center justify-between">
+              <Text className="text-[20px] font-bold text-slate-900">Quản lý thẻ phân loại</Text>
+              <Pressable onPress={onClose} className="h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                <Feather name="x" size={18} color={THEME_COLORS.neutral.slate700} />
+              </Pressable>
+            </View>
+
+            <ScrollView className="max-h-[52vh]" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {categories.map((category) => (
+                <View key={category._id} className="mb-2 rounded-2xl border border-slate-200 px-3 py-3">
+                  <View className="flex-row items-center justify-between gap-3">
+                    <View className="flex-row flex-1 items-center gap-3">
+                      <View className="h-4 w-4 rounded-sm" style={{ backgroundColor: category.color || THEME_COLORS.neutral.slate400 }} />
+                      <View className="flex-1">
+                        <Text className="text-[15px] font-semibold text-slate-900">{category.name}</Text>
+                        <Text className="text-[12px] text-slate-500">Màu {category.color || THEME_COLORS.neutral.slate400}</Text>
+                      </View>
+                    </View>
+
+                    <View className="flex-row items-center gap-2">
+                      <Pressable onPress={() => startEdit(category)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100">
+                        <Feather name="edit-2" size={15} color={THEME_COLORS.neutral.slate700} />
+                      </Pressable>
+                      <Pressable onPress={() => handleDelete(category._id)} className="h-9 w-9 items-center justify-center rounded-full bg-red-50">
+                        <Feather name="trash-2" size={15} color={THEME_COLORS.error.border} />
+                      </Pressable>
                     </View>
                   </View>
+                </View>
+              ))}
+            </ScrollView>
 
-                  <View className="flex-row items-center gap-2">
-                    <Pressable onPress={() => startEdit(category)} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100">
-                      <Feather name="edit-2" size={15} color={THEME_COLORS.neutral.slate700} />
-                    </Pressable>
-                    <Pressable onPress={() => handleDelete(category._id)} className="h-9 w-9 items-center justify-center rounded-full bg-red-50">
-                      <Feather name="trash-2" size={15} color={THEME_COLORS.error.border} />
-                    </Pressable>
-                  </View>
+            {(adding || editingId) ? (
+              <View className="mt-4 rounded-2xl border border-slate-200 p-3">
+                <Text className="mb-3 text-[13px] font-semibold text-slate-500">
+                  {adding ? 'Thêm thẻ mới' : 'Chỉnh sửa'}
+                </Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Tên thẻ..."
+                  className="mb-3 rounded-xl border border-slate-200 px-3 py-3 text-[15px] text-slate-900"
+                />
+                <View className="mb-4 flex-row flex-wrap gap-2">
+                  {DEFAULT_COLORS.map((item) => (
+                    <Pressable
+                      key={item}
+                      onPress={() => setColor(item)}
+                      className={`h-8 w-8 rounded-full ${color === item ? 'border-2 border-slate-900' : ''}`}
+                      style={{ backgroundColor: item }}
+                    />
+                  ))}
+                </View>
+                <View className="flex-row gap-3">
+                  <Pressable onPress={resetForm} className="flex-1 items-center rounded-full bg-slate-200 py-3">
+                    <Text className="text-[15px] font-semibold text-slate-600">Hủy</Text>
+                  </Pressable>
+                  <Pressable onPress={handleSave} disabled={saving || !name.trim()} className="flex-1 items-center rounded-full bg-primary-600 py-3">
+                    <Text className="text-[15px] font-semibold text-white">{saving ? 'Đang lưu...' : 'Lưu'}</Text>
+                  </Pressable>
                 </View>
               </View>
-            ))}
-          </ScrollView>
+            ) : null}
 
-          <View className="mt-4 rounded-2xl border border-slate-200 p-3">
-            <Text className="mb-3 text-[13px] font-semibold text-slate-500">
-              {adding ? 'Thêm thẻ mới' : editingId ? 'Chỉnh sửa thẻ' : 'Thêm thẻ mới'}
-            </Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Tên thẻ..."
-              className="mb-3 rounded-xl border border-slate-200 px-3 py-3 text-[15px] text-slate-900"
-            />
-            <View className="mb-4 flex-row flex-wrap gap-2">
-              {DEFAULT_COLORS.map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => setColor(item)}
-                  className={`h-8 w-8 rounded-full ${color === item ? 'border-2 border-slate-900' : ''}`}
-                  style={{ backgroundColor: item }}
-                />
-              ))}
-            </View>
-            <View className="flex-row gap-3">
-              <Pressable onPress={resetForm} className="flex-1 items-center rounded-full bg-slate-200 py-3">
-                <Text className="text-[15px] font-semibold text-slate-600">Hủy</Text>
+            {!adding && !editingId && (
+              <Pressable onPress={startAdd} className="mt-3 flex-row items-center justify-center rounded-full border border-dashed border-slate-300 py-3">
+                <Feather name="plus" size={16} color={THEME_COLORS.neutral.slate500} />
+                <Text className="ml-2 text-[15px] font-semibold text-slate-600">Thêm thẻ phân loại</Text>
               </Pressable>
-              <Pressable onPress={handleSave} disabled={saving || !name.trim()} className="flex-1 items-center rounded-full bg-primary-600 py-3">
-                <Text className="text-[15px] font-semibold text-white">{saving ? 'Đang lưu...' : 'Lưu'}</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {!adding && !editingId && (
-            <Pressable onPress={startAdd} className="mt-3 flex-row items-center justify-center rounded-full border border-dashed border-slate-300 py-3">
-              <Feather name="plus" size={16} color={THEME_COLORS.neutral.slate500} />
-              <Text className="ml-2 text-[15px] font-semibold text-slate-600">Thêm thẻ phân loại</Text>
-            </Pressable>
-          )}
+            )}
           </View>
         </Animated.View>
-        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

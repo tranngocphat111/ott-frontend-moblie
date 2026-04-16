@@ -1,11 +1,15 @@
-import React from 'react';
-import { Text, View } from 'react-native';
-import { CheckCircle2, FileArchive, FileAudio2, FileCode2, FileImage, FileSpreadsheet, FileText, FileVideo } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Alert, Pressable, Text, View } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { Download, FileArchive, FileAudio2, FileCode2, FileImage, FileSpreadsheet, FileText, FileVideo } from 'lucide-react-native';
 import type { ChatMessage } from '@/types';
+import { resolveMediaUrl } from '@/utils/chat';
 
 type Props = {
   message: ChatMessage;
   isMine: boolean;
+  onLongPress?: (event: any) => void;
 };
 
 const getFirstContent = (message: ChatMessage) => {
@@ -72,15 +76,66 @@ const getTypeVisual = (ext: string) => {
   return { label: 'FILE', bg: '#7d93aa', fg: '#ffffff', icon: FileText };
 };
 
-export const ChatFileMessage: React.FC<Props> = ({ message, isMine }) => {
+export const ChatFileMessage: React.FC<Props> = ({ message, isMine, onLongPress }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
   const fileName = getFileName(message);
   const ext = getExt(fileName);
   const content = getFirstContent(message);
   const sizeLabel = formatSize(content.size);
   const visual = getTypeVisual(ext);
 
+  const handleDownloadFile = async () => {
+    const sourceUrl = resolveMediaUrl(content.url || '');
+    if (!sourceUrl) {
+      Alert.alert('Thông báo', 'Không tìm thấy tệp để tải.');
+      return;
+    }
+
+    if (isDownloading) {
+      return;
+    }
+
+    try {
+      setIsDownloading(true);
+      const safeFileName = String(fileName || 'tep_dinh_kem').replace(/[\\/:*?"<>|]/g, '_');
+      const downloadDirectory = new FileSystem.Directory(FileSystem.Paths.cache, 'chat-download');
+      await downloadDirectory.create({ intermediates: true, idempotent: true });
+
+      const destinationFile = new FileSystem.File(downloadDirectory, `${Date.now()}_${safeFileName}`);
+      const downloadResult = await FileSystem.File.downloadFileAsync(sourceUrl, destinationFile, {
+        idempotent: true,
+      });
+
+      if (!downloadResult?.uri) {
+        throw new Error('Không thể tải tệp');
+      }
+
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert('Thành công', 'Đã tải tệp thành công.');
+        return;
+      }
+
+      await Sharing.shareAsync(downloadResult.uri, {
+        mimeType: 'application/octet-stream',
+        dialogTitle: `Lưu tệp: ${safeFileName}`,
+      });
+    } catch (error) {
+      console.error('Download file failed:', error);
+      Alert.alert('Lỗi', 'Không thể tải tệp. Vui lòng thử lại.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
-    <View className={`w-[260px] rounded-xl  p-2 py-1.5`}>
+    <Pressable
+      className={`w-[260px] rounded-xl p-2 py-1.5`}
+      onPress={() => void handleDownloadFile()}
+      onLongPress={onLongPress}
+      delayLongPress={150}
+      disabled={isDownloading}
+    >
       <View className="flex-row items-center gap-3">
         <View
           className="h-12 w-12 items-center justify-center rounded-md"
@@ -98,9 +153,15 @@ export const ChatFileMessage: React.FC<Props> = ({ message, isMine }) => {
           <Text className="mt-0.5 text-[12px] font-medium uppercase tracking-wide text-slate-500" numberOfLines={1}>
             {(ext || 'file')}{sizeLabel ? ` · ${sizeLabel}` : ''}
           </Text>
+          <View className="mt-1 flex-row items-center">
+            <Download size={12} color={isDownloading ? '#94a3b8' : '#64748b'} />
+            <Text className="ml-1 text-[11px] text-slate-500">
+              {isDownloading ? 'Đang tải xuống...' : 'Nhấn để tải xuống'}
+            </Text>
+          </View>
 
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 };

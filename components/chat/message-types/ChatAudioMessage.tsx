@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, Text, View } from 'react-native';
 import { Audio } from 'expo-av';
 import { Mic, Pause, Play } from 'lucide-react-native';
 import type { ChatMessage } from '@/types';
@@ -15,6 +15,7 @@ type Props = {
 type AudioSource = {
   url: string;
   durationMs: number;
+  mimeType?: string;
 };
 
 const formatDuration = (durationMs: number) => {
@@ -24,13 +25,48 @@ const formatDuration = (durationMs: number) => {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
+const looksLikeAudioPath = (value: string) => {
+  const lower = String(value || '').toLowerCase();
+  return /\.(m4a|mp3|wav|aac|caf|oga|ogg|opus|webm)(\?|$)/.test(lower);
+};
+
+const inferMimeType = (url: string) => {
+  const lower = String(url || '').toLowerCase();
+  if (lower.includes('.m4a')) return 'audio/mp4';
+  if (lower.includes('.mp3')) return 'audio/mpeg';
+  if (lower.includes('.wav')) return 'audio/wav';
+  if (lower.includes('.aac')) return 'audio/aac';
+  if (lower.includes('.caf')) return 'audio/x-caf';
+  if (lower.includes('.ogg') || lower.includes('.oga')) return 'audio/ogg';
+  if (lower.includes('.opus')) return 'audio/opus';
+  if (lower.includes('.webm')) return 'audio/webm';
+  return undefined;
+};
+
+const isLikelyUnsupportedIOSAudio = (url: string) => {
+  const lower = String(url || '').toLowerCase();
+  return /\.webm(\?|$)/.test(lower) || /\.opus(\?|$)/.test(lower);
+};
+
 const getAudioSource = (message: ChatMessage): AudioSource => {
   const firstContent = Array.isArray(message.content) ? message.content[0] : message.content;
   const candidate = firstContent && typeof firstContent === 'object' ? firstContent : undefined;
-  const rawUrl = typeof firstContent === 'string'
-    ? firstContent
-    : candidate?.url || candidate?.text || candidate?.name || '';
-  const url = resolveMediaUrl(String(rawUrl));
+
+  const contentValue = typeof firstContent === 'string' ? firstContent : '';
+  const candidateUrl = String(candidate?.url || '');
+  const candidateText = String(candidate?.text || '');
+  const attachmentUrl = String(message.attachments?.[0]?.url || '');
+
+  const rawUrl =
+    (candidateUrl && looksLikeAudioPath(candidateUrl) ? candidateUrl : '') ||
+    (candidateText && looksLikeAudioPath(candidateText) ? candidateText : '') ||
+    (contentValue && looksLikeAudioPath(contentValue) ? contentValue : '') ||
+    candidateUrl ||
+    candidateText ||
+    contentValue ||
+    attachmentUrl;
+
+  const url = resolveMediaUrl(String(rawUrl || ''));
   const durationMs =
     Number((candidate as { durationMs?: number; duration?: number } | undefined)?.durationMs) ||
     Number((candidate as { durationMs?: number; duration?: number } | undefined)?.duration) ||
@@ -39,6 +75,7 @@ const getAudioSource = (message: ChatMessage): AudioSource => {
   return {
     url,
     durationMs: Number.isFinite(durationMs) ? durationMs : 0,
+    mimeType: inferMimeType(url),
   };
 };
 
@@ -69,18 +106,35 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(source.durationMs);
   const soundRef = useRef<Audio.Sound | null>(null);
-  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sourceUrlRef = useRef('');
 
-  const clearTimer = () => {
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
+  const resetToStart = async () => {
+    const sound = soundRef.current;
+    if (!sound) return;
+
+    await sound.stopAsync().catch(() => undefined);
+    await sound.setPositionAsync(0).catch(() => undefined);
   };
 
   useEffect(() => {
     setDuration(source.durationMs);
   }, [source.durationMs]);
+
+  useEffect(() => {
+    if (sourceUrlRef.current === source.url) return;
+
+    sourceUrlRef.current = source.url;
+    setIsPlaying(false);
+    setIsLoading(false);
+    setCurrentTime(0);
+    setDuration(source.durationMs);
+
+    if (soundRef.current) {
+      const currentSound = soundRef.current;
+      soundRef.current = null;
+      void currentSound.unloadAsync().catch(() => undefined);
+    }
+  }, [source.durationMs, source.url]);
 
   useEffect(() => {
     if (!source.url) return;
@@ -108,7 +162,6 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
 
   useEffect(() => {
     return () => {
-      clearTimer();
       if (soundRef.current) {
         void soundRef.current.unloadAsync().catch(() => undefined);
       }
@@ -119,14 +172,12 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
     if (!audioId) return undefined;
 
     return registerAudioPlaybackHandler(audioId, async () => {
-      clearTimer();
       setIsPlaying(false);
       setIsLoading(false);
       setCurrentTime(0);
       try {
         if (soundRef.current) {
-          await soundRef.current.stopAsync().catch(() => undefined);
-          await soundRef.current.setPositionAsync(0).catch(() => undefined);
+          await resetToStart();
         }
       } catch {
         return;
@@ -144,7 +195,7 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
     }
 
     const { sound } = await Audio.Sound.createAsync(
-      { uri: source.url },
+      { uri: source.url, ...(source.mimeType ? { overrideFileExtensionAndroid: source.mimeType.split('/')[1] } : {}) },
       { shouldPlay: false, progressUpdateIntervalMillis: 200 },
       (status) => {
         if (!status.isLoaded) return;
@@ -155,7 +206,7 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
         if (status.didJustFinish) {
           setIsPlaying(false);
           setCurrentTime(0);
-          clearTimer();
+          void resetToStart();
         }
       },
     );
@@ -171,6 +222,12 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
   const togglePlayback = async () => {
     try {
       if (!audioId) return;
+
+      if (Platform.OS === 'ios' && isLikelyUnsupportedIOSAudio(source.url)) {
+        Alert.alert('Không hỗ trợ định dạng', 'Voice từ PC hiện đang là WebM/Opus nên iPhone không phát được. Cần đổi sang m4a/mp3 ở phía gửi hoặc backend.');
+        return;
+      }
+
       setIsLoading(true);
       await resetOtherAudioPlaybacks(audioId);
       const sound = await ensureSound();
@@ -180,36 +237,23 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
       }
 
       if (status.isPlaying) {
-        await sound.stopAsync();
-        await sound.setPositionAsync(0);
+        await resetToStart();
         setIsPlaying(false);
         setCurrentTime(0);
-        clearTimer();
         return;
+      }
+
+      if (status.positionMillis && status.durationMillis && status.positionMillis >= status.durationMillis - 80) {
+        await sound.setPositionAsync(0).catch(() => undefined);
       }
 
       await sound.playAsync();
       setIsPlaying(true);
-      clearTimer();
-      progressTimerRef.current = setInterval(async () => {
-        const playStatus = await sound.getStatusAsync();
-        if (!playStatus.isLoaded) return;
-        setCurrentTime(playStatus.positionMillis || 0);
-        if (playStatus.didJustFinish) {
-          setIsPlaying(false);
-          setCurrentTime(0);
-          setDuration(source.durationMs || 0);
-          clearTimer();
-          void sound.stopAsync().catch(() => undefined);
-          void sound.setPositionAsync(0).catch(() => undefined);
-        }
-      }, 200);
     } catch (error) {
       console.log('Failed to play audio:', error);
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(source.durationMs || 0);
-      clearTimer();
     } finally {
       setIsLoading(false);
     }

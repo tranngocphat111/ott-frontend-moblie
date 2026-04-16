@@ -139,7 +139,15 @@ chatApiClient.interceptors.response.use(
     return response.data;
   },
   async (error: AxiosError<ApiResponse>) => {
-    console.error('❌ CHAT API Error:', error.config?.url, 'Status:', error.response?.status);
+    const errorPayload = String(error.response?.data?.message || error.response?.data?.message || '');
+    const isPinLimitError =
+      error.config?.url?.includes('/pin') &&
+      error.response?.status === 400 &&
+      /toi da 3|tối đa 3|gioi han 3|giới hạn 3/i.test(errorPayload);
+
+    if (!isPinLimitError) {
+      console.error('❌ CHAT API Error:', error.config?.url, 'Status:', error.response?.status);
+    }
 
     const isNetworkError = !error.response;
 

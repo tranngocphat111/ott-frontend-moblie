@@ -2,101 +2,100 @@ import { io, type Socket } from 'socket.io-client';
 import { CHAT_API_CONFIG } from '@/configuration/api';
 
 type ChatSocketEventMap = {
-  tin_nhan: (payload: any) => void;
-  tin_nhan_reaction: (payload: any) => void;
-  tin_nhan_thu_hoi: (payload: any) => void;
-  tin_nhan_da_xoa: (payload: any) => void;
-  tin_nhan_pin: (payload: any) => void;
-  tao_phong_moi: (payload: any) => void;
-  cap_nhat_nhom: (payload: any) => void;
-  giai_tan_nhom: (payload: any) => void;
-  cap_nhat_role: (payload: any) => void;
-  cap_nhat_biet_danh: (payload: any) => void;
-  xoa_thanh_vien: (payload: any) => void;
-  bi_xoa_khoi_nhom: (payload: any) => void;
-  roi_nhom: (payload: any) => void;
+	tin_nhan: (payload: any) => void;
+	tin_nhan_reaction: (payload: any) => void;
+	tin_nhan_thu_hoi: (payload: any) => void;
+	tin_nhan_da_xoa: (payload: any) => void;
+	tin_nhan_pin: (payload: any) => void;
+	tao_phong_moi: (payload: any) => void;
+	cap_nhat_nhom: (payload: any) => void;
+	giai_tan_nhom: (payload: any) => void;
+	cap_nhat_role: (payload: any) => void;
+	cap_nhat_biet_danh: (payload: any) => void;
+	xoa_thanh_vien: (payload: any) => void;
+	bi_xoa_khoi_nhom: (payload: any) => void;
+	roi_nhom: (payload: any) => void;
 };
 
 class ChatSocketService {
-  private socket: Socket | null = null;
+	private socket: Socket | null = null;
 
-  private getSocketBaseUrl() {
-    return CHAT_API_CONFIG.BASE_URL.replace(/\/api\/?$/, '');
-  }
+	private getSocketBaseUrl() {
+		return CHAT_API_CONFIG.BASE_URL.replace(/\/api\/?$/, '');
+	}
 
-  private ensureSocket() {
-    if (this.socket) {
-      return this.socket;
-    }
+	private ensureSocket() {
+		if (this.socket) {
+			return this.socket;
+		}
 
-    const socket = io(this.getSocketBaseUrl(), {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1200,
-      timeout: 10000,
-    });
+		const socket = io(this.getSocketBaseUrl(), {
+			transports: ['websocket', 'polling'],
+			reconnectionAttempts: 10,
+			reconnectionDelay: 1200,
+			timeout: 10000,
+		});
 
-    socket.on('connect', () => {
-      console.log('[ChatSocket] connected', socket.id);
-    });
+		socket.on('connect', () => {
+			console.log('[ChatSocket] connected', socket.id);
+		});
 
-    socket.on('disconnect', () => {
-      console.log('[ChatSocket] disconnected');
-    });
+		socket.on('disconnect', () => {
+			console.log('[ChatSocket] disconnected');
+		});
 
-    socket.on('connect_error', (error) => {
-      console.error('[ChatSocket] connect_error', error?.message);
-    });
+		socket.on('connect_error', (error) => {
+			console.error('[ChatSocket] connect_error', error?.message);
+		});
 
-    this.socket = socket;
-    return socket;
-  }
+		this.socket = socket;
+		return socket;
+	}
 
-  connect() {
-    return this.ensureSocket();
-  }
+	connect() {
+		return this.ensureSocket();
+	}
 
-  disconnect() {
-    if (!this.socket) return;
-    this.socket.disconnect();
-    this.socket = null;
-  }
+	disconnect() {
+		if (!this.socket) return;
+		this.socket.disconnect();
+		this.socket = null;
+	}
 
-  joinUserRoom(userId: string) {
-    const socket = this.ensureSocket();
-    const joinAction = () => socket.emit('tham_gia_user_room', userId);
+	joinUserRoom(userId: string) {
+		const socket = this.ensureSocket();
+		const joinAction = () => socket.emit('tham_gia_user_room', userId);
 
-    if (socket.connected) {
-      joinAction();
-    } else {
-      socket.once('connect', joinAction);
-    }
-  }
+		if (socket.connected) {
+			joinAction();
+		} else {
+			socket.once('connect', joinAction);
+		}
+	}
 
-  joinConversation(conversationId: string) {
-    const socket = this.ensureSocket();
-    const joinAction = () => socket.emit('tham_gia_nhom', conversationId);
+	joinConversation(conversationId: string) {
+		const socket = this.ensureSocket();
+		const joinAction = () => socket.emit('tham_gia_nhom', conversationId);
 
-    if (socket.connected) {
-      joinAction();
-    } else {
-      socket.once('connect', joinAction);
-    }
-  }
+		if (socket.connected) {
+			joinAction();
+		} else {
+			socket.once('connect', joinAction);
+		}
+	}
 
-  on<K extends keyof ChatSocketEventMap>(event: K, callback: ChatSocketEventMap[K]) {
-    const socket = this.ensureSocket();
-    socket.on(event, callback as any);
-  }
+	on<K extends keyof ChatSocketEventMap>(event: K, callback: ChatSocketEventMap[K]) {
+		this.ensureSocket().on(event, callback as any);
+	}
 
-  off<K extends keyof ChatSocketEventMap>(event: K, callback?: ChatSocketEventMap[K]) {
-    if (!this.socket) return;
-    if (callback) {
-      this.socket.off(event, callback as any);
-      return;
-    }
-    this.socket.removeAllListeners(event);
-  }
+	off<K extends keyof ChatSocketEventMap>(event: K, callback?: ChatSocketEventMap[K]) {
+		if (!this.socket) return;
+		if (callback) {
+			this.socket.off(event, callback as any);
+			return;
+		}
+		this.socket.removeAllListeners(event);
+	}
 }
 
 export const chatSocket = new ChatSocketService();

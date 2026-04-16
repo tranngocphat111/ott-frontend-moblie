@@ -8,7 +8,7 @@ import {
   useConversationContextMenu,
 } from '@/contexts/ConversationContextMenuContext';
 import { THEME_COLORS } from '@/constants/theme';
-import { formatConversationTime, getConversationAvatar, getConversationTitle, getMessageBodyText } from '@/utils/chat';
+import { formatConversationTime, getConversationAvatar, getConversationTitle, getMessageBodyText, isSystemMessageType } from '@/utils/chat';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type { ChatCategory } from '@/services/api/chat';
 
@@ -135,6 +135,7 @@ function HomeConversationListBody({
         sender_name: activeItem.conversation.last_message.sender_name,
       })
     : '';
+  const activeIsSystemLastMessage = isSystemMessageType(activeItem?.conversation.last_message?.type);
 
   const activeInitials = String(activeTitle || '?')
     .trim()
@@ -241,7 +242,7 @@ function HomeConversationListBody({
                       </Text>
                     </View>
                     <Text className="text-[13px] leading-5 text-slate-500" numberOfLines={1}>
-                      {activeItem.conversation.last_message?.sender_id === String(currentUserId || '')
+                      {!activeIsSystemLastMessage && activeItem.conversation.last_message?.sender_id === String(currentUserId || '')
                         ? `Bạn: ${activePreviewText}`
                         : activePreviewText}
                     </Text>

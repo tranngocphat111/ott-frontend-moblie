@@ -7,6 +7,7 @@ import {
   getConversationAvatar,
   getConversationTitle,
   getMessageBodyText,
+  isSystemMessageType,
 } from '@/utils/chat';
 import { THEME_COLORS } from '@/constants/theme';
 import { Pin } from 'lucide-react-native';
@@ -63,6 +64,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
         sender_name: conversation.last_message.sender_name,
       })
     : 'Bắt đầu cuộc trò chuyện';
+  const isSystemLastMessage = isSystemMessageType(conversation.last_message?.type);
 
 React.useEffect(() => {
     if (isContextActive) {
@@ -200,7 +202,7 @@ React.useEffect(() => {
 
             <View className="flex-row items-center justify-between gap-3">
               <Text className="flex-1 text-[13px] leading-5 text-slate-500" numberOfLines={1}>
-                {conversation.last_message?.sender_id === String(currentUserId || '')
+                {!isSystemLastMessage && conversation.last_message?.sender_id === String(currentUserId || '')
                   ? `Bạn: ${previewText}`
                   : previewText}
               </Text>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -151,12 +151,29 @@ export default function HomeScreen() {
   const [categoryTargetConversation, setCategoryTargetConversation] = useState<ChatConversationWithParticipant | null>(null);
   const [conversationCategoryPickerVisible, setConversationCategoryPickerVisible] = useState(false);
 
+  const loadUsersPromiseRef = useRef<Promise<ChatServiceUser[]> | null>(null);
+  const loadConversationsPromiseRef = useRef<Promise<void> | null>(null);
+  const lastConversationsLoadAtRef = useRef(0);
+  const loadConversationsRef = useRef<(options?: { force?: boolean }) => Promise<void>>(async () => undefined);
+  const suppressSocketRefreshUntilRef = useRef(0);
+
   const selectedUser = useMemo(
     () => chatUsers.find((candidate) => candidate.user_id === chatUserId) || null,
     [chatUsers, chatUserId],
   );
 
-  const loadChatUsers = useCallback(async () => {
+  const loadChatUsers = useCallback(async (options?: { force?: boolean }) => {
+    const force = Boolean(options?.force);
+
+    if (!force && chatUsers.length > 0) {
+      return chatUsers;
+    }
+
+    if (loadUsersPromiseRef.current) {
+      return loadUsersPromiseRef.current;
+    }
+
+    const task = (async () => {
     try {
       setLoadingUsers(true);
       const response = await ChatApi.getAllUsers();
@@ -175,11 +192,15 @@ export default function HomeScreen() {
     } finally {
       setLoadingUsers(false);
     }
-  }, [chatUserId, setChatUserId]);
+    })();
 
-  useEffect(() => {
-    void loadChatUsers();
-  }, [loadChatUsers]);
+    loadUsersPromiseRef.current = task;
+    try {
+      return await task;
+    } finally {
+      loadUsersPromiseRef.current = null;
+    }
+  }, [chatUserId, chatUsers, setChatUserId]);
 
   useEffect(() => {
     void (async () => {
@@ -253,7 +274,19 @@ export default function HomeScreen() {
     return null;
   }, [chatUserId, chatUsers, loadChatUsers, setChatUserId]);
 
-  const loadConversations = useCallback(async () => {
+  const loadConversations = useCallback(async (options?: { force?: boolean }) => {
+    if (loadConversationsPromiseRef.current) {
+      await loadConversationsPromiseRef.current;
+      return;
+    }
+
+    const force = Boolean(options?.force);
+    const now = Date.now();
+    if (!force && now - lastConversationsLoadAtRef.current < 800) {
+      return;
+    }
+
+    const task = (async () => {
     const users = chatUsers.length > 0 ? chatUsers : await loadChatUsers();
     const storedUserIsValid = !!chatUserId && users.some((candidate) => candidate.user_id === chatUserId);
 
@@ -299,13 +332,26 @@ export default function HomeScreen() {
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+      lastConversationsLoadAtRef.current = Date.now();
+    }
+    })();
+
+    loadConversationsPromiseRef.current = task;
+    try {
+      await task;
+    } finally {
+      loadConversationsPromiseRef.current = null;
     }
   }, [chatUserId, chatUsers, loadChatUsers, resolveAutoChatUserId]);
 
+  useEffect(() => {
+    loadConversationsRef.current = loadConversations;
+  }, [loadConversations]);
+
   useFocusEffect(
     useCallback(() => {
-      void loadConversations();
-    }, [loadConversations]),
+      void loadConversationsRef.current();
+    }, []),
   );
 
   useEffect(() => {
@@ -315,8 +361,11 @@ export default function HomeScreen() {
     chatSocket.joinUserRoom(chatUserId);
 
     const refreshInbox = () => {
+      if (Date.now() < suppressSocketRefreshUntilRef.current) {
+        return;
+      }
       setIsRefreshing(true);
-      void loadConversations();
+      void loadConversationsRef.current();
     };
 
     chatSocket.on('tin_nhan', refreshInbox);
@@ -336,7 +385,7 @@ export default function HomeScreen() {
       chatSocket.off('bi_xoa_khoi_nhom', refreshInbox);
       chatSocket.off('giai_tan_nhom', refreshInbox);
     };
-  }, [chatUserId, loadConversations]);
+  }, [chatUserId]);
 
   useEffect(() => {
     const keyword = searchText.trim();
@@ -375,7 +424,7 @@ export default function HomeScreen() {
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    void loadConversations();
+    void loadConversations({ force: true });
   }, [loadConversations]);
 
   const handleOpenUserPicker = useCallback(async () => {
@@ -390,7 +439,7 @@ export default function HomeScreen() {
       await setChatUserId(userId);
       setPickerVisible(false);
       setIsRefreshing(true);
-      void loadConversations();
+      void loadConversations({ force: true });
     },
     [loadConversations, setChatUserId],
   );
@@ -669,8 +718,9 @@ export default function HomeScreen() {
             void (async () => {
               try {
                 setActionConversationId(conversationId);
+                suppressSocketRefreshUntilRef.current = Date.now() + 2000;
                 await ChatApi.deleteConversationForMe(conversationId, chatUserId);
-                await loadConversations();
+                await loadConversations({ force: true });
               } catch (error) {
                 console.error('Failed to delete conversation:', error);
                 Alert.alert('Lỗi', 'Không thể xóa cuộc trò chuyện.');

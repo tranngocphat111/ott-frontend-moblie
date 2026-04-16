@@ -8,3 +8,4 @@ export { ChatVoicePanel } from './ChatVoicePanel';
 export { ChatMediaPanel } from './ChatMediaPanel';
 export { ChatMessagesList } from './ChatMessagesList';
 export { ChatImagePreviewModal } from './ChatImagePreviewModal';
+export { MessageReactionsModal } from './modals/MessageReactionsModal';

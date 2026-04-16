@@ -1,124 +1,171 @@
-import React, { memo, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { ChatMessage } from '@/types';
-import { resolveMediaUrl } from '@/utils/chat';
+import { getOptimizedImageUrl, resolveMediaUrl } from '@/utils/chat';
 
 type Props = {
   message: ChatMessage;
   onImagePress?: (index: number) => void;
+  onLongPress?: (event: any) => void;
+  onMediaReady?: (messageId: string) => void;
 };
 
-type MediaItem = {
-  url: string;
-};
+const BLUR_HASH_PLACEHOLDER = '|rF?hV%2WCj[ayj[a|j[aybgF-jswaWbxaf8ayfbqsj[ayj[j[ayj[ayj[ayj[ayj[ayj[ayj[ay';
+const CLUSTER_WIDTH = 260;
 
-const getMediaValue = (item: unknown) => {
-  if (typeof item === 'string') return item;
-  const candidate = (item || {}) as { url?: string; text?: string; name?: string };
-  return candidate.url || candidate.text || candidate.name || '';
-};
+const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPress, onMediaReady }) => {
+  const [aspectRatio, setAspectRatio] = useState(1);
+  const readyRef = useRef(false);
 
-const getImageUrls = (message: ChatMessage): string[] => {
-  if (!Array.isArray(message.content)) return [];
-  return message.content
-    .map((item) => getMediaValue(item))
-    .filter(Boolean)
-    .map((url) => resolveMediaUrl(url));
-};
+  const imageUrls = useMemo(() => {
+    if (!Array.isArray(message.content)) return [];
+    return message.content
+      .map(item => typeof item === 'string' ? item : (item as any)?.url)
+      .filter(Boolean)
+      .map(url => resolveMediaUrl(url));
+  }, [message.content]);
 
-const fitSize = (sourceWidth: number, sourceHeight: number) => {
-  const maxWidth = 260;
-  const maxHeight = 340;
-  const minWidth = 140;
-  const minHeight = 120;
+  const optimizedUrls = useMemo(() => {
+    return imageUrls.map((url) => getOptimizedImageUrl(url, 'message') || url);
+  }, [imageUrls]);
 
-  if (!sourceWidth || !sourceHeight) {
-    return { width: maxWidth, height: 200 };
-  }
+  const markReady = useCallback(() => {
+    if (readyRef.current) return;
+    readyRef.current = true;
+    onMediaReady?.(String(message.msg_id || message._id));
+  }, [onMediaReady, message]);
 
-  const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight, 1);
-  const width = Math.max(minWidth, Math.round(sourceWidth * scale));
-  const height = Math.max(minHeight, Math.round(sourceHeight * scale));
+  if (!imageUrls.length) return null;
 
-  return { width, height };
-};
+  const count = imageUrls.length;
+  const GAP = 2;
+  const localStatus = message.local_status;
+  const localProgress = Number(message.local_upload_progress || 0);
 
-const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress }) => {
-  const imageUrls = useMemo(() => getImageUrls(message), [message]);
-  const [singleSize, setSingleSize] = useState({ width: 260, height: 200 });
-
-  if (!imageUrls.length) {
-    return null;
-  }
-
-  if (imageUrls.length === 1) {
+  const RenderItem = ({ index, className, style }: { index: number; className?: string; style?: any }) => {
     return (
-      <Pressable onPress={() => onImagePress?.(0)} className="overflow-hidden rounded-xl">
-          <Image source={{ uri: imageUrls[0] }} style={singleSize} contentFit="cover" transition={120} onLoad={(event) => {
-            const width = event.source?.width || 0;
-            const height = event.source?.height || 0;
-            setSingleSize(fitSize(width, height));
-          }} />
+      <Pressable
+        onPress={() => onImagePress?.(index)}
+        onLongPress={onLongPress}
+        className={`relative overflow-hidden ${className}`}
+        style={style}
+      >
+        <Image
+          source={{ uri: optimizedUrls[index] || imageUrls[index] }}
+          style={{ width: '100%', height: '100%', backgroundColor: '#eee' }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={120}
+          placeholder={BLUR_HASH_PLACEHOLDER}
+          onLoad={index === 0 ? markReady : undefined}
+          onError={index === 0 ? markReady : undefined}
+        />
+        {index === 5 && count > 6 && (
+          <View className="absolute inset-0 bg-black/45 items-center justify-center pointer-events-none">
+            <Text className="text-white font-bold text-lg">+{count - 6}</Text>
+          </View>
+        )}
       </Pressable>
     );
-  }
-
-  if (imageUrls.length === 2) {
-    return (
-      <View className="w-[260px] flex-row overflow-hidden rounded-xl">
-        {imageUrls.map((url, index) => (
-          <Pressable key={`${message._id}-${index}`} onPress={() => onImagePress?.(index)} className="h-[150px] flex-1 overflow-hidden border-r border-white">
-            <Image source={{ uri: url }} className="h-full w-full" contentFit="cover" transition={120} />
-          </Pressable>
-        ))}
-      </View>
-    );
-  }
-
-  if (imageUrls.length === 3) {
-    return (
-      <View className="h-[300px] w-[260px] flex-row overflow-hidden rounded-xl">
-        <Pressable onPress={() => onImagePress?.(0)} className="h-full w-[58%] overflow-hidden border-r border-white">
-          <Image source={{ uri: imageUrls[0] }} className="h-full w-full" contentFit="cover" transition={120} />
-        </Pressable>
-        <View className="w-[42%]">
-          {imageUrls.slice(1, 3).map((url, index) => (
-            <Pressable
-              key={`${message._id}-${index + 1}`}
-              onPress={() => onImagePress?.(index + 1)}
-              className={`h-1/2 overflow-hidden ${index === 0 ? 'border-b border-white' : ''}`}
-            >
-              <Image source={{ uri: url }} className="h-full w-full" contentFit="cover" transition={120} />
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    );
-  }
-
-  const visible = imageUrls.slice(0, 6);
-  const remaining = imageUrls.length - visible.length;
+  };
 
   return (
-    <View className="w-[260px] flex-row flex-wrap overflow-hidden rounded-2xl">
-      {visible.map((url, index) => {
-        const isLastVisible = index === visible.length - 1 && remaining > 0;
-        return (
-          <Pressable
-            key={`${message._id}-${index}`}
-            onPress={() => onImagePress?.(index)}
-            className="relative h-[86px] w-1/3 overflow-hidden border-b border-r border-white"
-          >
-            <Image source={{ uri: url }} className="h-full w-full" contentFit="cover" transition={120} />
-            {isLastVisible && (
-              <View className="absolute inset-0 items-center justify-center bg-black/45">
-                <Text className="text-[18px] font-bold text-white">+{remaining}</Text>
-              </View>
-            )}
-          </Pressable>
-        );
-      })}
+    <View style={{ width: CLUSTER_WIDTH }} className="overflow-hidden rounded-2xl border border-black/5 bg-white/95">
+      {count === 1 && (
+        <Pressable onPress={() => onImagePress?.(0)} onLongPress={onLongPress}>
+          <Image
+            source={{ uri: optimizedUrls[0] || imageUrls[0] }}
+            style={{ width: CLUSTER_WIDTH, aspectRatio, maxHeight: 350 }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={120}
+            placeholder={BLUR_HASH_PLACEHOLDER}
+            onLoad={(e) => {
+              const width = e.source?.width || 1;
+              const height = e.source?.height || 1;
+              setAspectRatio(Math.min(Math.max(width / height, 0.7), 1.5));
+              markReady();
+            }}
+            onError={markReady}
+          />
+        </Pressable>
+      )}
+      {count === 2 && (
+        <View className="flex-row h-[180px]" style={{ gap: GAP }}>
+          <RenderItem index={0} className="flex-1" />
+          <RenderItem index={1} className="flex-1" />
+        </View>
+      )}
+      {count === 3 && (
+        <View className="flex-row h-[210px]" style={{ gap: GAP }}>
+          <RenderItem index={0} className="flex-[1.4]" />
+          <View className="flex-1" style={{ gap: GAP }}>
+            <RenderItem index={1} className="flex-1" />
+            <RenderItem index={2} className="flex-1" />
+          </View>
+        </View>
+      )}
+      {count === 4 && (
+        <View className="h-[260px]" style={{ gap: GAP }}>
+          <View className="flex-row flex-1" style={{ gap: GAP }}>
+            <RenderItem index={0} className="flex-1" />
+            <RenderItem index={1} className="flex-1" />
+          </View>
+          <View className="flex-row flex-1" style={{ gap: GAP }}>
+            <RenderItem index={2} className="flex-1" />
+            <RenderItem index={3} className="flex-1" />
+          </View>
+        </View>
+      )}
+      {count === 5 && (
+        <View style={{ gap: GAP }}>
+          <View className="flex-row h-[160px]" style={{ gap: GAP }}>
+            <RenderItem index={0} className="flex-1" />
+            <RenderItem index={1} className="flex-1" />
+          </View>
+          <View className="flex-row h-[102px]" style={{ gap: GAP }}>
+            <RenderItem index={2} className="flex-1" />
+            <RenderItem index={3} className="flex-1" />
+            <RenderItem index={4} className="flex-1" />
+          </View>
+        </View>
+      )}
+      {count >= 6 && (
+        <View className="h-[260px]" style={{ gap: GAP }}>
+          <View className="flex-row flex-1" style={{ gap: GAP }}>
+            <RenderItem index={0} className="flex-1" />
+            <RenderItem index={1} className="flex-1" />
+          </View>
+          <View className="flex-row flex-1" style={{ gap: GAP }}>
+            <RenderItem index={2} className="flex-1" />
+            <RenderItem index={3} className="flex-1" />
+          </View>
+          <View className="flex-row flex-1" style={{ gap: GAP }}>
+            <RenderItem index={4} className="flex-1" />
+            <RenderItem index={5} className="flex-1" />
+          </View>
+        </View>
+      )}
+
+      {localStatus === 'uploading' && (
+        <View className="absolute inset-0 items-center justify-center bg-black/35">
+          <View className="rounded-2xl bg-black/55 px-3 py-2">
+            <View className="flex-row items-center gap-2">
+              <ActivityIndicator size="small" color="#fff" />
+              <Text className="text-[12px] font-semibold text-white">Đang gửi {Math.min(99, Math.max(0, Math.round(localProgress)))}%</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {localStatus === 'error' && (
+        <View className="absolute inset-0 items-center justify-center bg-black/45 px-3">
+          <View className="rounded-2xl bg-black/55 px-3 py-2">
+            <Text className="text-center text-[12px] font-semibold text-white">Gửi ảnh thất bại</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
