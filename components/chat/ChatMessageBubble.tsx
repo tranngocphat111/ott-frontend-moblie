@@ -25,6 +25,7 @@ import {
   PinOff,
   Settings,
   Video,
+  TextAlignJustify,
 } from "lucide-react-native";
 import { ChatFileMessage } from "./message-types/ChatFileMessage";
 import { ChatImageMessage } from "./message-types/ChatImageMessage";
@@ -115,7 +116,7 @@ const getReplyUiMeta = (reply: NonNullable<ChatMessage["reply_to"]>) => {
   }
 
   return {
-    icon: CornerUpLeft,
+    icon: TextAlignJustify,
     label: "Tin nhắn",
     detail: String(reply.content || "").trim() || "Tin nhắn",
     thumbnail: "",

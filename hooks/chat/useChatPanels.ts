@@ -4,7 +4,6 @@ import { Keyboard } from 'react-native';
 export const useChatPanels = () => {
   const [voicePanelVisible, setVoicePanelVisible] = useState(false);
   const [imagePanelVisible, setImagePanelVisible] = useState(false);
-  const [emojiPanelVisible, setEmojiPanelVisible] = useState(false);
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
 
   const hasSelectedMedia = selectedMediaIds.length > 0;
@@ -16,7 +15,6 @@ export const useChatPanels = () => {
   const closeAllPanels = useCallback((options?: { clearMediaSelection?: boolean }) => {
     setVoicePanelVisible(false);
     setImagePanelVisible(false);
-    setEmojiPanelVisible(false);
     if (options?.clearMediaSelection !== false) {
       setSelectedMediaIds([]);
     }
@@ -29,7 +27,6 @@ export const useChatPanels = () => {
       const next = !current;
       if (next) {
         setImagePanelVisible(false);
-        setEmojiPanelVisible(false);
       }
       return next;
     });
@@ -42,7 +39,6 @@ export const useChatPanels = () => {
       const next = !current;
       if (next) {
         setVoicePanelVisible(false);
-        setEmojiPanelVisible(false);
       }
       setSelectedMediaIds([]);
       return next;
@@ -54,18 +50,6 @@ export const useChatPanels = () => {
     setSelectedMediaIds([]);
   }, []);
 
-  const toggleEmojiPanel = useCallback(() => {
-    Keyboard.dismiss();
-    setTimeout(() => Keyboard.dismiss(), 100);
-    setEmojiPanelVisible((current) => {
-      const next = !current;
-      if (next) {
-        setVoicePanelVisible(false);
-        setImagePanelVisible(false);
-      }
-      return next;
-    });
-  }, []);
 
   const toggleSelectMedia = useCallback((assetId: string) => {
     setSelectedMediaIds((current) => (
@@ -78,18 +62,15 @@ export const useChatPanels = () => {
   return {
     voicePanelVisible,
     imagePanelVisible,
-    emojiPanelVisible,
     selectedMediaIds,
     hasSelectedMedia,
     setVoicePanelVisible,
     setImagePanelVisible,
-    setEmojiPanelVisible,
     setSelectedMediaIds,
     clearSelectedMedia,
     closeAllPanels,
     toggleVoicePanel,
     toggleImagePanel,
-    toggleEmojiPanel,
     closeImagePanel,
     toggleSelectMedia,
   };

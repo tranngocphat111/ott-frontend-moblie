@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
+  Easing,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -29,7 +31,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from "@/context/Authcontext";
 import { THEME_COLORS } from "@/constants/theme";
-import { ChatApi } from "@/services/api";
+import { ChatApi, chatSocket } from "@/services/api";
 import type {
   ChatConversationWithParticipant,
   ChatMessage,
@@ -38,7 +40,6 @@ import type {
 import {
   ChatImagePreviewModal,
   ChatComposer,
-  ChatEmojiPanel,
   ChatMediaPanel,
   ChatMessagesList,
   ChatPinnedMessagesBar,
@@ -65,7 +66,19 @@ import {
 
 const getMessageKey = (message: ChatMessage) => message.msg_id || message._id;
 const normalizeMessageId = (value?: string | null) => String(value || "").trim();
+const isSameMessageById = (left: ChatMessage, right: ChatMessage) => {
+  const leftMsgId = normalizeMessageId(left?.msg_id);
+  const leftDbId = normalizeMessageId(left?._id);
+  const rightMsgId = normalizeMessageId(right?.msg_id);
+  const rightDbId = normalizeMessageId(right?._id);
+
+  return (
+    (leftMsgId && (leftMsgId === rightMsgId || leftMsgId === rightDbId)) ||
+    (leftDbId && (leftDbId === rightDbId || leftDbId === rightMsgId))
+  );
+};
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+const MAX_VIDEO_UPLOAD_SIZE = 100 * 1024 * 1024;
 const CHAT_BROWN_DARK = '#b78457';
 const CHAT_BROWN = '#d2a177';
 const CHAT_BROWN_SOFT = '#f5e8dc';
@@ -275,15 +288,27 @@ const patchMessageById = (
   options?: { remove?: boolean },
   normalizeMessages?: (messages: ChatMessage[]) => ChatMessage[],
 ) => {
-  const key = getMessageKey(incoming);
-  if (!key) return source;
+  const incomingMsgId = normalizeMessageId(incoming?.msg_id);
+  const incomingDbId = normalizeMessageId(incoming?._id);
+  const hasIncomingId = Boolean(incomingMsgId || incomingDbId);
+  if (!hasIncomingId) return source;
 
   const next = [...source];
-  const idx = next.findIndex((item) => getMessageKey(item) === key);
+  const idx = next.findIndex((item) => {
+    const itemMsgId = normalizeMessageId(item?.msg_id);
+    const itemDbId = normalizeMessageId(item?._id);
+
+    return (
+      (incomingMsgId && itemMsgId === incomingMsgId) ||
+      (incomingDbId && itemDbId === incomingDbId) ||
+      (incomingMsgId && itemDbId === incomingMsgId) ||
+      (incomingDbId && itemMsgId === incomingDbId)
+    );
+  });
 
   if (options?.remove) {
     if (idx >= 0) next.splice(idx, 1);
-    return next;
+    return normalizeMessages ? normalizeMessages(next) : next;
   }
 
   if (idx >= 0) {
@@ -321,6 +346,118 @@ const mergeMessagesByKey = (
   });
 
   return normalizeMessages(Array.from(map.values()));
+};
+
+const TYPING_INDICATOR_LEFT = 48;
+
+const ChatTypingIndicator = ({
+  typingUserNames,
+}: {
+  typingUserNames: string[];
+}) => {
+  const visible = typingUserNames.length > 0;
+
+  const dot1 = useRef(new Animated.Value(0.2)).current;
+  const dot2 = useRef(new Animated.Value(0.2)).current;
+  const dot3 = useRef(new Animated.Value(0.2)).current;
+
+  useEffect(() => {
+    if (!visible) {
+      dot1.setValue(0.2);
+      dot2.setValue(0.2);
+      dot3.setValue(0.2);
+      return;
+    }
+
+    const bump = (value: Animated.Value) =>
+      Animated.sequence([
+        Animated.timing(value, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(value, {
+          toValue: 0.2,
+          duration: 220,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]);
+
+    const animation = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([Animated.delay(0), bump(dot1)]),
+        Animated.sequence([Animated.delay(120), bump(dot2)]),
+        Animated.sequence([Animated.delay(240), bump(dot3)]),
+      ]),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+      dot1.setValue(0.2);
+      dot2.setValue(0.2);
+      dot3.setValue(0.2);
+    };
+  }, [dot1, dot2, dot3, visible]);
+
+  if (!visible) return null;
+
+  const label =
+    typingUserNames.length === 1
+      ? `${typingUserNames[0]} đang nhập`
+      : "Đang nhập";
+
+  const dotStyle = (value: Animated.Value) => ({
+    opacity: value,
+    transform: [
+      {
+        translateY: value.interpolate({
+          inputRange: [0.2, 1],
+          outputRange: [0, -3],
+        }),
+      },
+    ],
+  });
+
+  const dotBase = {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#94a3b8",
+  } as const;
+
+  return (
+    <View
+      pointerEvents="none"
+      accessible
+      accessibilityLabel={label}
+      style={{
+        position: "absolute",
+        left: TYPING_INDICATOR_LEFT,
+        bottom: 12,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          backgroundColor: "#ffffff",
+          borderRadius: 999,
+          borderWidth: 1,
+          borderColor: "#e2e8f0",
+        }}
+      >
+        <Animated.View style={[dotBase, { marginRight: 6 }, dotStyle(dot1)]} />
+        <Animated.View style={[dotBase, { marginRight: 6 }, dotStyle(dot2)]} />
+        <Animated.View style={[dotBase, dotStyle(dot3)]} />
+      </View>
+    </View>
+  );
 };
 
 export default function ChatDetailScreen() {
@@ -391,6 +528,10 @@ export default function ChatDetailScreen() {
 
   // Local component state
   const [messageText, setMessageText] = useState("");
+  const [typingUserIds, setTypingUserIds] = useState<Record<string, number>>({});
+  const typingActiveRef = useRef(false);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(
     null,
   );
@@ -424,16 +565,13 @@ export default function ChatDetailScreen() {
   const {
     voicePanelVisible,
     imagePanelVisible,
-    emojiPanelVisible,
     selectedMediaIds,
     hasSelectedMedia,
     setVoicePanelVisible,
-    setEmojiPanelVisible,
     clearSelectedMedia,
     closeAllPanels,
     toggleVoicePanel,
     toggleImagePanel,
-    toggleEmojiPanel,
     closeImagePanel,
     toggleSelectMedia,
   } = useChatPanels();
@@ -442,6 +580,103 @@ export default function ChatDetailScreen() {
   const title = getConversationTitle(conversation, userIdForChat);
   const avatar = getConversationAvatar(conversation, userIdForChat);
   const isGroup = conversation?.type === "group";
+
+  const typingUserIdList = Object.keys(typingUserIds).filter(
+    (id) => id && String(id) !== String(userIdForChat || ""),
+  );
+
+  const typingUserNames = typingUserIdList
+    .map((id) => {
+      const participant = conversation?.participants?.find(
+        (item) => String(item.user_id || item._id || "") === String(id),
+      );
+      return String(
+        participant?.nickname || participant?.display_name || participant?.name || "",
+      ).trim();
+    })
+    .filter(Boolean);
+
+  const headerSubtitle = "Hoạt động gần đây";
+
+  const stopTyping = useCallback(() => {
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+      typingStopTimerRef.current = null;
+    }
+
+    if (!typingActiveRef.current) return;
+    if (!conversationId || !userIdForChat) return;
+
+    chatSocket.stopTyping(String(conversationId), String(userIdForChat));
+    typingActiveRef.current = false;
+  }, [conversationId, userIdForChat]);
+
+  const startTyping = useCallback(() => {
+    if (!conversationId || !userIdForChat) return;
+
+    if (!typingActiveRef.current) {
+      chatSocket.startTyping(String(conversationId), String(userIdForChat));
+      typingActiveRef.current = true;
+    }
+
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+    }
+
+    typingStopTimerRef.current = setTimeout(() => {
+      stopTyping();
+    }, 2000);
+  }, [conversationId, stopTyping, userIdForChat]);
+
+  const handleTextChange = useCallback(
+    (value: string) => {
+      setMessageText(value);
+
+      if (value.length > 0) {
+        startTyping();
+      } else {
+        stopTyping();
+      }
+    },
+    [startTyping, stopTyping],
+  );
+
+  useEffect(() => {
+    setTypingUserIds({});
+  }, [conversationId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setTypingUserIds((prev) => {
+        const ids = Object.keys(prev);
+        if (ids.length === 0) return prev;
+
+        let changed = false;
+        const next: Record<string, number> = {};
+        ids.forEach((id) => {
+          const last = prev[id];
+          if (last && now - last < 4500) {
+            next[id] = last;
+          } else {
+            changed = true;
+          }
+        });
+
+        return changed ? next : prev;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopTyping();
+    };
+  }, [stopTyping]);
 
   const openWebCall = useCallback(async (type: 'voice' | 'video') => {
     if (!conversationId) return;
@@ -514,9 +749,8 @@ export default function ChatDetailScreen() {
 
   const openMessageMenu = useCallback((message: ChatMessage) => {
     dismissKeyboard();
-    const key = getMessageKey(message);
-    const latestMessage = messages.find((item) => getMessageKey(item) === key) || message;
-    const isPinnedNow = pinnedMessages.some((item) => getMessageKey(item) === key);
+    const latestMessage = messages.find((item) => isSameMessageById(item, message)) || message;
+    const isPinnedNow = pinnedMessages.some((item) => isSameMessageById(item, message));
     setActiveMessageMenu({
       ...latestMessage,
       is_pinned: isPinnedNow,
@@ -610,10 +844,10 @@ export default function ChatDetailScreen() {
       const pinned = await ChatApi.pinMessage(conversationId, pendingPinMessage.msg_id, userIdForChat, true);
 
       setMessages((current) => patchMessageById(current, unpinned, undefined, normalizeMessages));
-      setPinnedMessages((current) => patchMessageById(current, unpinned, { remove: true }, normalizeMessages));
+      setPinnedMessages((current) => patchMessageById(current, unpinned, { remove: true }, normalizePinnedMessages));
 
       setMessages((current) => patchMessageById(current, pinned, undefined, normalizeMessages));
-      setPinnedMessages((current) => patchMessageById(current, pinned, undefined, normalizeMessages));
+      setPinnedMessages((current) => patchMessageById(current, pinned, undefined, normalizePinnedMessages));
 
       setReplacePinModalVisible(false);
       setPendingPinMessage(null);
@@ -873,7 +1107,25 @@ export default function ChatDetailScreen() {
       if (!conversationId || !userIdForChat) return;
 
       const mimeType = getMimeType(params.fileName, params.mimeType);
-      const fileSize = Number(params.fileSize || 0);
+      let fileSize = Number(params.fileSize || 0);
+
+      if (!fileSize) {
+        try {
+          const info = await FileSystem.getInfoAsync(params.uri);
+          fileSize = Number((info as any)?.size || 0);
+        } catch {
+          // Ignore size resolution failures; we'll fall back to unknown size.
+        }
+      }
+
+      const isVideoLike = params.explicitType === 'video' || String(mimeType || '').startsWith('video/');
+      const sizeLimit = isVideoLike ? MAX_VIDEO_UPLOAD_SIZE : MAX_UPLOAD_SIZE;
+      if (fileSize && fileSize > sizeLimit) {
+        const limitMb = Math.round(sizeLimit / 1024 / 1024);
+        Alert.alert('Lưu ý', `Tệp vượt quá ${limitMb}MB nên không thể gửi.`);
+        return;
+      }
+
       const { uploadUrl, key, fileCategory } = await ChatApi.getMessagePresignedUrl(
         params.fileName,
         mimeType,
@@ -920,8 +1172,27 @@ export default function ChatDetailScreen() {
     ) => {
       if (!conversationId || !userIdForChat || assets.length === 0) return;
 
-      const validAssets = assets.filter((asset) => Number(asset.fileSize || 0) <= MAX_UPLOAD_SIZE || !asset.fileSize);
-      if (validAssets.length !== assets.length) {
+      const hydratedAssets = await Promise.all(
+        assets.map(async (asset) => {
+          if (asset.fileSize != null) return asset;
+
+          try {
+            const info = await FileSystem.getInfoAsync(asset.uri);
+            const resolvedSize = Number((info as any)?.size || 0);
+            return {
+              ...asset,
+              fileSize: resolvedSize || null,
+            };
+          } catch {
+            return asset;
+          }
+        }),
+      );
+
+      const validAssets = hydratedAssets.filter(
+        (asset) => Number(asset.fileSize || 0) <= MAX_UPLOAD_SIZE || !asset.fileSize,
+      );
+      if (validAssets.length !== hydratedAssets.length) {
         Alert.alert("Lưu ý", "Một số ảnh lớn hơn 50MB nên đã được bỏ qua.");
       }
       if (validAssets.length === 0) return;
@@ -1122,10 +1393,19 @@ export default function ChatDetailScreen() {
     });
     if (result.canceled || !result.assets?.length) return;
 
-    const validAssets = result.assets.filter((asset) => Number(asset.size || 0) <= MAX_UPLOAD_SIZE || !asset.size);
+    const validAssets = result.assets.filter((asset) => {
+      const fileName = String(asset.name || '');
+      const mimeType = String(asset.mimeType || '');
+      const ext = getFileExtension(fileName).toLowerCase();
+      const isVideoLike = mimeType.startsWith('video/') || ['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi'].includes(ext);
+      const sizeLimit = isVideoLike ? MAX_VIDEO_UPLOAD_SIZE : MAX_UPLOAD_SIZE;
+
+      return Number(asset.size || 0) <= sizeLimit || !asset.size;
+    });
+
     if (validAssets.length !== result.assets.length) {
       const skipped = result.assets.length - validAssets.length;
-      Alert.alert("Lưu ý", `${skipped} tệp vượt quá 50MB đã được bỏ qua.`);
+      Alert.alert("Lưu ý", `${skipped} tệp vượt quá giới hạn (50MB file, 100MB video) đã được bỏ qua.`);
     }
     if (validAssets.length === 0) return;
 
@@ -1133,11 +1413,16 @@ export default function ChatDetailScreen() {
     try {
       for (let index = 0; index < validAssets.length; index += 1) {
         const asset = validAssets[index];
+        const fileName = asset.name || `file_${Date.now()}_${index}`;
+        const resolvedMimeType = getMimeType(fileName, asset.mimeType);
+        const isVideoLike = String(resolvedMimeType || '').startsWith('video/');
+
         await uploadAndSendSingleFile({
           uri: asset.uri,
-          fileName: asset.name || `file_${Date.now()}_${index}`,
-          mimeType: asset.mimeType,
+          fileName,
+          mimeType: resolvedMimeType,
           fileSize: Number(asset.size || 0),
+          explicitType: isVideoLike ? 'video' : undefined,
           progressLabel: `Đang tải tệp ${index + 1}/${validAssets.length}...`,
         });
       }
@@ -1246,9 +1531,6 @@ export default function ChatDetailScreen() {
       setIsSendingAttachment(false);
     }
   }, [conversationId, isSendingAttachment, pendingVoiceUri, setVoicePanelVisible, stopVoiceRecording, uploadAndSendSingleFile, userIdForChat]);
-  const appendEmoji = useCallback((emoji: string) => {
-    setMessageText((current) => `${current}${emoji}`);
-  }, []);
 
   const sendSelectedPanelMedia = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment || selectedMediaIds.length === 0) return;
@@ -1316,6 +1598,41 @@ export default function ChatDetailScreen() {
   }, [imagePanelVisible, loadRecentMedia, mediaAssets.length, mediaLoading]);
 
   // Socket event handlers
+  const handleTypingStart = useCallback(
+    (payload: { conversationId?: string; conversation_id?: string; userId?: string; user_id?: string }) => {
+      const payloadConversationId = String(payload?.conversationId || payload?.conversation_id || "");
+      if (payloadConversationId !== String(conversationId || "")) return;
+
+      const payloadUserId = String(payload?.userId || payload?.user_id || "");
+      if (!payloadUserId) return;
+      if (String(payloadUserId) === String(userIdForChat || "")) return;
+
+      setTypingUserIds((prev) => ({
+        ...prev,
+        [payloadUserId]: Date.now(),
+      }));
+    },
+    [conversationId, userIdForChat],
+  );
+
+  const handleTypingStop = useCallback(
+    (payload: { conversationId?: string; conversation_id?: string; userId?: string; user_id?: string }) => {
+      const payloadConversationId = String(payload?.conversationId || payload?.conversation_id || "");
+      if (payloadConversationId !== String(conversationId || "")) return;
+
+      const payloadUserId = String(payload?.userId || payload?.user_id || "");
+      if (!payloadUserId) return;
+
+      setTypingUserIds((prev) => {
+        if (!prev[payloadUserId]) return prev;
+        const next = { ...prev };
+        delete next[payloadUserId];
+        return next;
+      });
+    },
+    [conversationId],
+  );
+
   const handleIncomingMessage = useCallback(
     (payload: ChatMessage) => {
       if (String(payload?.conversation_id || "") !== String(conversationId))
@@ -1441,6 +1758,8 @@ export default function ChatDetailScreen() {
     onMessagePinned: handleMessagePinned,
     onMessageRevoked: handleMessageRevoked,
     onMessageDeleted: handleMessageDeleted,
+    onTypingStart: handleTypingStart,
+    onTypingStop: handleTypingStop,
   });
 
   // Send message
@@ -1451,6 +1770,8 @@ export default function ChatDetailScreen() {
     if (!trimmed) return;
 
     const isLink = /^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed);
+
+    stopTyping();
 
     try {
       await ChatApi.sendMessage({
@@ -1463,7 +1784,6 @@ export default function ChatDetailScreen() {
 
       setMessageText("");
       setReplyToMessage(null);
-      setEmojiPanelVisible(false);
       setPendingScrollToBottom();
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -1475,6 +1795,7 @@ export default function ChatDetailScreen() {
     messageText,
     replyToMessage?.msg_id,
     setPendingScrollToBottom,
+    stopTyping,
   ]);
   return (
     <SafeAreaView
@@ -1488,7 +1809,7 @@ export default function ChatDetailScreen() {
       >
         <ChatScreenHeader
           title={title}
-          subtitle="Hoat động gần đây"
+          subtitle={headerSubtitle}
           accentStart={CHAT_BROWN_DARK}
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
@@ -1587,6 +1908,8 @@ export default function ChatDetailScreen() {
               <Feather name="chevron-down" size={20} color="#ffffff" />
             </Pressable>
           )}
+           
+          <ChatTypingIndicator typingUserNames={typingUserNames} />
         </View>
 
         {uploadProgress && (
@@ -1606,15 +1929,13 @@ export default function ChatDetailScreen() {
 
         <ChatComposer
           value={messageText}
-          onChangeText={setMessageText}
+          onChangeText={handleTextChange}
           onInputFocus={handleComposerInputFocus}
           onInputPressIn={handleComposerInputPressIn}
           onSend={() => void onSendMessage()}
-          onToggleEmoji={toggleEmojiPanel}
           onToggleImagePanel={toggleImagePanel}
           onToggleVoicePanel={toggleVoicePanel}
           onPickFile={() => void pickFileAndSend()}
-          emojiActive={emojiPanelVisible}
           imagePanelActive={imagePanelVisible}
           voicePanelActive={voicePanelVisible}
           replyToMessage={replyToMessage}
@@ -1642,9 +1963,6 @@ export default function ChatDetailScreen() {
           />
         )}
 
-        {emojiPanelVisible && (
-          <ChatEmojiPanel height={CHAT_PANEL_HEIGHT} onAppendEmoji={appendEmoji} />
-        )}
 
         {voicePanelVisible && (
           <ChatVoicePanel

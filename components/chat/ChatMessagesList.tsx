@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
 import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
@@ -37,11 +37,9 @@ const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ name, av
   return (
     <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
       {showImage ? (
-        <ExpoImage
+        <Image
           source={{ uri: avatarUrl }}
-          cachePolicy="memory-disk"
           className="h-full w-full"
-          contentFit="cover"
           onError={() => setHasError(true)}
         />
       ) : (
@@ -221,16 +219,16 @@ export const ChatMessagesList: React.FC<Props> = ({
                   onLongPress={(event) => onMessageLongPress(item, event)}
                   onReplyPress={() => item.reply_to_msg_id && onReplyPress(item.reply_to_msg_id)}
                   onImagePress={(imageIndex) => {
+                    // Keep extraction logic aligned with ChatImageMessage (content items -> url only),
+                    // otherwise indexes can diverge and open the wrong image.
                     const imageItems = Array.isArray(item.content)
                       ? item.content
-                          .map((content) => {
-                            if (typeof content === 'string') return content;
-                            if (!content || typeof content !== 'object') return '';
-                            return String(content.url || content.text || content.name || '');
-                          })
-                          .filter((value): value is string => !!value)
+                          .map((content) => (typeof content === 'string' ? content : (content as any)?.url))
+                          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+                          .map((value) => resolveMediaUrl(String(value)))
                       : [];
-                    const selected = resolveMediaUrl(imageItems[imageIndex] || '');
+
+                    const selected = imageItems[imageIndex];
                     if (selected) onImagePreview(selected);
                   }}
                 />
