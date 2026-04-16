@@ -7,6 +7,8 @@ type ChatSocketEventMap = {
 	tin_nhan_thu_hoi: (payload: any) => void;
 	tin_nhan_da_xoa: (payload: any) => void;
 	tin_nhan_pin: (payload: any) => void;
+	nguoi_dung_dang_soan_tin_nhan: (payload: any) => void;
+	nguoi_dung_ngung_soan_tin_nhan: (payload: any) => void;
 	tao_phong_moi: (payload: any) => void;
 	cap_nhat_nhom: (payload: any) => void;
 	giai_tan_nhom: (payload: any) => void;
@@ -81,6 +83,30 @@ class ChatSocketService {
 			joinAction();
 		} else {
 			socket.once('connect', joinAction);
+		}
+	}
+
+	startTyping(conversationId: string, userId: string) {
+		const socket = this.ensureSocket();
+		const action = () =>
+			socket.emit('nguoi_dung_dang_soan_tin_nhan', { conversationId, userId });
+
+		if (socket.connected) {
+			action();
+		} else {
+			socket.once('connect', action);
+		}
+	}
+
+	stopTyping(conversationId: string, userId: string) {
+		const socket = this.ensureSocket();
+		const action = () =>
+			socket.emit('nguoi_dung_ngung_soan_tin_nhan', { conversationId, userId });
+
+		if (socket.connected) {
+			action();
+		} else {
+			socket.once('connect', action);
 		}
 	}
 

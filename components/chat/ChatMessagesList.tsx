@@ -1,5 +1,5 @@
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
 import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
@@ -8,6 +8,7 @@ import {
   getOptimizedImageUrl,
   getMessageSenderName,
   getMessageSenderAvatar,
+  isCallMessageType,
   isSystemMessageType,
   resolveMediaUrl,
   shouldBreakMessageCluster,
@@ -29,6 +30,29 @@ const getInitials = (value: string) => {
   return `${tokens[0].slice(0, 1)}${tokens[tokens.length - 1].slice(0, 1)}`.toUpperCase();
 };
 
+const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ name, avatarUrl }) => {
+  const [hasError, setHasError] = useState(false);
+  const showImage = !!avatarUrl && !hasError;
+
+  return (
+    <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
+      {showImage ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          className="h-full w-full"
+          onError={() => setHasError(true)}
+        />
+      ) : (
+        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+          <Text className="text-[12px] font-bold text-[#8b5e34]">
+            {getInitials(name)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 type Props = {
   loading: boolean;
   preparing?: boolean;
@@ -45,10 +69,12 @@ type Props = {
   onMessageLongPress: (message: ChatMessage, event?: any) => void;
   onReplyPress: (replyToMsgId: string) => void;
   onImagePreview: (imageUrl: string) => void;
+  onCallPress?: (message: ChatMessage) => void;
   onReactionPress?: (message: ChatMessage, emoji: string) => void;
   onMediaReady?: (messageId: string) => void;
   accentColor: string;
   mineAccentColor: string;
+  footerComponent?: React.ReactNode;
 };
 
 export const ChatMessagesList: React.FC<Props> = ({
@@ -66,10 +92,12 @@ export const ChatMessagesList: React.FC<Props> = ({
   onMessageLongPress,
   onReplyPress,
   onImagePreview,
+  onCallPress,
   onReactionPress,
   onMediaReady,
   accentColor,
   mineAccentColor,
+  footerComponent,
   conversation,
 }) => {
   const { user, chatUserId } = useAuth();
@@ -86,7 +114,7 @@ export const ChatMessagesList: React.FC<Props> = ({
         drawDistance={560}
         scrollEventThrottle={16}
         onContentSizeChange={onContentSizeChange}
-        contentContainerStyle={{ paddingTop: 12, paddingBottom: 16 }}
+        contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
         // showsVerticalScrollIndicator={false}
         renderItem={({ item, index }) => {
         const prevMessage = messages[index - 1];
@@ -152,17 +180,7 @@ export const ChatMessagesList: React.FC<Props> = ({
               style={isHighlighted ? { paddingVertical: 4 } : undefined}
             >
               {!isMine && clusterStart ? (
-                <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
-                  {senderAvatarUrl ? (
-                    <ExpoImage source={{ uri: senderAvatarUrl }} cachePolicy="memory-disk" className="h-full w-full" contentFit="cover" />
-                  ) : (
-                    <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
-                      <Text className="text-[12px] font-bold text-[#8b5e34]">
-                        {getInitials(senderName)}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                <SenderAvatar name={senderName} avatarUrl={senderAvatarUrl} />
               ) : !isMine ? (
                 <View className="mr-2 h-8 w-8" />
               ) : null}
@@ -196,21 +214,23 @@ export const ChatMessagesList: React.FC<Props> = ({
                             onImagePreview(selected);
                           }
                         }
+                      : isCallMessageType(item.type)
+                        ? () => onCallPress?.(item)
                       : undefined
                   }
                   onLongPress={(event) => onMessageLongPress(item, event)}
                   onReplyPress={() => item.reply_to_msg_id && onReplyPress(item.reply_to_msg_id)}
                   onImagePress={(imageIndex) => {
+                    // Keep extraction logic aligned with ChatImageMessage (content items -> url only),
+                    // otherwise indexes can diverge and open the wrong image.
                     const imageItems = Array.isArray(item.content)
                       ? item.content
-                          .map((content) => {
-                            if (typeof content === 'string') return content;
-                            if (!content || typeof content !== 'object') return '';
-                            return String(content.url || content.text || content.name || '');
-                          })
-                          .filter((value): value is string => !!value)
+                          .map((content) => (typeof content === 'string' ? content : (content as any)?.url))
+                          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+                          .map((value) => resolveMediaUrl(String(value)))
                       : [];
-                    const selected = resolveMediaUrl(imageItems[imageIndex] || '');
+
+                    const selected = imageItems[imageIndex];
                     if (selected) onImagePreview(selected);
                   }}
                 />
@@ -227,6 +247,9 @@ export const ChatMessagesList: React.FC<Props> = ({
               Hãy gửi lời chào đầu tiên để bắt đầu cuộc trò chuyện.
             </Text>
           </View>
+        }
+        ListFooterComponent={
+          footerComponent ? <View className="pb-2 pt-1">{footerComponent}</View> : null
         }
       />
 

@@ -5,6 +5,7 @@ import type {
   ChatOlderMessagesResponse,
 } from '@/types/entities/chat';
 import type {
+  ChatForwardMessageResponse,
   ChatLinkMessage,
   ChatMessageContextResponse,
   ChatPresignedUrlResponse,
@@ -134,6 +135,20 @@ export const chatMessageApi = {
 
   async sendMessage(payload: SendMessagePayload): Promise<ChatMessage> {
     return await chatApiClient.post('/messages', payload);
+  },
+
+  async forwardMessage(
+    originalMsgId: string,
+    conversationId: string,
+    targetConversationIds: string[],
+    senderId: string,
+  ): Promise<ChatForwardMessageResponse> {
+    return await chatApiClient.post('/messages/forward', {
+      originalMsgId,
+      conversationId,
+      targetConversationIds,
+      senderId,
+    });
   },
 
   async reactToMessage(

@@ -1,6 +1,56 @@
 import type { ChatConversation, ChatMessage } from '@/types';
 import { MEDIA_CONFIG } from '@/configuration/api';
 
+const CUSTOM_SHORTCODE_TO_EMOJI_MAP: Record<string, string> = {
+  ':D': '😃',
+  '<3': '❤️',
+  ':)': '🙂',
+  ':(': '☹️',
+  ';)': '😉',
+  ':P': '😛',
+  ':O': '😲',
+  ':*': '😘',
+  '8)': '😎',
+  '>:(': '😠',
+  ':/': '😕',
+  ":'(": '😭',
+  '-_-': '😑',
+  'O:)': '😇',
+  '3:)': '😈',
+  'o.O': '🧐',
+  '(y)': '👍',
+  '(n)': '👎',
+  '(^^^)': '🦈',
+  '<(")': '🐧',
+};
+
+const CUSTOM_SHORTCODES_SORTED_BY_LENGTH = Object.keys(CUSTOM_SHORTCODE_TO_EMOJI_MAP).sort(
+  (a, b) => b.length - a.length,
+);
+
+const escapeRegExp = (value: string): string => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+export const convertDisplayShortcodeToEmoji = (text: string): string => {
+  if (!text || typeof text !== 'string') {
+    return String(text || '');
+  }
+
+  let normalized = text;
+
+  for (const shortcode of CUSTOM_SHORTCODES_SORTED_BY_LENGTH) {
+    const escapedShortcode = escapeRegExp(shortcode);
+    const pattern = new RegExp(`(^|\\s)(${escapedShortcode})(?=\\s|$)`, 'g');
+
+    normalized = normalized.replace(pattern, (_match, leadingWhitespace: string) => {
+      return `${leadingWhitespace}${CUSTOM_SHORTCODE_TO_EMOJI_MAP[shortcode]}`;
+    });
+  }
+
+  return normalized;
+};
+
 const getFilenameFromValue = (value: string) => {
   const cleanValue = String(value || '').trim();
   if (!cleanValue) return '';
@@ -75,6 +125,18 @@ export const getOptimizedImageUrl = (
 export const isSystemMessageType = (type?: string | null) =>
   String(type || '').toLowerCase().startsWith('system');
 
+export const isCallMessageType = (type?: string | null) => {
+  const normalizedType = String(type || '').toLowerCase();
+  return [
+    'call_start',
+    'call_join',
+    'call_end',
+    'call_missed',
+    'call_cancel',
+    'call_no_answer',
+  ].includes(normalizedType);
+};
+
 export const getMessageBodyText = (message: ChatMessage) => {
   if (message.is_deleted) return 'Tin nhắn đã bị xóa';
   if (message.is_revoked) return 'Tin nhắn đã được thu hồi';
@@ -91,7 +153,23 @@ export const getMessageBodyText = (message: ChatMessage) => {
         : '';
 
   if (isSystemMessageType(message.type)) {
-    return String(rawValue || '').trim() || 'Thông báo hệ thống';
+    return convertDisplayShortcodeToEmoji(String(rawValue || '').trim()) || 'Thông báo hệ thống';
+  }
+
+  if (isCallMessageType(message.type)) {
+    const normalizedType = String(message.type || '').toLowerCase();
+    const normalizedRaw = String(rawValue || '').toLowerCase();
+    const isVideoCall = /video/i.test(normalizedRaw);
+
+    if (normalizedType === 'call_missed' || normalizedType === 'call_cancel' || normalizedType === 'call_no_answer') {
+      return `Đã bỏ lỡ cuộc gọi ${isVideoCall ? 'video' : 'thoại'}`;
+    }
+
+    if (normalizedType === 'call_end') {
+      return `Cuộc gọi ${isVideoCall ? 'video' : 'thoại'} đã kết thúc`;
+    }
+
+    return `Cuộc gọi ${isVideoCall ? 'video' : 'thoại'}`;
   }
 
   if (message.type === 'image') {
@@ -106,7 +184,7 @@ export const getMessageBodyText = (message: ChatMessage) => {
     return filename || (message.type === 'video' ? '[Video]' : message.type === 'audio' ? '[Âm thanh]' : '[Tệp tin]');
   }
 
-  return String(rawValue || '').trim() || 'Tin nhắn';
+  return convertDisplayShortcodeToEmoji(String(rawValue || '').trim()) || 'Tin nhắn';
 };
 
 export const formatConversationTime = (value?: string | null) => {

@@ -8,11 +8,9 @@ interface ChatComposerProps {
   value: string;
   onChangeText: (value: string) => void;
   onSend: () => void;
-  onToggleEmoji?: () => void;
   onToggleImagePanel?: () => void;
   onToggleVoicePanel?: () => void;
   onPickFile?: () => void;
-  emojiActive?: boolean;
   imagePanelActive?: boolean;
   voicePanelActive?: boolean;
   replyToMessage?: ChatMessage | null;
@@ -30,11 +28,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   value,
   onChangeText,
   onSend,
-  onToggleEmoji,
   onToggleImagePanel,
   onToggleVoicePanel,
   onPickFile,
-  emojiActive = false,
   imagePanelActive = false,
   voicePanelActive = false,
   replyToMessage,
@@ -82,17 +78,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         </View>
       ) : (
         <View className="flex-row items-center rounded-[26px] border border-slate-200 bg-slate-50 px-3 py-2">
-          <Pressable
-            className={actionButtonClass}
-            onPress={() => {
-              Keyboard.dismiss();
-              textInputRef.current?.blur();
-              onToggleEmoji?.();
-            }}
-            disabled={disabled}
-          >
-            <Feather name="smile" size={18} color={emojiActive ? accentColor : '#64748b'} />
-          </Pressable>
 
           <TextInput
             ref={textInputRef}

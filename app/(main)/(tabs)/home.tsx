@@ -364,7 +364,6 @@ export default function HomeScreen() {
       if (Date.now() < suppressSocketRefreshUntilRef.current) {
         return;
       }
-      setIsRefreshing(true);
       void loadConversationsRef.current();
     };
 
@@ -438,7 +437,6 @@ export default function HomeScreen() {
     async (userId: string) => {
       await setChatUserId(userId);
       setPickerVisible(false);
-      setIsRefreshing(true);
       void loadConversations({ force: true });
     },
     [loadConversations, setChatUserId],
