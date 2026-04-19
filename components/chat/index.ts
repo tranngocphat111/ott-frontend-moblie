@@ -7,5 +7,6 @@ export { ChatEmojiPanel } from './ChatEmojiPanel';
 export { ChatVoicePanel } from './ChatVoicePanel';
 export { ChatMediaPanel } from './ChatMediaPanel';
 export { ChatMessagesList } from './ChatMessagesList';
+export { SenderAvatar } from './ChatMessagesList';
 export { ChatImagePreviewModal } from './ChatImagePreviewModal';
 export { MessageReactionsModal } from './modals/MessageReactionsModal';

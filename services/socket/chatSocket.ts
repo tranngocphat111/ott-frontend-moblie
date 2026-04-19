@@ -14,6 +14,7 @@ type ChatSocketEventMap = {
 	giai_tan_nhom: (payload: any) => void;
 	cap_nhat_role: (payload: any) => void;
 	cap_nhat_biet_danh: (payload: any) => void;
+	cap_nhat_phan_loai: (payload: any) => void;
 	xoa_thanh_vien: (payload: any) => void;
 	bi_xoa_khoi_nhom: (payload: any) => void;
 	roi_nhom: (payload: any) => void;
@@ -84,6 +85,11 @@ class ChatSocketService {
 		} else {
 			socket.once('connect', joinAction);
 		}
+	}
+
+	leaveConversation(conversationId: string) {
+		if (!this.socket) return;
+		this.socket.emit('roi_nhom_chat', conversationId);
 	}
 
 	startTyping(conversationId: string, userId: string) {

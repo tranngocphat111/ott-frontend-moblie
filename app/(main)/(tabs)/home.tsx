@@ -370,6 +370,7 @@ export default function HomeScreen() {
     chatSocket.on('tin_nhan', refreshInbox);
     chatSocket.on('tao_phong_moi', refreshInbox);
     chatSocket.on('cap_nhat_nhom', refreshInbox);
+    chatSocket.on('cap_nhat_phan_loai', refreshInbox);
     chatSocket.on('roi_nhom', refreshInbox);
     chatSocket.on('xoa_thanh_vien', refreshInbox);
     chatSocket.on('bi_xoa_khoi_nhom', refreshInbox);
@@ -379,6 +380,7 @@ export default function HomeScreen() {
       chatSocket.off('tin_nhan', refreshInbox);
       chatSocket.off('tao_phong_moi', refreshInbox);
       chatSocket.off('cap_nhat_nhom', refreshInbox);
+      chatSocket.off('cap_nhat_phan_loai', refreshInbox);
       chatSocket.off('roi_nhom', refreshInbox);
       chatSocket.off('xoa_thanh_vien', refreshInbox);
       chatSocket.off('bi_xoa_khoi_nhom', refreshInbox);

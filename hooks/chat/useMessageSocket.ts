@@ -12,6 +12,9 @@ interface UseMessageSocketProps {
   onMessageDeleted: (payload: ChatMessage) => void;
   onTypingStart?: (payload: { conversationId?: string; userId?: string }) => void;
   onTypingStop?: (payload: { conversationId?: string; userId?: string }) => void;
+  onRemovedFromGroup?: (payload: any) => void;
+  onGroupDissolved?: (payload: any) => void;
+  onConversationSynced?: (payload: any) => void;
 }
 
 export function useMessageSocket({
@@ -24,6 +27,9 @@ export function useMessageSocket({
   onMessageDeleted,
   onTypingStart,
   onTypingStop,
+  onRemovedFromGroup,
+  onGroupDissolved,
+  onConversationSynced,
 }: UseMessageSocketProps) {
   useEffect(() => {
     if (!conversationId || !userIdForChat) return;
@@ -46,7 +52,21 @@ export function useMessageSocket({
       chatSocket.on('nguoi_dung_ngung_soan_tin_nhan', onTypingStop as any);
     }
 
+    if (onRemovedFromGroup) {
+      chatSocket.on('bi_xoa_khoi_nhom', onRemovedFromGroup as any);
+    }
+
+    if (onGroupDissolved) {
+      chatSocket.on('giai_tan_nhom', onGroupDissolved as any);
+    }
+
+    if (onConversationSynced) {
+      chatSocket.on('tao_phong_moi', onConversationSynced as any);
+    }
+
     return () => {
+      chatSocket.leaveConversation(conversationId);
+
       chatSocket.off('tin_nhan', onIncomingMessage);
       chatSocket.off('tin_nhan_reaction', onReactionChanged);
       chatSocket.off('tin_nhan_pin', onMessagePinned);
@@ -60,6 +80,18 @@ export function useMessageSocket({
       if (onTypingStop) {
         chatSocket.off('nguoi_dung_ngung_soan_tin_nhan', onTypingStop as any);
       }
+
+      if (onRemovedFromGroup) {
+        chatSocket.off('bi_xoa_khoi_nhom', onRemovedFromGroup as any);
+      }
+
+      if (onGroupDissolved) {
+        chatSocket.off('giai_tan_nhom', onGroupDissolved as any);
+      }
+
+      if (onConversationSynced) {
+        chatSocket.off('tao_phong_moi', onConversationSynced as any);
+      }
     };
   }, [
     conversationId,
@@ -71,5 +103,8 @@ export function useMessageSocket({
     onMessageDeleted,
     onTypingStart,
     onTypingStop,
+    onRemovedFromGroup,
+    onGroupDissolved,
+    onConversationSynced,
   ]);
 }

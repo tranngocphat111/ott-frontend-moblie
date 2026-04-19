@@ -45,7 +45,6 @@ function RootLayoutNav() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
         contentStyle: { backgroundColor: THEME_COLORS.surface.DEFAULT },
       }}
     >
