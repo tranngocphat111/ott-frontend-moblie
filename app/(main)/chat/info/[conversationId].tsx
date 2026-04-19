@@ -31,7 +31,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/Authcontext";
-import { colors, THEME_COLORS } from "@/constants/theme";
+import { colors, fonts, fontSizes, THEME_COLORS } from "@/constants/theme";
 import { ChatApi } from "@/services/api";
 import type { ChatMessage } from "@/types/entities/chat";
 import {
@@ -42,6 +42,7 @@ import {
 } from "@/utils/chat";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
+import { CreateGroupModal } from "@/components/chat/modals/CreateGroupModal";
 
 type InfoTab = "members" | "pinned" | "media" | "files" | "links";
 type StorageTab = "media" | "videos" | "files" | "links" | "audios";
@@ -361,6 +362,18 @@ export default function ChatInfoScreen() {
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   const [updatingGroupAvatar, setUpdatingGroupAvatar] = useState(false);
+  const [createGroupModalVisible, setCreateGroupModalVisible] = useState(false);
+
+  // For 1-1 chats: identify the other user
+  const otherMember = useMemo(
+    () =>
+      !isGroup
+        ? members.find(
+          (m) => String(m.user_id || "") !== String(userIdForChat || ""),
+        )
+        : undefined,
+    [isGroup, members, userIdForChat],
+  );
 
   const openStorageTab = useCallback((nextTab: InfoTab) => {
     if (nextTab === "files") {
@@ -471,7 +484,8 @@ export default function ChatInfoScreen() {
         onPress: async () => {
           try {
             await ChatApi.dissolveGroup(conversationId, userIdForChat);
-            router.back();
+            if (router.dismissAll) router.dismissAll();
+            router.replace("/(main)/(tabs)/home");
           } catch {
             Alert.alert("Lỗi", "Không thể giải tán nhóm");
           }
@@ -674,7 +688,7 @@ export default function ChatInfoScreen() {
             <Text className="ml-1.5 text-[13px] text-black">
               {senderFilter
                 ? senderOptions.find((item) => item.id === senderFilter)
-                    ?.name || "Người gửi"
+                  ?.name || "Người gửi"
                 : "Theo người gửi"}
             </Text>
             <Feather
@@ -755,23 +769,41 @@ export default function ChatInfoScreen() {
                     )}
                   </View>
 
-                  <View className="mt-3 flex-row items-center">
-                    <Text
-                      className="text-[32px] font-semibold text-slate-900"
-                      numberOfLines={1}
-                    >
-                      {title}
-                    </Text>
+                  <View className="mt-3 flex-row justify-center items-center w-full px-10">
+                    {/* Thẻ View bọc Title làm mốc (Relative) */}
+                    <View className="relative">
+                      <Text
+                        style={{
+                          fontSize: fontSizes.xl,
+                          fontFamily: fonts.display,
+                          color: colors.primary[900],
+                        }}
+                        className="font-semibold text-center"
+                        numberOfLines={1}
+                      >
+                        {title}
+                      </Text>
 
-                    {isGroup && canManageGroupProfile && (
-                      <Pressable onPress={handleOpenRenameGroup} className="ml-2 p-1.5">
-                        <Feather
-                          name="edit-2"
-                          size={17}
-                          color={THEME_COLORS.neutral.slate500}
-                        />
-                      </Pressable>
-                    )}
+                      {/* Icon được đặt Absolute để nó "bay" bên cạnh mà không chiếm diện tích trong hàng */}
+                      {isGroup && canManageGroupProfile && (
+                        <Pressable
+                          onPress={handleOpenRenameGroup}
+                          className="absolute p-1"
+                          style={{
+                            left: '100%', // Đẩy icon ra bắt đầu từ điểm kết thúc của Text
+                            marginLeft: 4, // Khoảng cách nhỏ giữa chữ và icon
+                            top: '50%',
+                            transform: [{ translateY: -12 }], // Căn giữa icon theo chiều dọc (điều chỉnh số này tùy size icon)
+                          }}
+                        >
+                          <Feather
+                            name="edit-2"
+                            size={16}
+                            color={THEME_COLORS.neutral.slate500}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
                   </View>
 
                   {isMyDocuments ? (
@@ -858,21 +890,7 @@ export default function ChatInfoScreen() {
                         </Text>
                       </Pressable>
 
-                      <Pressable
-                        onPress={() => openStorageTab("media")}
-                        className="items-center"
-                      >
-                        <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                          <Feather
-                            name="image"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate700}
-                          />
-                        </View>
-                        <Text className="mt-2 text-center text-[12px] text-slate-600">
-                          Đổi{`\n`}hình nền
-                        </Text>
-                      </Pressable>
+
 
                       <Pressable
                         onPress={() => {
@@ -902,26 +920,34 @@ export default function ChatInfoScreen() {
                 {!isMyDocuments && (
                   <>
                     <View className="mt-2 bg-white border-y border-slate-200">
-                      <Pressable
-                        onPress={() => setNicknameModalVisible(true)}
-                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                      >
-                        <View className="flex-row items-center">
+                      {/* Đổi biệt danh - for both group and 1-1 */}
+                      {!isGroup && otherMember && (
+                        <Pressable
+                          onPress={() => {
+                            openNicknameEditor(
+                              otherMember.user_id,
+                              otherMember.nickname || '',
+                            );
+                          }}
+                          className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                        >
+                          <View className="flex-row items-center">
+                            <Feather
+                              name="edit-2"
+                              size={20}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                            <Text className="ml-4 text-[17px] text-slate-800">
+                              Đổi biệt danh
+                            </Text>
+                          </View>
                           <Feather
-                            name="edit-2"
-                            size={20}
+                            name="chevron-right"
+                            size={18}
                             color={THEME_COLORS.neutral.slate400}
                           />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Đổi tên gợi nhớ
-                          </Text>
-                        </View>
-                        <Feather
-                          name="chevron-right"
-                          size={18}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                      </Pressable>
+                        </Pressable>
+                      )}
 
                       <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
                         <View className="flex-row items-center">
@@ -935,7 +961,7 @@ export default function ChatInfoScreen() {
                           </Text>
                         </View>
                         <Switch
-                                                  // Màu của thanh trượt (Track)
+                          // Màu của thanh trượt (Track)
                           trackColor={{
                             false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
                             true: colors.primary[400], // Màu nâu đặc trưng khi bật
@@ -1030,15 +1056,10 @@ export default function ChatInfoScreen() {
                         )}
                       </Pressable>
 
-                      {!isGroup && (
+                      {!isGroup && otherMember && (
                         <>
                           <Pressable
-                            onPress={() => {
-                              Alert.alert(
-                                "Thông báo",
-                                `Tạo nhóm với ${title} sẽ được bật trong bản kế tiếp.`,
-                              );
-                            }}
+                            onPress={() => setCreateGroupModalVisible(true)}
                             className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
                           >
                             <View className="flex-row items-center">
@@ -1632,18 +1653,18 @@ export default function ChatInfoScreen() {
                         typeof content === "string"
                           ? content
                           : String(
-                              (content as any)?.url ||
-                                (content as any)?.text ||
-                                "",
-                            );
+                            (content as any)?.url ||
+                            (content as any)?.text ||
+                            "",
+                          );
                       const fileName =
                         typeof content === "string"
                           ? extractFileName(rawPath) || "Tệp đính kèm"
                           : String(
-                              (content as any)?.name ||
-                                extractFileName(rawPath) ||
-                                "Tệp đính kèm",
-                            );
+                            (content as any)?.name ||
+                            extractFileName(rawPath) ||
+                            "Tệp đính kèm",
+                          );
                       const size =
                         typeof content === "string"
                           ? Number(message.size || 0)
@@ -2025,6 +2046,36 @@ export default function ChatInfoScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {!isGroup && otherMember && (
+        <CreateGroupModal
+          visible={createGroupModalVisible}
+          users={allUsers.filter((u) => u.user_id !== userIdForChat)}
+          preSelectedIds={[otherMember.user_id]}
+          onClose={() => setCreateGroupModalVisible(false)}
+          onCreate={async (name, memberIds, avatarUri) => {
+            if (!userIdForChat) return;
+            try {
+              // Ensure the other user is included
+              const finalMemberIds = Array.from(
+                new Set([...memberIds, otherMember.user_id]),
+              );
+              await ChatApi.createConversation({
+                creatorId: userIdForChat,
+                type: 'group',
+                name,
+                memberIds: finalMemberIds,
+                avatar: avatarUri || '',
+              });
+              setCreateGroupModalVisible(false);
+              router.back();
+            } catch (error) {
+              console.error('Failed to create group:', error);
+              Alert.alert('Lỗi', 'Không thể tạo nhóm. Vui lòng thử lại.');
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

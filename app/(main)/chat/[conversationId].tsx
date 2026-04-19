@@ -1787,6 +1787,19 @@ export default function ChatDetailScreen() {
     closeAllPanels();
   }, [closeAllPanels, isChatLocked]);
 
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setPendingScrollToBottom();
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+    };
+  }, [setPendingScrollToBottom]);
+
   // Setup focus effect
   useFocusEffect(
     useCallback(() => {
@@ -1985,30 +1998,24 @@ export default function ChatDetailScreen() {
 
         if (payload?.deleteForOwner) {
           chatSocket.leaveConversation(String(conversationId));
-          // Owner dissolves group - delete conversation and navigate home
           try {
-            if (!userIdForChat) {
-              router.back();
-              return;
+            if (userIdForChat) {
+              await ChatApi.deleteConversationForMe(conversationId, userIdForChat);
             }
-            await ChatApi.deleteConversationForMe(conversationId, userIdForChat);
           } catch (err) {
             console.error("Error deleting conversation:", err);
           }
-          // Navigate to home after a short delay
           setTimeout(() => {
-            router.back();
+            if (router.dismissAll) router.dismissAll();
+            router.replace("/(main)/(tabs)/home");
           }, 300);
         } else {
           setIsChatLocked(true);
           chatSocket.leaveConversation(String(conversationId));
-          // Other members are routed out immediately
-          setTimeout(() => {
-            router.back();
-          }, 300);
+          void loadConversation();
         }
     },
-    [conversationId, userIdForChat, router],
+    [conversationId, userIdForChat, router, loadConversation],
   );
 
   const handleConversationSynced = useCallback(
@@ -2128,10 +2135,10 @@ export default function ChatDetailScreen() {
 
         {isMyDocuments && (
           <View className="border-b border-[#ead8c7] bg-[#fff9f4] px-3 py-2">
-            <View className="flex-row flex-wrap gap-2">
+            <View className="flex-row flex-wrap gap-1">
               {([
                 { key: 'all', label: 'Tất cả' },
-                { key: 'image', label: 'Ảnh' },
+                { key: 'image', label: 'Ảnh/video' },
                 { key: 'file', label: 'File' },
                 { key: 'link', label: 'Link' },
                 { key: 'text', label: 'Văn bản' },

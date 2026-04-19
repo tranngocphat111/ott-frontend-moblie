@@ -364,14 +364,14 @@ export default function GroupMembersScreen() {
         onRequestClose={() => setActionModalVisible(false)}
       >
         <Pressable
-          className="flex-1 justify-end bg-black/35 px-4 pb-8"
+          className="flex-1 justify-center bg-black/35 px-4 pb-8"
           onPress={() => setActionModalVisible(false)}
         >
           <Pressable
             className="rounded-[28px] bg-white px-5 pb-5 pt-4"
             onPress={() => undefined}
           >
-            <Text className="mb-4 text-center text-[32px] font-semibold text-slate-800">
+            <Text className="mb-4 text-center text-[18px] font-semibold text-slate-800">
               Tùy chọn thành viên
             </Text>
 
@@ -379,7 +379,7 @@ export default function GroupMembersScreen() {
               onPress={handleOpenNicknameModal}
               className="mb-3 rounded-2xl bg-slate-200 py-3"
             >
-              <Text className="text-center text-[30px] font-medium text-slate-800">
+              <Text className="text-center text-[16px] font-medium text-slate-800">
                 Đổi biệt danh
               </Text>
             </Pressable>
@@ -398,7 +398,7 @@ export default function GroupMembersScreen() {
                     onPress={() => void handleMemberRoleUpdate()}
                     className="mb-3 rounded-2xl bg-slate-200 py-3"
                   >
-                    <Text className="text-center text-[30px] font-medium text-slate-800">
+                    <Text className="text-center text-[16px] font-medium text-slate-800">
                       {normalize(member?.roles) === "admin"
                         ? "Gỡ quyền quản trị viên"
                         : "Đặt làm quản trị viên"}
@@ -409,7 +409,7 @@ export default function GroupMembersScreen() {
                     onPress={handleOpenRemoveConfirmation}
                     className="mb-3 rounded-2xl bg-red-100 py-3"
                   >
-                    <Text className="text-center text-[30px] font-medium text-red-600">
+                    <Text className="text-center text-[16px] font-medium text-red-600">
                       Xóa khỏi nhóm
                     </Text>
                   </Pressable>
@@ -421,7 +421,7 @@ export default function GroupMembersScreen() {
               onPress={() => setActionModalVisible(false)}
               className="rounded-2xl bg-slate-200 py-3"
             >
-              <Text className="text-center text-[30px] font-medium text-slate-800">
+              <Text className="text-center text-[16px] font-medium text-slate-800">
                 Hủy
               </Text>
             </Pressable>

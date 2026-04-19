@@ -171,6 +171,7 @@ export const ChatMessagesList: React.FC<Props> = ({
         removeClippedSubviews
         drawDistance={560}
         scrollEventThrottle={16}
+        estimatedItemSize={120}
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
         // showsVerticalScrollIndicator={false}
