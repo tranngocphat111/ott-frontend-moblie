@@ -1,9 +1,16 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +19,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -22,22 +31,28 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/Authcontext";
-import { THEME_COLORS } from "@/constants/theme";
+import { colors, fonts, fontSizes, THEME_COLORS } from "@/constants/theme";
 import { ChatApi } from "@/services/api";
 import type { ChatMessage } from "@/types/entities/chat";
 import {
   getConversationAvatar,
   getConversationTitle,
+  getOptimizedImageUrl,
   resolveMediaUrl,
 } from "@/utils/chat";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
+import { SenderAvatar } from "@/components/chat";
+import { CreateGroupModal } from "@/components/chat/modals/CreateGroupModal";
 
 type InfoTab = "members" | "pinned" | "media" | "files" | "links";
-type StorageTab = "media" | "files" | "links" | "audios";
+type StorageTab = "media" | "videos" | "files" | "links" | "audios";
 type ViewMode = "main" | "storage";
+type StorageFilterMenu = "sender" | "time" | null;
+type TimePreset = "all" | "7d" | "30d" | "90d";
 
 const storageTabs: { key: StorageTab; label: string }[] = [
   { key: "media", label: "Ảnh" },
+  { key: "videos", label: "Video" },
   { key: "files", label: "File" },
   { key: "links", label: "Link" },
   { key: "audios", label: "Tin nhắn thoại" },
@@ -49,6 +64,49 @@ const getFirstContent = (message: ChatMessage) => {
   if (first && typeof first === "object")
     return first.url || first.text || first.name || "";
   return "";
+};
+
+const extractFileName = (value: string) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const byPath = raw.split("/").pop() || raw;
+  return decodeURIComponent(
+    (byPath.split("?")[0] || byPath).replace(/^[a-f0-9]+_/i, ""),
+  );
+};
+
+const getFileTypeIcon = (fileName: string): string => {
+  const ext =
+    String(fileName || "")
+      .split(".")
+      .pop()
+      ?.toLowerCase() || "";
+  if (/^(jpg|jpeg|png|gif|webp)$/.test(ext)) return "image";
+  if (/^(pdf)$/.test(ext)) return "file-text";
+  if (/^(doc|docx|txt)$/.test(ext)) return "file-text";
+  if (/^(xls|xlsx|csv)$/.test(ext)) return "bar-chart-2";
+  if (/^(ppt|pptx)$/.test(ext)) return "layers";
+  if (/^(zip|rar|7z|tar|gz)$/.test(ext)) return "archive";
+  if (/^(mp3|m4a|wav|flac|aac)$/.test(ext)) return "music";
+  if (/^(mp4|avi|mov|mkv|flv)$/.test(ext)) return "video";
+  return "paperclip";
+};
+
+const getFileTypeColor = (fileName: string) => {
+  const ext =
+    String(fileName || "")
+      .split(".")
+      .pop()
+      ?.toLowerCase() || "";
+  if (/^(jpg|jpeg|png|gif|webp)$/.test(ext)) return "#ea580c";
+  if (/^(pdf)$/.test(ext)) return "#dc2626";
+  if (/^(doc|docx|txt)$/.test(ext)) return "#2563eb";
+  if (/^(xls|xlsx|csv)$/.test(ext)) return "#16a34a";
+  if (/^(ppt|pptx)$/.test(ext)) return "#9333ea";
+  if (/^(zip|rar|7z|tar|gz)$/.test(ext)) return "#eab308";
+  if (/^(mp3|m4a|wav|flac|aac)$/.test(ext)) return "#7c3aed";
+  if (/^(mp4|avi|mov|mkv|flv)$/.test(ext)) return "#0f766e";
+  return THEME_COLORS.neutral.slate600;
 };
 
 const getDateGroupLabel = (value?: string | null) => {
@@ -77,6 +135,41 @@ const sortByNewest = <T extends { createdAt?: string; created_at?: string }>(
     ).getTime();
     return rightTime - leftTime;
   });
+};
+
+const filterByPreset = <T extends { createdAt?: string; created_at?: string }>(
+  items: T[],
+  preset: TimePreset,
+) => {
+  if (preset === "all") return items;
+
+  const now = Date.now();
+  const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 90;
+  const minTime = now - days * 24 * 60 * 60 * 1000;
+
+  return items.filter((item) => {
+    const raw = item.createdAt || item.created_at;
+    const time = new Date(String(raw || "")).getTime();
+    if (Number.isNaN(time)) return false;
+    return time >= minTime;
+  });
+};
+
+const isVideoMessage = (message: ChatMessage) => {
+  const type = String(message?.type || "").toLowerCase();
+  if (type === "video") return true;
+
+  const source = getFirstContent(message).toLowerCase();
+  return /\.(mp4|mov|avi|mkv|webm)(\?|$)/.test(source);
+};
+
+const isImageMessage = (message: ChatMessage) => {
+  const type = String(message?.type || "").toLowerCase();
+  if (type === "image") return true;
+  if (type === "video") return false;
+
+  const source = getFirstContent(message).toLowerCase();
+  return /\.(jpg|jpeg|png|gif|webp|bmp|heic)(\?|$)/.test(source);
 };
 
 export default function ChatInfoScreen() {
@@ -119,6 +212,12 @@ export default function ChatInfoScreen() {
   const title = getConversationTitle(conversation, userIdForChat);
   const avatar = getConversationAvatar(conversation, userIdForChat);
   const isGroup = conversation?.type === "group";
+  const isMyDocuments = Boolean(
+    conversation?.is_self_conversation ||
+    String(conversation?.name || "")
+      .trim()
+      .toLowerCase() === "my documents",
+  );
   const myMember = useMemo(
     () =>
       members.find(
@@ -128,6 +227,8 @@ export default function ChatInfoScreen() {
     [members, userIdForChat],
   );
   const isAdmin = String(myMember?.roles || "") === "admin";
+  const isOwner = String(conversation?.created_by || "") === String(userIdForChat || "");
+  const canManageGroupProfile = isGroup && isAdmin;
   const memberIds = useMemo(
     () => new Set(members.map((member) => String(member.user_id || ""))),
     [members],
@@ -140,73 +241,7 @@ export default function ChatInfoScreen() {
     [allUsers, memberIds],
   );
 
-  // Member management
-  const handleMemberPress = useCallback(
-    (member: any) => {
-      const memberUserId = String(member?.user_id || "");
-      const isSelf = memberUserId === String(userIdForChat || "");
-
-      const options: {
-        text: string;
-        style?: "cancel" | "destructive";
-        onPress?: () => void;
-      }[] = [
-        {
-          text: "Đổi biệt danh",
-          onPress: () => {
-            const currentName =
-              member?.nickname || member?.user?.name || member?.name || "";
-            openNicknameEditor(memberUserId, currentName);
-          },
-        },
-      ];
-
-      if (isAdmin && !isSelf) {
-        const nextRole = member?.roles === "admin" ? "user" : "admin";
-        options.push({
-          text:
-            nextRole === "admin"
-              ? "Đặt làm quản trị viên"
-              : "Gỡ quyền quản trị viên",
-          onPress: async () => {
-            if (!conversationId || !userIdForChat) return;
-            try {
-              await ChatApi.updateMemberRole(
-                conversationId,
-                memberUserId,
-                userIdForChat,
-                nextRole,
-              );
-              await loadInfo();
-            } catch {
-              Alert.alert("Lỗi", "Không thể cập nhật vai trò");
-            }
-          },
-        });
-        options.push({
-          text: "Xóa khỏi nhóm",
-          style: "destructive",
-          onPress: async () => {
-            if (!conversationId || !userIdForChat) return;
-            try {
-              await ChatApi.removeMember(
-                conversationId,
-                memberUserId,
-                userIdForChat,
-              );
-              await loadInfo();
-            } catch {
-              Alert.alert("Lỗi", "Không thể xóa thành viên");
-            }
-          },
-        });
-      }
-
-      options.push({ text: "Hủy", style: "cancel" });
-      Alert.alert("Tùy chọn thành viên", "", options);
-    },
-    [conversationId, userIdForChat, isAdmin, loadInfo, openNicknameEditor],
-  );
+  // Member options moved to dedicated members screen modal (no default Alert options here).
 
   const handleAddMember = useCallback(
     async (newMemberId: string) => {
@@ -321,8 +356,24 @@ export default function ChatInfoScreen() {
   const [isHiddenConversation, setIsHiddenConversation] = useState(false);
   const [storageTab, setStorageTab] = useState<StorageTab>("media");
   const [senderFilter, setSenderFilter] = useState<string>("");
-  const [videoOnly, setVideoOnly] = useState(false);
   const [timeSortEnabled, setTimeSortEnabled] = useState(true);
+  const [openFilterMenu, setOpenFilterMenu] = useState<StorageFilterMenu>(null);
+  const [timePreset, setTimePreset] = useState<TimePreset>("all");
+  const [nameModalVisible, setNameModalVisible] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState("");
+  const [updatingGroupAvatar, setUpdatingGroupAvatar] = useState(false);
+  const [createGroupModalVisible, setCreateGroupModalVisible] = useState(false);
+
+  // For 1-1 chats: identify the other user
+  const otherMember = useMemo(
+    () =>
+      !isGroup
+        ? members.find(
+          (m) => String(m.user_id || "") !== String(userIdForChat || ""),
+        )
+        : undefined,
+    [isGroup, members, userIdForChat],
+  );
 
   const openStorageTab = useCallback((nextTab: InfoTab) => {
     if (nextTab === "files") {
@@ -336,6 +387,112 @@ export default function ChatInfoScreen() {
     setTab(nextTab);
     setViewMode("storage");
   }, []);
+
+  const handleOpenRenameGroup = useCallback(() => {
+    if (!canManageGroupProfile) {
+      Alert.alert("Thông báo", "Bạn không có quyền đổi tên nhóm.");
+      return;
+    }
+
+    setGroupNameInput(String(conversation?.name || "").trim());
+    setNameModalVisible(true);
+  }, [canManageGroupProfile, conversation?.name]);
+
+  const handleSubmitRenameGroup = useCallback(async () => {
+    if (!conversationId || !userIdForChat || !canManageGroupProfile) return;
+
+    const nextName = String(groupNameInput || "").trim();
+    if (!nextName) {
+      Alert.alert("Thông báo", "Tên nhóm không được để trống.");
+      return;
+    }
+
+    try {
+      await ChatApi.updateConversation(conversationId, {
+        name: nextName,
+        requesterId: userIdForChat,
+      });
+      setNameModalVisible(false);
+      await loadInfo();
+    } catch {
+      Alert.alert("Lỗi", "Không thể đổi tên nhóm");
+    }
+  }, [canManageGroupProfile, conversationId, groupNameInput, loadInfo, userIdForChat]);
+
+  const handlePickGroupAvatar = useCallback(async () => {
+    if (!conversationId || !userIdForChat || !canManageGroupProfile) {
+      Alert.alert("Thông báo", "Bạn không có quyền đổi ảnh nhóm.");
+      return;
+    }
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Thông báo", "Bạn cần cấp quyền truy cập thư viện ảnh.");
+        return;
+      }
+
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.9,
+      });
+
+      if (picked.canceled || !picked.assets?.length) return;
+
+      setUpdatingGroupAvatar(true);
+      const selectedAsset = picked.assets[0];
+      const optimized = await ImageManipulator.manipulateAsync(
+        selectedAsset.uri,
+        [],
+        { compress: 0.25, format: ImageManipulator.SaveFormat.JPEG },
+      );
+
+      const fileName = `group_avatar_${Date.now()}.jpg`;
+      const mimeType = "image/jpeg";
+      const { uploadUrl, key } = await ChatApi.getMessagePresignedUrl(fileName, mimeType);
+
+      if (!uploadUrl || !key) {
+        throw new Error("Không lấy được upload url");
+      }
+
+      await ChatApi.uploadFileToS3(uploadUrl, optimized.uri, mimeType);
+      await ChatApi.updateConversation(conversationId, {
+        avatar: key,
+        requesterId: userIdForChat,
+      });
+      await loadInfo();
+    } catch {
+      Alert.alert("Lỗi", "Không thể đổi ảnh nhóm");
+    } finally {
+      setUpdatingGroupAvatar(false);
+    }
+  }, [canManageGroupProfile, conversationId, loadInfo, userIdForChat]);
+
+  const handleDissolveGroup = useCallback(() => {
+    if (!conversationId || !userIdForChat) return;
+    if (!isOwner) {
+      Alert.alert("Thông báo", "Chỉ trưởng nhóm mới có thể giải tán nhóm.");
+      return;
+    }
+
+    Alert.alert("Giải tán nhóm", "Nhóm sẽ bị xóa với tất cả thành viên. Tiếp tục?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Giải tán",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await ChatApi.dissolveGroup(conversationId, userIdForChat);
+            if (router.dismissAll) router.dismissAll();
+            router.replace("/(main)/(tabs)/home");
+          } catch {
+            Alert.alert("Lỗi", "Không thể giải tán nhóm");
+          }
+        },
+      },
+    ]);
+  }, [conversationId, isOwner, router, userIdForChat]);
 
   // Setup focus
   useFocusEffect(
@@ -368,14 +525,23 @@ export default function ChatInfoScreen() {
   }, [tab, members, pinnedMessages, mediaMessages, fileMessages, linkMessages]);
 
   const senderNameById = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { name: string; avatarUrl: string }>();
     members.forEach((member) => {
       const id = String(member?.user_id || "");
       if (!id) return;
-      map.set(
-        id,
-        String(member?.nickname || member?.user?.name || member?.name || id),
-      );
+      const avatarRaw = String(
+        member?.avatar || member?.user?.avatar || "",
+      ).trim();
+      const avatarUrl =
+        getOptimizedImageUrl(avatarRaw, "avatar") ||
+        resolveMediaUrl(avatarRaw) ||
+        "";
+      map.set(id, {
+        name: String(
+          member?.nickname || member?.user?.name || member?.name || id,
+        ),
+        avatarUrl,
+      });
     });
     return map;
   }, [members]);
@@ -393,7 +559,8 @@ export default function ChatInfoScreen() {
 
     return Array.from(ids).map((id) => ({
       id,
-      name: senderNameById.get(id) || id,
+      name: senderNameById.get(id)?.name || id,
+      avatarUrl: senderNameById.get(id)?.avatarUrl || "",
     }));
   }, [
     fileMessages,
@@ -404,40 +571,62 @@ export default function ChatInfoScreen() {
   ]);
 
   const filteredMedia = useMemo(() => {
-    const base = sortByNewest(mediaMessages).filter((item) => {
-      if (senderFilter && String(item.sender_id || "") !== senderFilter)
-        return false;
-      if (videoOnly && String(item.type || "").toLowerCase() !== "video")
-        return false;
-      return true;
-    });
+    const base = filterByPreset(sortByNewest(mediaMessages), timePreset).filter(
+      (item) => {
+        if (senderFilter && String(item.sender_id || "") !== senderFilter)
+          return false;
+        return isImageMessage(item);
+      },
+    );
 
     return timeSortEnabled ? base : [...base].reverse();
-  }, [mediaMessages, senderFilter, timeSortEnabled, videoOnly]);
+  }, [mediaMessages, senderFilter, timePreset, timeSortEnabled]);
+
+  const filteredVideos = useMemo(() => {
+    const base = filterByPreset(sortByNewest(mediaMessages), timePreset).filter(
+      (item) => {
+        if (senderFilter && String(item.sender_id || "") !== senderFilter) {
+          return false;
+        }
+        return isVideoMessage(item);
+      },
+    );
+
+    return timeSortEnabled ? base : [...base].reverse();
+  }, [mediaMessages, senderFilter, timePreset, timeSortEnabled]);
 
   const filteredFiles = useMemo(() => {
-    const base = sortByNewest(fileMessages).filter(
+    const base = filterByPreset(sortByNewest(fileMessages), timePreset).filter(
       (item) => !senderFilter || String(item.sender_id || "") === senderFilter,
     );
 
     return timeSortEnabled ? base : [...base].reverse();
-  }, [fileMessages, senderFilter, timeSortEnabled]);
+  }, [fileMessages, senderFilter, timePreset, timeSortEnabled]);
 
   const filteredLinks = useMemo(() => {
-    const base = sortByNewest(linkMessages).filter(
+    const base = filterByPreset(sortByNewest(linkMessages), timePreset).filter(
       (item) => !senderFilter || String(item.sender_id || "") === senderFilter,
     );
 
     return timeSortEnabled ? base : [...base].reverse();
-  }, [linkMessages, senderFilter, timeSortEnabled]);
+  }, [linkMessages, senderFilter, timePreset, timeSortEnabled]);
 
   const filteredVoices = useMemo(() => {
-    const base = sortByNewest(voiceMessages).filter(
+    const base = filterByPreset(sortByNewest(voiceMessages), timePreset).filter(
       (item) => !senderFilter || String(item.sender_id || "") === senderFilter,
     );
 
     return timeSortEnabled ? base : [...base].reverse();
-  }, [senderFilter, timeSortEnabled, voiceMessages]);
+  }, [senderFilter, timePreset, timeSortEnabled, voiceMessages]);
+
+  const myDocumentsStorageUsedMb = useMemo(() => {
+    const totalBytes = [
+      ...mediaMessages,
+      ...fileMessages,
+      ...voiceMessages,
+    ].reduce((sum, item) => sum + Number(item?.size || 0), 0);
+    return Math.round((totalBytes / (1024 * 1024)) * 10) / 10;
+  }, [fileMessages, mediaMessages, voiceMessages]);
 
   return (
     <SafeAreaView
@@ -456,9 +645,16 @@ export default function ChatInfoScreen() {
         }}
         className="px-4 pb-3"
       >
-        <View className="flex-row items-center gap-3 px-4 py-1">
+        <View className="flex-row items-center gap-3 px-4 py-1 justify-between">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              if (viewMode === "storage") {
+                setViewMode("main");
+                setOpenFilterMenu(null);
+                return;
+              }
+              router.back();
+            }}
             className="h-10 w-10  items-center justify-center"
           >
             <Feather
@@ -468,17 +664,68 @@ export default function ChatInfoScreen() {
             />
           </Pressable>
 
-          <View className="flex-1">
+          <View className="flex-1 items-center">
             <Text
               className="text-[18px] font-bold text-white"
               numberOfLines={1}
             >
-              Tùy chọn
+              {viewMode === "main" ? "Tùy chọn" : "Ảnh, file, link"}
             </Text>
           </View>
+          <View className="h-10 w-10" />
         </View>
       </LinearGradient>
 
+      {viewMode === "storage" && (
+        <View className="flex-row gap-2  bg-white px-3 py-3">
+          <Pressable
+            onPress={() =>
+              setOpenFilterMenu((prev) => (prev === "sender" ? null : "sender"))
+            }
+            className="flex-row items-center rounded-full border border-[#ccc]  px-3 py-2"
+          >
+            <Feather name="user" size={14} color={THEME_COLORS.neutral.black} />
+            <Text className="ml-1.5 text-[13px] text-black">
+              {senderFilter
+                ? senderOptions.find((item) => item.id === senderFilter)
+                  ?.name || "Người gửi"
+                : "Theo người gửi"}
+            </Text>
+            <Feather
+              name="chevron-down"
+              size={14}
+              color={THEME_COLORS.neutral.black}
+            />
+          </Pressable>
+
+          <Pressable
+            onPress={() =>
+              setOpenFilterMenu((prev) => (prev === "time" ? null : "time"))
+            }
+            className="flex-row items-center rounded-full border border-[#ccc] bg-white/10 px-3 py-2"
+          >
+            <Feather
+              name="clock"
+              size={14}
+              color={THEME_COLORS.neutral.black}
+            />
+            <Text className="ml-1.5 text-[13px] text-black">
+              {timePreset === "all"
+                ? "Theo thời gian"
+                : timePreset === "7d"
+                  ? "7 ngày"
+                  : timePreset === "30d"
+                    ? "30 ngày"
+                    : "3 tháng"}
+            </Text>
+            <Feather
+              name="chevron-down"
+              size={14}
+              color={THEME_COLORS.neutral.black}
+            />
+          </Pressable>
+        </View>
+      )}
       {viewMode === "main" && (
         <>
           <FlatList
@@ -488,553 +735,651 @@ export default function ChatInfoScreen() {
             renderItem={() => (
               <>
                 <View className="items-center bg-white px-4 py-4">
-                  <View className="h-20 w-20 overflow-hidden rounded-full bg-slate-200">
-                    {avatar ? (
-                      <Image
-                        source={{ uri: avatar }}
-                        className="h-full w-full"
-                      />
-                    ) : null}
-                  </View>
-                  <Text
-                    className="mt-3 text-[32px] font-semibold text-slate-900"
-                    numberOfLines={1}
-                  >
-                    {title}
-                  </Text>
-
-                  <View className="mt-4 w-full flex-row items-start justify-around">
-                    <Pressable
-                      onPress={() => openStorageTab("links")}
-                      className="items-center"
-                    >
-                      <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                        <Feather
-                          name="search"
-                          size={20}
-                          color={THEME_COLORS.neutral.slate700}
+                  <View className="relative h-20 w-20">
+                    <View className="h-20 w-20 overflow-hidden rounded-full bg-slate-200 items-center justify-center">
+                      {avatar ? (
+                        <Image
+                          source={{ uri: avatar }}
+                          className="h-full w-full"
                         />
-                      </View>
-                      <Text className="mt-2 text-center text-[12px] text-slate-600">
-                        Tìm{`\n`}tin nhắn
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => {
-                        Alert.alert(
-                          "Thông báo",
-                          "Trang cá nhân sẽ được tích hợp ở bản kế tiếp.",
-                        );
-                      }}
-                      className="items-center"
-                    >
-                      <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                      ) : (
                         <Feather
-                          name="user"
-                          size={20}
-                          color={THEME_COLORS.neutral.slate700}
+                          name="folder"
+                          size={30}
+                          color={THEME_COLORS.primary[600]}
                         />
-                      </View>
-                      <Text className="mt-2 text-center text-[12px] text-slate-600">
-                        Trang{`\n`}cá nhân
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => openStorageTab("media")}
-                      className="items-center"
-                    >
-                      <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                        <Feather
-                          name="image"
-                          size={20}
-                          color={THEME_COLORS.neutral.slate700}
-                        />
-                      </View>
-                      <Text className="mt-2 text-center text-[12px] text-slate-600">
-                        Đổi{`\n`}hình nền
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => {
-                        const current =
-                          participant?.settings?.notification_status || "on";
-                        void handleChangeNotificationStatus(
-                          current === "off" ? "on" : "off",
-                        );
-                      }}
-                      className="items-center"
-                    >
-                      <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                        <Feather
-                          name="bell-off"
-                          size={20}
-                          color={THEME_COLORS.neutral.slate700}
-                        />
-                      </View>
-                      <Text className="mt-2 text-center text-[12px] text-slate-600">
-                        Tắt{`\n`}thông báo
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View className="mt-2 bg-white border-y border-slate-200">
-                  <Pressable
-                    onPress={() => setNicknameModalVisible(true)}
-                    className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="edit-2"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Đổi tên gợi nhớ
-                      </Text>
-                    </View>
-                    <Feather
-                      name="chevron-right"
-                      size={18}
-                      color={THEME_COLORS.neutral.slate400}
-                    />
-                  </Pressable>
-
-                  <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="star"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Đánh dấu bạn thân
-                      </Text>
-                    </View>
-                    <Switch
-                      value={isBestFriend}
-                      onValueChange={setIsBestFriend}
-                    />
-                  </View>
-
-                  <Pressable
-                    onPress={() => openStorageTab("pinned")}
-                    className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="clock"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Nhật ký chung
-                      </Text>
-                    </View>
-                    <Feather
-                      name="chevron-right"
-                      size={18}
-                      color={THEME_COLORS.neutral.slate400}
-                    />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => openStorageTab("media")}
-                    className="px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="mb-3 flex-row items-center justify-between">
-                      <View className="flex-row items-center">
-                        <Feather
-                          name="image"
-                          size={20}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                        <Text className="ml-4 text-[17px] text-slate-800">
-                          Ảnh, file, link
-                        </Text>
-                      </View>
-                      <Feather
-                        name="chevron-right"
-                        size={18}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
+                      )}
                     </View>
 
-                    <FlatList
-                      data={mediaMessages.slice(0, 4)}
-                      horizontal
-                      keyExtractor={(item, index) =>
-                        String(item.msg_id || item._id || index)
-                      }
-                      ListFooterComponent={
-                        <View className="ml-2 h-14 w-14 items-center justify-center rounded-lg bg-slate-100">
+                    {isGroup && canManageGroupProfile && (
+                      <Pressable
+                        onPress={() => void handlePickGroupAvatar()}
+                        className="absolute bottom-0 right-0 h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white"
+                      >
+                        {updatingGroupAvatar ? (
+                          <ActivityIndicator size="small" color={THEME_COLORS.primary[600]} />
+                        ) : (
                           <Feather
-                            name="arrow-right"
+                            name="camera"
                             size={16}
-                            color={THEME_COLORS.primary[600]}
+                            color={THEME_COLORS.neutral.slate700}
                           />
-                        </View>
-                      }
-                      renderItem={({ item }) => {
-                        const content = getFirstContent(item);
-                        const resolved = resolveMediaUrl(content);
-                        if (!resolved) return null;
-                        return (
-                          <View className="mr-2 h-14 w-14 overflow-hidden rounded-lg bg-slate-200">
-                            <Image
-                              source={{ uri: resolved }}
-                              className="h-full w-full"
-                            />
-                          </View>
-                        );
-                      }}
-                    />
-                  </Pressable>
-
-                  {!isGroup && (
-                    <>
-                      <Pressable
-                        onPress={() => {
-                          Alert.alert(
-                            "Thông báo",
-                            `Tạo nhóm với ${title} sẽ được bật trong bản kế tiếp.`,
-                          );
-                        }}
-                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                      >
-                        <View className="flex-row items-center">
-                          <Feather
-                            name="users"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Tạo nhóm với {title}
-                          </Text>
-                        </View>
-                        <Feather
-                          name="chevron-right"
-                          size={18}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
+                        )}
                       </Pressable>
+                    )}
+                  </View>
 
-                      <Pressable
-                        onPress={() => {
-                          Alert.alert(
-                            "Thông báo",
-                            `Thêm ${title} vào nhóm sẽ được bật trong bản kế tiếp.`,
-                          );
+                  <View className="mt-3 flex-row justify-center items-center w-full px-10">
+                    {/* Thẻ View bọc Title làm mốc (Relative) */}
+                    <View className="relative">
+                      <Text
+                        style={{
+                          fontSize: fontSizes.xl,
+                          fontFamily: fonts.display,
+                          color: colors.primary[900],
                         }}
-                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                        className="font-semibold text-center"
+                        numberOfLines={1}
                       >
-                        <View className="flex-row items-center">
-                          <Feather
-                            name="user-plus"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Thêm {title} vào nhóm
-                          </Text>
-                        </View>
-                        <Feather
-                          name="chevron-right"
-                          size={18}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                      </Pressable>
-                    </>
-                  )}
+                        {title}
+                      </Text>
 
-                  {isGroup && (
-                    <Pressable
-                      onPress={() => openStorageTab("members")}
-                      className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                    >
-                      <View className="flex-row items-center">
-                        <Feather
-                          name="users"
-                          size={20}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                        <Text className="ml-4 text-[17px] text-slate-800">
-                          Xem thành viên nhóm ({members.length})
+                      {/* Icon được đặt Absolute để nó "bay" bên cạnh mà không chiếm diện tích trong hàng */}
+                      {isGroup && canManageGroupProfile && (
+                        <Pressable
+                          onPress={handleOpenRenameGroup}
+                          className="absolute p-1"
+                          style={{
+                            left: '100%', // Đẩy icon ra bắt đầu từ điểm kết thúc của Text
+                            marginLeft: 4, // Khoảng cách nhỏ giữa chữ và icon
+                            top: '50%',
+                            transform: [{ translateY: -12 }], // Căn giữa icon theo chiều dọc (điều chỉnh số này tùy size icon)
+                          }}
+                        >
+                          <Feather
+                            name="edit-2"
+                            size={16}
+                            color={THEME_COLORS.neutral.slate500}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  {isMyDocuments ? (
+                    <View className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-[16px] font-semibold text-slate-800">
+                          Dung lượng
+                        </Text>
+                        <Text className="text-[14px] text-slate-600">
+                          {myDocumentsStorageUsedMb} MB / 500 MB
                         </Text>
                       </View>
-                      <Feather
-                        name="chevron-right"
-                        size={18}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                    </Pressable>
+                      <View className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                        <View
+                          className="h-full rounded-full bg-primary-600"
+                          style={{
+                            width: `${Math.min(100, (myDocumentsStorageUsedMb / 500) * 100)}%`,
+                          }}
+                        />
+                      </View>
+                      <View className="mt-3 flex-row justify-between">
+                        <Pressable className="rounded-full bg-primary-100 px-3 py-2">
+                          <Text className="text-[12px] font-semibold text-primary-700">
+                            Thêm dung lượng
+                          </Text>
+                        </Pressable>
+                        <Pressable className="rounded-full bg-slate-200 px-3 py-2">
+                          <Text className="text-[12px] font-semibold text-slate-700">
+                            Xem và dọn dẹp
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : (
+                    <View className="mt-4 w-full flex-row items-start justify-around">
+                      <Pressable
+                        onPress={() => openStorageTab("links")}
+                        className="items-center"
+                      >
+                        <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                          <Feather
+                            name="search"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate700}
+                          />
+                        </View>
+                        <Text className="mt-2 text-center text-[12px] text-slate-600">
+                          Tìm{`\n`}tin nhắn
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => {
+                          if (isGroup) {
+                            if (!isAdmin) {
+                              Alert.alert(
+                                "Thông báo",
+                                "Bạn không có quyền thêm thành viên.",
+                              );
+                              return;
+                            }
+                            setMemberModalVisible(true);
+                            return;
+                          }
+
+                          Alert.alert(
+                            "Thông báo",
+                            "Trang cá nhân sẽ được tích hợp ở bản kế tiếp.",
+                          );
+                        }}
+                        className="items-center"
+                      >
+                        <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                          <Feather
+                            name={isGroup ? "user-plus" : "user"}
+                            size={20}
+                            color={THEME_COLORS.neutral.slate700}
+                          />
+                        </View>
+                        <Text className="mt-2 text-center text-[12px] text-slate-600">
+                          {isGroup
+                            ? `Thêm${`\n`}thành viên`
+                            : `Trang${`\n`}cá nhân`}
+                        </Text>
+                      </Pressable>
+
+
+
+                      <Pressable
+                        onPress={() => {
+                          const current =
+                            participant?.settings?.notification_status || "on";
+                          void handleChangeNotificationStatus(
+                            current === "off" ? "on" : "off",
+                          );
+                        }}
+                        className="items-center"
+                      >
+                        <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                          <Feather
+                            name="bell-off"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate700}
+                          />
+                        </View>
+                        <Text className="mt-2 text-center text-[12px] text-slate-600">
+                          Tắt{`\n`}thông báo
+                        </Text>
+                      </Pressable>
+                    </View>
                   )}
                 </View>
 
-                <View className="mt-2 bg-white border-y border-slate-200">
-                  <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="bookmark"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Ghim trò chuyện
-                      </Text>
-                    </View>
-                    <Switch
-                      value={Boolean(participant?.settings?.is_pinned)}
-                      onValueChange={() => void handleTogglePinConversation()}
-                    />
-                  </View>
-
-                  <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="eye-off"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Ẩn trò chuyện
-                      </Text>
-                    </View>
-                    <Switch
-                      value={isHiddenConversation}
-                      onValueChange={setIsHiddenConversation}
-                    />
-                  </View>
-
-                  <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="phone-call"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Báo cuộc gọi đến
-                      </Text>
-                    </View>
-                    <Switch
-                      value={
-                        (participant?.settings?.notification_status || "on") !==
-                        "off"
-                      }
-                      onValueChange={(next) =>
-                        void handleChangeNotificationStatus(next ? "on" : "off")
-                      }
-                    />
-                  </View>
-
-                  <Pressable
-                    onPress={() => openStorageTab("links")}
-                    className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="settings"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Cài đặt cá nhân
-                      </Text>
-                    </View>
-                    <Feather
-                      name="chevron-right"
-                      size={18}
-                      color={THEME_COLORS.neutral.slate400}
-                    />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() =>
-                      Alert.alert(
-                        "Tin nhắn tự xóa",
-                        "Tùy chọn tin nhắn tự xóa sẽ được bổ sung trong bản tiếp theo.",
-                      )
-                    }
-                    className="px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center">
-                        <Feather
-                          name="clock"
-                          size={20}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                        <View className="ml-4">
-                          <Text className="text-[17px] text-slate-800">
-                            Tin nhắn tự xóa
-                          </Text>
-                          <Text className="text-[13px] text-slate-500">
-                            Không tự xóa
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </Pressable>
-                </View>
-
-                <View className="mt-2 bg-white border-y border-slate-200">
-                  <Pressable
-                    onPress={() =>
-                      Alert.alert(
-                        "Báo xấu",
-                        "Chức năng báo xấu sẽ được tích hợp trong bản tới.",
-                      )
-                    }
-                    className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="alert-triangle"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Báo xấu
-                      </Text>
-                    </View>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() =>
-                      Alert.alert(
-                        "Quản lý chặn",
-                        "Chức năng quản lý chặn sẽ được tích hợp trong bản tới.",
-                      )
-                    }
-                    className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="slash"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Quản lý chặn
-                      </Text>
-                    </View>
-                    <Feather
-                      name="chevron-right"
-                      size={18}
-                      color={THEME_COLORS.neutral.slate400}
-                    />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => openStorageTab("files")}
-                    className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="pie-chart"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Dung lượng trò chuyện
-                      </Text>
-                    </View>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={handleDeleteConversation}
-                    className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                  >
-                    <View className="flex-row items-center">
-                      <Feather
-                        name="trash"
-                        size={20}
-                        color={THEME_COLORS.neutral.slate400}
-                      />
-                      <Text className="ml-4 text-[17px] text-slate-800">
-                        Xóa lịch sử trò chuyện
-                      </Text>
-                    </View>
-                  </Pressable>
-
-                  {isGroup && (
-                    <>
-                      {isAdmin && (
+                {!isMyDocuments && (
+                  <>
+                    <View className="mt-2 bg-white border-y border-slate-200">
+                      {/* Đổi biệt danh - for both group and 1-1 */}
+                      {!isGroup && otherMember && (
                         <Pressable
-                          onPress={() => setMemberModalVisible(true)}
+                          onPress={() => {
+                            openNicknameEditor(
+                              otherMember.user_id,
+                              otherMember.nickname || '',
+                            );
+                          }}
                           className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
                         >
                           <View className="flex-row items-center">
                             <Feather
-                              name="user-plus"
+                              name="edit-2"
                               size={20}
-                              color={THEME_COLORS.primary[600]}
+                              color={THEME_COLORS.neutral.slate400}
                             />
                             <Text className="ml-4 text-[17px] text-slate-800">
-                              Thêm thành viên
+                              Đổi biệt danh
                             </Text>
                           </View>
+                          <Feather
+                            name="chevron-right"
+                            size={18}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
                         </Pressable>
                       )}
 
+                      <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="star"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Đánh dấu bạn thân
+                          </Text>
+                        </View>
+                        <Switch
+                          // Màu của thanh trượt (Track)
+                          trackColor={{
+                            false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
+                            true: colors.primary[400], // Màu nâu đặc trưng khi bật
+                          }}
+                          // Màu của nút tròn (Thumb)
+                          thumbColor={
+                            (participant?.settings?.notification_status ||
+                              "on") !== "off"
+                              ? colors.primary[50] // Màu kem nhạt khi bật
+                              : THEME_COLORS.neutral.white // Màu trắng khi tắt
+                          }
+                          // Nền cho iOS để khớp với trạng thái OFF
+                          ios_backgroundColor={THEME_COLORS.neutral.slate300}
+                          value={isBestFriend}
+                          onValueChange={setIsBestFriend}
+                        />
+                      </View>
+
                       <Pressable
-                        onPress={handleLeaveGroup}
-                        className="flex-row items-center justify-between px-4 py-4"
+                        onPress={() => openStorageTab("pinned")}
+                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
                       >
                         <View className="flex-row items-center">
                           <Feather
-                            name="log-out"
+                            name="clock"
                             size={20}
-                            color={THEME_COLORS.error.border}
+                            color={THEME_COLORS.neutral.slate400}
                           />
-                          <Text className="ml-4 text-[17px] text-red-600">
-                            Rời nhóm
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Nhật ký chung
+                          </Text>
+                        </View>
+                        <Feather
+                          name="chevron-right"
+                          size={18}
+                          color={THEME_COLORS.neutral.slate400}
+                        />
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => openStorageTab("media")}
+                        className="px-4 py-4 border-b border-slate-100"
+                      >
+                        <View className="mb-3 flex-row items-center justify-between">
+                          <View className="flex-row items-center">
+                            <Feather
+                              name="image"
+                              size={20}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                            <Text className="ml-4 text-[17px] text-slate-800">
+                              Ảnh, file, link
+                            </Text>
+                          </View>
+                          <Feather
+                            name="chevron-right"
+                            size={18}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                        </View>
+
+                        {!isMyDocuments && (
+                          <FlatList
+                            data={mediaMessages.slice(0, 4)}
+                            horizontal
+                            keyExtractor={(item, index) =>
+                              String(item.msg_id || item._id || index)
+                            }
+                            ListFooterComponent={
+                              <View className="ml-2 h-14 w-14 items-center justify-center rounded-lg bg-slate-100">
+                                <Feather
+                                  name="arrow-right"
+                                  size={16}
+                                  color={THEME_COLORS.primary[600]}
+                                />
+                              </View>
+                            }
+                            renderItem={({ item }) => {
+                              const content = getFirstContent(item);
+                              const resolved = resolveMediaUrl(content);
+                              if (!resolved) return null;
+                              return (
+                                <View className="mr-2 h-14 w-14 overflow-hidden rounded-lg bg-slate-200">
+                                  <Image
+                                    source={{ uri: resolved }}
+                                    className="h-full w-full"
+                                  />
+                                </View>
+                              );
+                            }}
+                          />
+                        )}
+                      </Pressable>
+
+                      {!isGroup && otherMember && (
+                        <>
+                          <Pressable
+                            onPress={() => setCreateGroupModalVisible(true)}
+                            className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                          >
+                            <View className="flex-row items-center">
+                              <Feather
+                                name="users"
+                                size={20}
+                                color={THEME_COLORS.neutral.slate400}
+                              />
+                              <Text className="ml-4 text-[17px] text-slate-800">
+                                Tạo nhóm với {title}
+                              </Text>
+                            </View>
+                            <Feather
+                              name="chevron-right"
+                              size={18}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                          </Pressable>
+
+                          <Pressable
+                            onPress={() => {
+                              Alert.alert(
+                                "Thông báo",
+                                `Thêm ${title} vào nhóm sẽ được bật trong bản kế tiếp.`,
+                              );
+                            }}
+                            className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                          >
+                            <View className="flex-row items-center">
+                              <Feather
+                                name="user-plus"
+                                size={20}
+                                color={THEME_COLORS.neutral.slate400}
+                              />
+                              <Text className="ml-4 text-[17px] text-slate-800">
+                                Thêm {title} vào nhóm
+                              </Text>
+                            </View>
+                            <Feather
+                              name="chevron-right"
+                              size={18}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                          </Pressable>
+                        </>
+                      )}
+
+                      {isGroup && (
+                        <Pressable
+                          onPress={() => {
+                            if (!conversationId) return;
+                            router.push({
+                              pathname: "/chat/info/members/[conversationId]",
+                              params: { conversationId },
+                            });
+                          }}
+                          className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                        >
+                          <View className="flex-row items-center">
+                            <Feather
+                              name="users"
+                              size={20}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                            <Text className="ml-4 text-[17px] text-slate-800">
+                              Xem thành viên nhóm ({members.length})
+                            </Text>
+                          </View>
+                          <Feather
+                            name="chevron-right"
+                            size={18}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
+
+                    <View className="mt-2 bg-white border-y border-slate-200">
+                      <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="bookmark"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Ghim trò chuyện
+                          </Text>
+                        </View>
+                        <Switch
+                          trackColor={{
+                            false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
+                            true: colors.primary[400], // Màu nâu đặc trưng khi bật
+                          }}
+                          // Màu của nút tròn (Thumb)
+                          thumbColor={
+                            (participant?.settings?.notification_status ||
+                              "on") !== "off"
+                              ? colors.primary[50] // Màu kem nhạt khi bật
+                              : THEME_COLORS.neutral.white // Màu trắng khi tắt
+                          }
+                          // Nền cho iOS để khớp với trạng thái OFF
+                          ios_backgroundColor={THEME_COLORS.neutral.slate300}
+                          value={Boolean(participant?.settings?.is_pinned)}
+                          onValueChange={() =>
+                            void handleTogglePinConversation()
+                          }
+                        />
+                      </View>
+
+                      <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="eye-off"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Ẩn trò chuyện
+                          </Text>
+                        </View>
+                        <Switch
+                          trackColor={{
+                            false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
+                            true: colors.primary[400], // Màu nâu đặc trưng khi bật
+                          }}
+                          // Màu của nút tròn (Thumb)
+                          thumbColor={
+                            (participant?.settings?.notification_status ||
+                              "on") !== "off"
+                              ? colors.primary[50] // Màu kem nhạt khi bật
+                              : THEME_COLORS.neutral.white // Màu trắng khi tắt
+                          }
+                          // Nền cho iOS để khớp với trạng thái OFF
+                          ios_backgroundColor={THEME_COLORS.neutral.slate300}
+                          value={isHiddenConversation}
+                          onValueChange={setIsHiddenConversation}
+                        />
+                      </View>
+
+                      <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="phone-call"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Báo cuộc gọi đến
+                          </Text>
+                        </View>
+                        <Switch
+                          // Màu của thanh trượt (Track)
+                          trackColor={{
+                            false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
+                            true: colors.primary[400], // Màu nâu đặc trưng khi bật
+                          }}
+                          // Màu của nút tròn (Thumb)
+                          thumbColor={
+                            (participant?.settings?.notification_status ||
+                              "on") !== "off"
+                              ? colors.primary[50] // Màu kem nhạt khi bật
+                              : THEME_COLORS.neutral.white // Màu trắng khi tắt
+                          }
+                          // Nền cho iOS để khớp với trạng thái OFF
+                          ios_backgroundColor={THEME_COLORS.neutral.slate300}
+                          value={
+                            (participant?.settings?.notification_status ||
+                              "on") !== "off"
+                          }
+                          onValueChange={(next) =>
+                            void handleChangeNotificationStatus(
+                              next ? "on" : "off",
+                            )
+                          }
+                        />
+                      </View>
+
+                      <Pressable
+                        onPress={() => openStorageTab("links")}
+                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                      >
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="settings"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Cài đặt cá nhân
+                          </Text>
+                        </View>
+                        <Feather
+                          name="chevron-right"
+                          size={18}
+                          color={THEME_COLORS.neutral.slate400}
+                        />
+                      </Pressable>
+                    </View>
+
+                    <View className="mt-2 bg-white border-y border-slate-200">
+                      <Pressable
+                        onPress={() =>
+                          Alert.alert(
+                            "Báo xấu",
+                            "Chức năng báo xấu sẽ được tích hợp trong bản tới.",
+                          )
+                        }
+                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                      >
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="alert-triangle"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Báo xấu
                           </Text>
                         </View>
                       </Pressable>
-                    </>
-                  )}
-                </View>
 
-                <View className="mt-2 bg-white px-4 py-3 border-y border-slate-200">
-                  <Text className="mb-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    Phân loại
-                  </Text>
-                  <View className="flex-row flex-wrap gap-2">
-                    <Pressable
-                      onPress={() => handleSelectCategory(null)}
-                      className={`rounded-full px-3 py-2 ${!participant?.settings?.category_id ? "bg-primary-600" : "bg-slate-100"}`}
-                    >
-                      <Text
-                        className={`text-[12px] font-semibold ${!participant?.settings?.category_id ? "text-white" : "text-slate-700"}`}
+                      <Pressable
+                        onPress={() =>
+                          Alert.alert(
+                            "Quản lý chặn",
+                            "Chức năng quản lý chặn sẽ được tích hợp trong bản tới.",
+                          )
+                        }
+                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
                       >
-                        Không phân loại
-                      </Text>
-                    </Pressable>
-
-                    {categories.map((category) => {
-                      const isSelected =
-                        participant?.settings?.category_id === category._id;
-                      return (
-                        <Pressable
-                          key={category._id}
-                          onPress={() => handleSelectCategory(category._id)}
-                          className={`rounded-full px-3 py-2 ${isSelected ? "bg-primary-600" : "bg-slate-100"}`}
-                        >
-                          <Text
-                            className={`text-[12px] font-semibold ${isSelected ? "text-white" : "text-slate-700"}`}
-                          >
-                            {category.name}
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="slash"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Quản lý chặn
                           </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
+                        </View>
+                        <Feather
+                          name="chevron-right"
+                          size={18}
+                          color={THEME_COLORS.neutral.slate400}
+                        />
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => openStorageTab("files")}
+                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                      >
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="pie-chart"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Dung lượng trò chuyện
+                          </Text>
+                        </View>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={handleDeleteConversation}
+                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                      >
+                        <View className="flex-row items-center">
+                          <Feather
+                            name="trash"
+                            size={20}
+                            color={THEME_COLORS.neutral.slate400}
+                          />
+                          <Text className="ml-4 text-[17px] text-slate-800">
+                            Xóa lịch sử trò chuyện
+                          </Text>
+                        </View>
+                      </Pressable>
+
+                      {isGroup && (
+                        <>
+                          {isOwner && (
+                            <Pressable
+                              onPress={handleDissolveGroup}
+                              className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                            >
+                              <View className="flex-row items-center">
+                                <Feather
+                                  name="slash"
+                                  size={20}
+                                  color={THEME_COLORS.error.border}
+                                />
+                                <Text className="ml-4 text-[17px] text-red-600">
+                                  Giải tán nhóm
+                                </Text>
+                              </View>
+                            </Pressable>
+                          )}
+
+                          <Pressable
+                            onPress={handleLeaveGroup}
+                            className="flex-row items-center justify-between px-4 py-4"
+                          >
+                            <View className="flex-row items-center">
+                              <Feather
+                                name="log-out"
+                                size={20}
+                                color={THEME_COLORS.error.border}
+                              />
+                              <Text className="ml-4 text-[17px] text-red-600">
+                                Rời nhóm
+                              </Text>
+                            </View>
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+                  </>
+                )}
               </>
             )}
           />
@@ -1043,65 +1388,103 @@ export default function ChatInfoScreen() {
 
       {viewMode === "storage" && (
         <>
-          <LinearGradient
-            colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            className="px-4 pb-3"
-          >
-            <View className="mt-2 flex-row items-center justify-between">
-              <Pressable
-                onPress={() => setViewMode("main")}
-                className="h-10 w-10 items-center justify-center rounded-full bg-white/15"
-              >
-                <Feather
-                  name="chevron-left"
-                  size={20}
-                  color={THEME_COLORS.neutral.white}
-                />
-              </Pressable>
-              <Text className="text-[30px] font-semibold text-white">
-                Ảnh, file, link
-              </Text>
-              <View className="h-10 w-10" />
-            </View>
-
-            <View className="mt-3 flex-row gap-2">
+          {openFilterMenu === "sender" && (
+            <View className="absolute left-4 right-4 top-[140px] z-30 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
               <Pressable
                 onPress={() => {
-                  if (!senderFilter && senderOptions.length > 0) {
-                    setSenderFilter(senderOptions[0].id);
-                    return;
-                  }
                   setSenderFilter("");
+                  setOpenFilterMenu(null);
                 }}
-                className={`rounded-full border px-3 py-2 ${senderFilter ? "border-primary-300 bg-primary-400/40" : "border-white/40 bg-white/10"}`}
+                className="flex-row items-center rounded-xl px-3 py-2"
               >
-                <Text className="text-[13px] text-white">Theo người gửi</Text>
+                <SenderAvatar name="Tất cả" />
+                <Text className="text-[14px] text-slate-700">Tất cả</Text>
               </Pressable>
+              {senderOptions.map((item) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() => {
+                    setSenderFilter(item.id);
+                    setOpenFilterMenu(null);
+                  }}
+                  className="flex-row items-center rounded-xl px-3 py-2"
+                >
+                  <SenderAvatar name={item.name} avatarUrl={item.avatarUrl} />
+                  <Text className="text-[14px] text-slate-700">
+                    {item.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
 
+          {openFilterMenu === "time" && (
+            <View className="absolute left-4 right-4 top-[140px] z-30 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
               <Pressable
-                onPress={() => setVideoOnly((prev) => !prev)}
-                className={`rounded-full border px-3 py-2 ${videoOnly ? "border-primary-300 bg-primary-400/40" : "border-white/40 bg-white/10"}`}
+                onPress={() => {
+                  setTimePreset("all");
+                  setOpenFilterMenu(null);
+                }}
+                className="rounded-xl px-3 py-2"
               >
-                <Text className="text-[13px] text-white">Video</Text>
+                <Text className="text-[14px] text-slate-700">
+                  Tất cả thời gian
+                </Text>
               </Pressable>
-
               <Pressable
-                onPress={() => setTimeSortEnabled((prev) => !prev)}
-                className={`rounded-full border px-3 py-2 ${timeSortEnabled ? "border-primary-300 bg-primary-400/40" : "border-white/40 bg-white/10"}`}
+                onPress={() => {
+                  setTimePreset("7d");
+                  setOpenFilterMenu(null);
+                }}
+                className="rounded-xl px-3 py-2"
               >
-                <Text className="text-[13px] text-white">Theo thời gian</Text>
+                <Text className="text-[14px] text-slate-700">7 ngày trước</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setTimePreset("30d");
+                  setOpenFilterMenu(null);
+                }}
+                className="rounded-xl px-3 py-2"
+              >
+                <Text className="text-[14px] text-slate-700">
+                  30 ngày trước
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setTimePreset("90d");
+                  setOpenFilterMenu(null);
+                }}
+                className="rounded-xl px-3 py-2"
+              >
+                <Text className="text-[14px] text-slate-700">
+                  3 tháng trước
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setTimeSortEnabled((prev) => !prev);
+                  setOpenFilterMenu(null);
+                }}
+                className="rounded-xl px-3 py-2"
+              >
+                <Text className="text-[14px] text-slate-700">
+                  {timeSortEnabled ? "Đang: Mới nhất" : "Đang: Cũ nhất"}
+                </Text>
               </Pressable>
             </View>
-          </LinearGradient>
+          )}
 
-          <View className="bg-white px-4 pt-3">
-            <View className="flex-row border-b border-slate-200">
+          <View className="bg-white px-4 pt-3 border-b border-slate-200">
+            <View className="flex-row  ">
               {storageTabs.map((item) => (
                 <Pressable
                   key={item.key}
-                  onPress={() => setStorageTab(item.key)}
+                  onPress={() => {
+                    setStorageTab(item.key);
+                    setOpenFilterMenu(null);
+                  }}
                   className="mr-6 pb-2"
                 >
                   <Text
@@ -1152,7 +1535,7 @@ export default function ChatInfoScreen() {
 
                 return sections.map(([label, items]) => (
                   <View key={label} className="mb-4">
-                    <Text className="mb-2 text-[31px] font-semibold text-slate-700">
+                    <Text className="mb-2 text-[18px] font-semibold text-slate-700">
                       {label}
                     </Text>
                     <View className="flex-row flex-wrap">
@@ -1179,9 +1562,77 @@ export default function ChatInfoScreen() {
                 ));
               })()}
 
+            {storageTab === "videos" &&
+              (() => {
+                const grouped = new Map<string, ChatMessage[]>();
+                filteredVideos.forEach((item) => {
+                  const label = getDateGroupLabel(
+                    item.createdAt || item.created_at,
+                  );
+                  const list = grouped.get(label) || [];
+                  list.push(item);
+                  grouped.set(label, list);
+                });
+
+                const sections = Array.from(grouped.entries());
+                if (sections.length === 0) {
+                  return (
+                    <Text className="py-14 text-center text-[14px] text-slate-500">
+                      Chưa có video
+                    </Text>
+                  );
+                }
+
+                return sections.map(([label, items]) => (
+                  <View key={label} className="mb-4">
+                    <Text className="mb-2 text-[18px] font-semibold text-slate-700">
+                      {label}
+                    </Text>
+                    <View className="flex-row flex-wrap">
+                      {items.map((message, index) => {
+                        const mediaUri = resolveMediaUrl(
+                          getFirstContent(message),
+                        );
+                        if (!mediaUri) return null;
+                        return (
+                          <View
+                            key={`${message._id || message.msg_id || index}`}
+                            className="mb-1 mr-1 h-28 w-[31.8%] overflow-hidden rounded-md bg-slate-200"
+                          >
+                            <Image
+                              source={{ uri: mediaUri }}
+                              className="h-full w-full"
+                              resizeMode="cover"
+                            />
+                            <View className="absolute inset-x-0 bottom-0 bg-black/35 px-2 py-1">
+                              <Feather
+                                name="video"
+                                size={12}
+                                color={THEME_COLORS.neutral.white}
+                              />
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ));
+              })()}
+
             {storageTab === "files" &&
               (() => {
-                if (filteredFiles.length === 0) {
+                const grouped = new Map<string, ChatMessage[]>();
+                filteredFiles.forEach((item) => {
+                  const label = getDateGroupLabel(
+                    item.createdAt || item.created_at,
+                  );
+                  const list = grouped.get(label) || [];
+                  list.push(item);
+                  grouped.set(label, list);
+                });
+
+                const sections = Array.from(grouped.entries());
+                if (sections.length === 0) {
                   return (
                     <Text className="py-14 text-center text-[14px] text-slate-500">
                       Chưa có file
@@ -1189,60 +1640,115 @@ export default function ChatInfoScreen() {
                   );
                 }
 
-                return filteredFiles.map((message, index) => {
-                  const content = Array.isArray(message.content)
-                    ? message.content[0]
-                    : message.content;
-                  const fileName =
-                    typeof content === "string"
-                      ? "Tệp đính kèm"
-                      : String((content as any)?.name || "Tệp đính kèm");
-                  const size =
-                    typeof content === "string"
-                      ? 0
-                      : Number((content as any)?.size || 0);
-                  const sender =
-                    senderNameById.get(String(message.sender_id || "")) ||
-                    message.sender_name ||
-                    message.sender_id ||
-                    "Thành viên";
+                return sections.map(([label, items]) => (
+                  <View key={label} className="mb-4">
+                    <Text className="mb-2 text-[18px] font-semibold text-slate-700">
+                      {label}
+                    </Text>
+                    {items.map((message, index) => {
+                      const content = Array.isArray(message.content)
+                        ? message.content[0]
+                        : message.content;
+                      const rawPath =
+                        typeof content === "string"
+                          ? content
+                          : String(
+                            (content as any)?.url ||
+                            (content as any)?.text ||
+                            "",
+                          );
+                      const fileName =
+                        typeof content === "string"
+                          ? extractFileName(rawPath) || "Tệp đính kèm"
+                          : String(
+                            (content as any)?.name ||
+                            extractFileName(rawPath) ||
+                            "Tệp đính kèm",
+                          );
+                      const size =
+                        typeof content === "string"
+                          ? Number(message.size || 0)
+                          : Number((content as any)?.size || message.size || 0);
+                      const fileTypeIcon = getFileTypeIcon(fileName);
+                      const fileTypeColor = getFileTypeColor(fileName);
+                      const sender =
+                        senderNameById.get(String(message.sender_id || ""))
+                          ?.name ||
+                        message.sender_name ||
+                        message.sender_id ||
+                        "Thành viên";
 
-                  return (
-                    <View
-                      key={`${message._id || message.msg_id || index}`}
-                      className="mb-2 flex-row items-center rounded-xl bg-white px-3 py-3 border border-slate-200"
-                    >
-                      <View className="mr-3 h-10 w-10 items-center justify-center rounded-md bg-primary-100">
-                        <Feather
-                          name="paperclip"
-                          size={16}
-                          color={THEME_COLORS.primary[600]}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-[16px] text-slate-900"
-                          numberOfLines={1}
+                      return (
+                        <View
+                          key={`${message._id || message.msg_id || index}`}
+                          className="mb-2 flex-row items-center rounded-xl bg-white px-3 py-3 border border-slate-200"
                         >
-                          {fileName}
-                        </Text>
-                        <Text className="text-[13px] text-slate-500">
-                          {Math.max(1, Math.round(size / 1024))} KB - {sender}
-                        </Text>
-                      </View>
-                      <Feather
-                        name="more-horizontal"
-                        size={16}
-                        color={THEME_COLORS.neutral.slate500}
-                      />
-                    </View>
-                  );
-                });
+                          <View className="mr-3 h-10 w-10 items-center justify-center rounded-md bg-slate-100">
+                            <Feather
+                              name={fileTypeIcon as any}
+                              size={16}
+                              color={fileTypeColor}
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <Text
+                              className="text-[16px] text-slate-900"
+                              numberOfLines={1}
+                            >
+                              {fileName}
+                            </Text>
+                            <Text className="text-[13px] text-slate-500">
+                              {Math.max(1, Math.round(size / 1024))} KB -{" "}
+                              {sender}
+                            </Text>
+                          </View>
+                          <Feather
+                            name="more-horizontal"
+                            size={16}
+                            color={THEME_COLORS.neutral.slate500}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                ));
               })()}
 
             {storageTab === "links" &&
               (() => {
-                if (filteredLinks.length === 0) {
+                const grouped = new Map<
+                  string,
+                  Array<{ key: string; url: string; sender: string }>
+                >();
+                filteredLinks.forEach((item, itemIndex) => {
+                  const sender =
+                    senderNameById.get(String(item.sender_id || ""))?.name ||
+                    item.sender_name ||
+                    item.sender_id ||
+                    "Thành viên";
+                  const label = getDateGroupLabel(
+                    item.createdAt || item.created_at,
+                  );
+                  const links = Array.isArray(item.links) ? item.links : [];
+                  const list = grouped.get(label) || [];
+
+                  links
+                    .filter((link) => !!String(link || "").trim())
+                    .forEach((link, linkIndex) => {
+                      list.push({
+                        key: `${item._id || item.msg_id || itemIndex}-${linkIndex}`,
+                        url: String(link),
+                        sender,
+                      });
+                    });
+
+                  grouped.set(label, list);
+                });
+
+                const sections = Array.from(grouped.entries()).filter(
+                  ([, items]) => items.length > 0,
+                );
+                if (sections.length === 0) {
                   return (
                     <Text className="py-14 text-center text-[14px] text-slate-500">
                       Chưa có liên kết
@@ -1250,58 +1756,77 @@ export default function ChatInfoScreen() {
                   );
                 }
 
-                return filteredLinks.map((item, index) => {
-                  const firstLink = Array.isArray(item.links)
-                    ? String(item.links[0] || "")
-                    : "";
-                  const sender =
-                    senderNameById.get(String(item.sender_id || "")) ||
-                    item.sender_name ||
-                    item.sender_id ||
-                    "Thành viên";
-
-                  return (
-                    <View
-                      key={`${item._id || item.msg_id || index}`}
-                      className="mb-2 flex-row rounded-xl bg-white px-3 py-3 border border-slate-200"
-                    >
-                      <View className="mr-3 h-10 w-10 items-center justify-center rounded-md bg-slate-100">
-                        <Feather
-                          name="link"
-                          size={16}
-                          color={THEME_COLORS.neutral.slate500}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-[14px] font-semibold uppercase text-primary-600"
-                          numberOfLines={1}
+                return sections.map(([label, items]) => (
+                  <View key={label} className="mb-4">
+                    <Text className="mb-2 text-[18px] font-semibold text-slate-700">
+                      {label}
+                    </Text>
+                    {items.map((linkItem) => {
+                      const title = linkItem.url.replace(/^https?:\/\//i, "");
+                      return (
+                        <Pressable
+                          key={linkItem.key}
+                          onPress={() => {
+                            const hasProtocol = /^https?:\/\//i.test(
+                              linkItem.url,
+                            );
+                            const target = hasProtocol
+                              ? linkItem.url
+                              : `https://${linkItem.url}`;
+                            void Linking.openURL(target);
+                          }}
+                          className="mb-2 flex-row rounded-xl bg-white px-3 py-3 border border-slate-200"
                         >
-                          {firstLink.replace(/^https?:\/\//i, "")}
-                        </Text>
-                        <Text
-                          className="text-[16px] text-slate-900"
-                          numberOfLines={2}
-                        >
-                          {firstLink}
-                        </Text>
-                        <Text className="text-[13px] text-slate-500">
-                          {sender}
-                        </Text>
-                      </View>
-                      <Feather
-                        name="more-horizontal"
-                        size={16}
-                        color={THEME_COLORS.neutral.slate500}
-                      />
-                    </View>
-                  );
-                });
+                          <View className="mr-3 h-10 w-10 items-center justify-center rounded-md bg-slate-100">
+                            <Feather
+                              name="link"
+                              size={16}
+                              color={THEME_COLORS.neutral.slate500}
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <Text
+                              className="text-[14px] font-semibold uppercase text-primary-600"
+                              numberOfLines={1}
+                            >
+                              {title}
+                            </Text>
+                            <Text
+                              className="text-[16px] text-slate-900"
+                              numberOfLines={2}
+                            >
+                              {linkItem.url}
+                            </Text>
+                            <Text className="text-[13px] text-slate-500">
+                              {linkItem.sender}
+                            </Text>
+                          </View>
+                          <Feather
+                            name="more-horizontal"
+                            size={16}
+                            color={THEME_COLORS.neutral.slate500}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ));
               })()}
 
             {storageTab === "audios" &&
               (() => {
-                if (filteredVoices.length === 0) {
+                const grouped = new Map<string, ChatMessage[]>();
+                filteredVoices.forEach((item) => {
+                  const label = getDateGroupLabel(
+                    item.createdAt || item.created_at,
+                  );
+                  const list = grouped.get(label) || [];
+                  list.push(item);
+                  grouped.set(label, list);
+                });
+
+                const sections = Array.from(grouped.entries());
+                if (sections.length === 0) {
                   return (
                     <Text className="py-14 text-center text-[14px] text-slate-500">
                       Chưa có tin nhắn thoại
@@ -1309,51 +1834,96 @@ export default function ChatInfoScreen() {
                   );
                 }
 
-                return filteredVoices.map((message, index) => {
-                  const content = Array.isArray(message.content)
-                    ? message.content[0]
-                    : message.content;
-                  const sender =
-                    senderNameById.get(String(message.sender_id || "")) ||
-                    message.sender_name ||
-                    message.sender_id ||
-                    "Thành viên";
-                  const size =
-                    typeof content === "string"
-                      ? 0
-                      : Number((content as any)?.size || 0);
+                return sections.map(([label, items]) => (
+                  <View key={label} className="mb-4">
+                    <Text className="mb-2 text-[18px] font-semibold text-slate-700">
+                      {label}
+                    </Text>
+                    {items.map((message, index) => {
+                      const content = Array.isArray(message.content)
+                        ? message.content[0]
+                        : message.content;
+                      const sender =
+                        senderNameById.get(String(message.sender_id || ""))
+                          ?.name ||
+                        message.sender_name ||
+                        message.sender_id ||
+                        "Thành viên";
+                      const size =
+                        typeof content === "string"
+                          ? 0
+                          : Number((content as any)?.size || 0);
 
-                  return (
-                    <View
-                      key={`${message._id || message.msg_id || index}`}
-                      className="mb-2 flex-row items-center rounded-xl bg-white px-3 py-3 border border-slate-200"
-                    >
-                      <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-primary-500">
-                        <Feather
-                          name="play"
-                          size={18}
-                          color={THEME_COLORS.neutral.white}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-[27px] text-slate-900">
-                          00:03
-                        </Text>
-                        <Text className="text-[13px] text-slate-500">
-                          {Math.max(1, Math.round(size / 1024))} KB - {sender}
-                        </Text>
-                      </View>
-                      <Feather
-                        name="more-horizontal"
-                        size={16}
-                        color={THEME_COLORS.neutral.slate500}
-                      />
-                    </View>
-                  );
-                });
+                      return (
+                        <View
+                          key={`${message._id || message.msg_id || index}`}
+                          className="mb-2 flex-row items-center rounded-xl bg-white px-3 py-3 border border-slate-200"
+                        >
+                          <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-primary-500">
+                            <Feather
+                              name="play"
+                              size={18}
+                              color={THEME_COLORS.neutral.white}
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-[27px] text-slate-900">
+                              00:03
+                            </Text>
+                            <Text className="text-[13px] text-slate-500">
+                              {Math.max(1, Math.round(size / 1024))} KB -{" "}
+                              {sender}
+                            </Text>
+                          </View>
+                          <Feather
+                            name="more-horizontal"
+                            size={16}
+                            color={THEME_COLORS.neutral.slate500}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                ));
               })()}
           </ScrollView>
         ))}
+
+      <Modal
+        visible={nameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNameModalVisible(false)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-center bg-black/30 px-5"
+          onPress={() => setNameModalVisible(false)}
+        >
+          <Pressable className="w-full rounded-2xl bg-white p-4" onPress={() => undefined}>
+            <Text className="text-[16px] font-bold text-slate-900">Đổi tên nhóm</Text>
+            <TextInput
+              value={groupNameInput}
+              onChangeText={setGroupNameInput}
+              placeholder="Nhập tên nhóm mới"
+              className="mt-3 rounded-xl border border-slate-200 px-3 py-2.5 text-[14px] text-slate-900"
+            />
+            <View className="mt-4 flex-row justify-end gap-2">
+              <Pressable
+                onPress={() => setNameModalVisible(false)}
+                className="rounded-xl bg-slate-100 px-4 py-2.5"
+              >
+                <Text className="text-[13px] font-semibold text-slate-700">Hủy</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void handleSubmitRenameGroup()}
+                className="rounded-xl bg-primary-600 px-4 py-2.5"
+              >
+                <Text className="text-[13px] font-semibold text-white">Lưu</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={memberModalVisible}
@@ -1476,6 +2046,36 @@ export default function ChatInfoScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {!isGroup && otherMember && (
+        <CreateGroupModal
+          visible={createGroupModalVisible}
+          users={allUsers.filter((u) => u.user_id !== userIdForChat)}
+          preSelectedIds={[otherMember.user_id]}
+          onClose={() => setCreateGroupModalVisible(false)}
+          onCreate={async (name, memberIds, avatarUri) => {
+            if (!userIdForChat) return;
+            try {
+              // Ensure the other user is included
+              const finalMemberIds = Array.from(
+                new Set([...memberIds, otherMember.user_id]),
+              );
+              await ChatApi.createConversation({
+                creatorId: userIdForChat,
+                type: 'group',
+                name,
+                memberIds: finalMemberIds,
+                avatar: avatarUri || '',
+              });
+              setCreateGroupModalVisible(false);
+              router.back();
+            } catch (error) {
+              console.error('Failed to create group:', error);
+              Alert.alert('Lỗi', 'Không thể tạo nhóm. Vui lòng thử lại.');
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

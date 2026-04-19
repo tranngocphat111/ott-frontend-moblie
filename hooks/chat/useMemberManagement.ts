@@ -8,6 +8,10 @@ interface UseMemberManagementProps {
   isAdmin: boolean;
   isGroup: boolean | undefined;
   onLoadInfo: () => Promise<void>;
+  onOpenMemberOptions?: (payload: {
+    member: any;
+    options: Array<{ text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }>;
+  }) => void;
 }
 
 export function useMemberManagement({
@@ -16,6 +20,7 @@ export function useMemberManagement({
   isAdmin,
   isGroup,
   onLoadInfo,
+  onOpenMemberOptions,
 }: UseMemberManagementProps) {
   const handleMemberPress = useCallback(
     (member: any) => {
@@ -59,9 +64,10 @@ export function useMemberManagement({
       }
 
       options.push({ text: 'Hủy', style: 'cancel' });
-      Alert.alert('Tùy chọn thành viên', '', options);
+      onOpenMemberOptions?.({ member, options });
+      return options;
     },
-    [conversationId, userIdForChat, isAdmin, onLoadInfo],
+    [conversationId, userIdForChat, isAdmin, onLoadInfo, onOpenMemberOptions],
   );
 
   const handleAddMember = useCallback(

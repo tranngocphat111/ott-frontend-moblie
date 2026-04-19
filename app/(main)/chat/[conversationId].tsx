@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -66,8 +66,41 @@ import {
   useMessageHighlight,
 } from "@/hooks/chat";
 
-const getMessageKey = (message: ChatMessage) => message.local_temp_id || message.msg_id || message._id;
+const getMessageKey = (message: ChatMessage) =>
+  message.msg_id || message._id || message.local_temp_id || "";
 const normalizeMessageId = (value?: string | null) => String(value || "").trim();
+const URL_PATTERN =
+  /((https?:\/\/|www\.)[^\s]+|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\/[^\s]*)?)/i;
+
+const normalizeLink = (rawValue: string): string | null => {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
+const isStandaloneLink = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  const fullMatch = trimmed.match(URL_PATTERN);
+  if (!fullMatch || fullMatch[0] !== trimmed) return false;
+
+  const candidate = trimmed.replace(/[),.!?:;]+$/g, "");
+  return !!normalizeLink(candidate);
+};
 const isSameMessageById = (left: ChatMessage, right: ChatMessage) => {
   const leftMsgId = normalizeMessageId(left?.msg_id);
   const leftDbId = normalizeMessageId(left?._id);
@@ -292,19 +325,22 @@ const patchMessageById = (
 ) => {
   const incomingMsgId = normalizeMessageId(incoming?.msg_id);
   const incomingDbId = normalizeMessageId(incoming?._id);
-  const hasIncomingId = Boolean(incomingMsgId || incomingDbId);
+  const incomingLocalId = normalizeMessageId(incoming?.local_temp_id);
+  const hasIncomingId = Boolean(incomingMsgId || incomingDbId || incomingLocalId);
   if (!hasIncomingId) return source;
 
   const next = [...source];
   const idx = next.findIndex((item) => {
     const itemMsgId = normalizeMessageId(item?.msg_id);
     const itemDbId = normalizeMessageId(item?._id);
+    const itemLocalId = normalizeMessageId(item?.local_temp_id);
 
     return (
       (incomingMsgId && itemMsgId === incomingMsgId) ||
       (incomingDbId && itemDbId === incomingDbId) ||
       (incomingMsgId && itemDbId === incomingMsgId) ||
-      (incomingDbId && itemMsgId === incomingDbId)
+      (incomingDbId && itemMsgId === incomingDbId) ||
+      (incomingLocalId && itemLocalId === incomingLocalId)
     );
   });
 
@@ -531,6 +567,10 @@ export default function ChatDetailScreen() {
     normalizePinnedMessages,
     PAGE_SIZE,
   } = useConversationMessages(conversationId, userIdForChat);
+  const isMyDocuments = Boolean(
+    conversation?.is_self_conversation ||
+    String(conversation?.name || '').trim().toLowerCase() === 'my documents',
+  );
   const {
     listRef,
     loadingOlder,
@@ -579,6 +619,8 @@ export default function ChatDetailScreen() {
 
   // Local component state
   const [messageText, setMessageText] = useState("");
+  const [myDocumentsFilter, setMyDocumentsFilter] = useState<'all' | 'image' | 'file' | 'link' | 'text'>('all');
+  const [isChatLocked, setIsChatLocked] = useState(false);
   const [typingUserIds, setTypingUserIds] = useState<Record<string, number>>({});
   const typingActiveRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1683,6 +1725,81 @@ export default function ChatDetailScreen() {
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
   }, []);
 
+  const displayMessages = useMemo(() => {
+    if (!isMyDocuments || myDocumentsFilter === 'all') {
+      return messages;
+    }
+
+    return messages.filter((message) => {
+      const type = String(message.type || '').toLowerCase();
+      if (myDocumentsFilter === 'image') {
+        return type === 'image' || type === 'video';
+      }
+      if (myDocumentsFilter === 'text') {
+        return type === 'text';
+      }
+      return type === myDocumentsFilter;
+    });
+  }, [isMyDocuments, messages, myDocumentsFilter]);
+
+  useEffect(() => {
+    const currentUserId = String(userIdForChat || "").trim();
+    if (!currentUserId) {
+      setIsChatLocked(false);
+      return;
+    }
+
+    let locked = false;
+    for (const message of messages) {
+      const action = String(message?.system_meta?.action || "").toLowerCase();
+      if (!action) continue;
+
+      if (
+        action === "removed_from_group" &&
+        String(message?.system_meta?.removed_user_id || "") === currentUserId
+      ) {
+        locked = true;
+        continue;
+      }
+
+      if (action === "group_dissolved") {
+        locked = true;
+        continue;
+      }
+
+      if (action === "member_added") {
+        const addedIds = Array.isArray(message?.system_meta?.added_user_ids)
+          ? message.system_meta?.added_user_ids
+          : [];
+        if (addedIds.map((id) => String(id)).includes(currentUserId)) {
+          locked = false;
+        }
+      }
+    }
+
+    setIsChatLocked(locked);
+  }, [messages, userIdForChat]);
+
+  useEffect(() => {
+    if (!isChatLocked) return;
+    setMessageText("");
+    setReplyToMessage(null);
+    closeAllPanels();
+  }, [closeAllPanels, isChatLocked]);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setPendingScrollToBottom();
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+    };
+  }, [setPendingScrollToBottom]);
+
   // Setup focus effect
   useFocusEffect(
     useCallback(() => {
@@ -1852,6 +1969,70 @@ export default function ChatDetailScreen() {
     [conversationId, normalizeMessages, normalizePinnedMessages],
   );
 
+  const handleRemovedFromGroup = useCallback(
+    (payload: { conversationId?: string }) => {
+      if (String(payload?.conversationId || "") !== String(conversationId)) {
+        return;
+      }
+
+      setIsChatLocked(true);
+      setMessageText("");
+      setReplyToMessage(null);
+      closeAllPanels();
+      chatSocket.leaveConversation(String(conversationId));
+      void loadConversation();
+    },
+    [closeAllPanels, conversationId, loadConversation],
+  );
+
+  const handleGroupDissolved = useCallback(
+    async (payload: {
+      conversationId?: string;
+      message?: string;
+      dissolvedByName?: string;
+      deleteForOwner?: boolean;
+    }) => {
+        if (String(payload?.conversationId || "") !== String(conversationId)) {
+          return;
+        }
+
+        if (payload?.deleteForOwner) {
+          chatSocket.leaveConversation(String(conversationId));
+          try {
+            if (userIdForChat) {
+              await ChatApi.deleteConversationForMe(conversationId, userIdForChat);
+            }
+          } catch (err) {
+            console.error("Error deleting conversation:", err);
+          }
+          setTimeout(() => {
+            if (router.dismissAll) router.dismissAll();
+            router.replace("/(main)/(tabs)/home");
+          }, 300);
+        } else {
+          setIsChatLocked(true);
+          chatSocket.leaveConversation(String(conversationId));
+          void loadConversation();
+        }
+    },
+    [conversationId, userIdForChat, router, loadConversation],
+  );
+
+  const handleConversationSynced = useCallback(
+    (payload: any) => {
+      const syncedConversationId = String(
+        payload?._id || payload?.conversation?._id || payload?.conversationId || "",
+      );
+      if (syncedConversationId !== String(conversationId || "")) {
+        return;
+      }
+
+      setIsChatLocked(false);
+      void loadConversation();
+    },
+    [conversationId, loadConversation],
+  );
+
   // Setup socket listeners
   useMessageSocket({
     conversationId,
@@ -1863,16 +2044,40 @@ export default function ChatDetailScreen() {
     onMessageDeleted: handleMessageDeleted,
     onTypingStart: handleTypingStart,
     onTypingStop: handleTypingStop,
+    onRemovedFromGroup: handleRemovedFromGroup,
+    onGroupDissolved: handleGroupDissolved,
+    onConversationSynced: handleConversationSynced,
   });
+
+  const handleDeleteConversationForMe = useCallback(() => {
+    if (!conversationId || !userIdForChat) return;
+
+    Alert.alert('Xóa cuộc trò chuyện', 'Bạn có chắc muốn xóa cuộc trò chuyện này?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await ChatApi.deleteConversationForMe(conversationId, userIdForChat);
+            router.back();
+          } catch {
+            Alert.alert('Lỗi', 'Không thể xóa cuộc trò chuyện');
+          }
+        },
+      },
+    ]);
+  }, [conversationId, router, userIdForChat]);
 
   // Send message
   const onSendMessage = useCallback(async () => {
-    if (!conversationId || !userIdForChat) return;
+    if (!conversationId || !userIdForChat || isChatLocked) return;
 
     const trimmed = messageText.trim();
     if (!trimmed) return;
 
-    const isLink = /^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed);
+    const isLink = isStandaloneLink(trimmed);
+    const normalizedContent = isLink ? normalizeLink(trimmed) || trimmed : trimmed;
 
     stopTyping();
 
@@ -1880,7 +2085,7 @@ export default function ChatDetailScreen() {
       await ChatApi.sendMessage({
         conversationId,
         senderId: userIdForChat,
-        content: trimmed,
+        content: normalizedContent,
         type: isLink ? "link" : "text",
         replyToMsgId: replyToMessage?.msg_id,
       });
@@ -1894,6 +2099,7 @@ export default function ChatDetailScreen() {
     }
   }, [
     conversationId,
+    isChatLocked,
     userIdForChat,
     messageText,
     replyToMessage?.msg_id,
@@ -1917,8 +2123,8 @@ export default function ChatDetailScreen() {
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
           onBack={handleBack}
-          onPhone={() => void openWebCall('voice')}
-          onVideo={() => void openWebCall('video')}
+          onPhone={isMyDocuments ? undefined : () => void openWebCall('voice')}
+          onVideo={isMyDocuments ? undefined : () => void openWebCall('video')}
           onMenu={() =>
             router.push({
               pathname: "/chat/info/[conversationId]",
@@ -1926,6 +2132,33 @@ export default function ChatDetailScreen() {
             } as any)
           }
         />
+
+        {isMyDocuments && (
+          <View className="border-b border-[#ead8c7] bg-[#fff9f4] px-3 py-2">
+            <View className="flex-row flex-wrap gap-1">
+              {([
+                { key: 'all', label: 'Tất cả' },
+                { key: 'image', label: 'Ảnh/video' },
+                { key: 'file', label: 'File' },
+                { key: 'link', label: 'Link' },
+                { key: 'text', label: 'Văn bản' },
+              ] as const).map((item) => {
+                const active = myDocumentsFilter === item.key;
+                return (
+                  <Pressable
+                    key={item.key}
+                    onPress={() => setMyDocumentsFilter(item.key)}
+                    className={`rounded-full px-4 py-2 ${active ? 'bg-[#b78457]' : 'bg-white'} border ${active ? 'border-[#b78457]' : 'border-[#ead8c7]'}`}
+                  >
+                    <Text className={`text-[12px] font-semibold ${active ? 'text-white' : 'text-slate-600'}`}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         <ChatPinnedMessagesBar
           pinnedMessages={pinnedMessages}
@@ -1976,7 +2209,7 @@ export default function ChatDetailScreen() {
           <ChatMessagesList
             loading={loading}
             preparing={false}
-            messages={messages}
+            messages={displayMessages}
             conversation={conversation}
             listRef={listRef as any}
             onScroll={onScroll as any}
@@ -2009,6 +2242,7 @@ export default function ChatDetailScreen() {
                 isGroup={isGroup}
               />
             }
+            onDeleteConversation={handleDeleteConversationForMe}
           />
 
           {showScrollToBottom && (
@@ -2037,27 +2271,35 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
-        <ChatComposer
-          value={messageText}
-          onChangeText={handleTextChange}
-          onInputFocus={handleComposerInputFocus}
-          onInputPressIn={handleComposerInputPressIn}
-          onSend={() => void onSendMessage()}
-          onToggleImagePanel={toggleImagePanel}
-          onToggleVoicePanel={toggleVoicePanel}
-          onPickFile={() => void pickFileAndSend()}
-          imagePanelActive={imagePanelVisible}
-          voicePanelActive={voicePanelVisible}
-          replyToMessage={replyToMessage}
-          onCancelReply={() => setReplyToMessage(null)}
-          disabled={!conversationId || !userIdForChat || isSendingAttachment}
-          accentColor={CHAT_BROWN}
-          selectedMediaIds={selectedMediaIds}
-          onClearSelection={clearSelectedMedia}
-          onSendSelected={() => void sendSelectedPanelMedia()}
-        />
+        {!isChatLocked ? (
+          <ChatComposer
+            value={messageText}
+            onChangeText={handleTextChange}
+            onInputFocus={handleComposerInputFocus}
+            onInputPressIn={handleComposerInputPressIn}
+            onSend={() => void onSendMessage()}
+            onToggleImagePanel={toggleImagePanel}
+            onToggleVoicePanel={toggleVoicePanel}
+            onPickFile={() => void pickFileAndSend()}
+            imagePanelActive={imagePanelVisible}
+            voicePanelActive={voicePanelVisible}
+            replyToMessage={replyToMessage}
+            onCancelReply={() => setReplyToMessage(null)}
+            disabled={!conversationId || !userIdForChat || isSendingAttachment}
+            accentColor={CHAT_BROWN}
+            selectedMediaIds={selectedMediaIds}
+            onClearSelection={clearSelectedMedia}
+            onSendSelected={() => void sendSelectedPanelMedia()}
+          />
+        ) : (
+          <View className="mx-3 mb-2 rounded-2xl border border-[#ead8c7] bg-[#fff9f4] px-4 py-3">
+            <Text className="text-center text-[13px] font-medium text-slate-600">
+              Bạn không thể gửi tin nhắn trong cuộc trò chuyện này.
+            </Text>
+          </View>
+        )}
 
-        {imagePanelVisible && (
+        {!isChatLocked && imagePanelVisible && (
           <ChatMediaPanel
             visible={imagePanelVisible}
             height={CHAT_PANEL_HEIGHT}
@@ -2074,7 +2316,7 @@ export default function ChatDetailScreen() {
         )}
 
 
-        {voicePanelVisible && (
+        {!isChatLocked && voicePanelVisible && (
           <ChatVoicePanel
             height={CHAT_PANEL_HEIGHT}
             accentColor={CHAT_BROWN}

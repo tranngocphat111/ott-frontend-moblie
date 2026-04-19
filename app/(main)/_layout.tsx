@@ -6,8 +6,8 @@ export default function MainLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
         contentStyle: { backgroundColor: THEME_COLORS.surface.DEFAULT },
+        animation: 'slide_from_right',
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

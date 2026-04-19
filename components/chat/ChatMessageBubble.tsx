@@ -31,6 +31,7 @@ import { ChatFileMessage } from "./message-types/ChatFileMessage";
 import { ChatImageMessage } from "./message-types/ChatImageMessage";
 import { ChatVideoMessage } from "./message-types/ChatVideoMessage";
 import { ChatAudioMessage } from "./message-types/ChatAudioMessage";
+import { ChatLinkMessage } from "./message-types/ChatLinkMessage";
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
@@ -437,6 +438,12 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
             />
           ) : message.type === "file" ? (
             <ChatFileMessage
+              message={message}
+              isMine={isMine}
+              onLongPress={onLongPress}
+            />
+          ) : message.type === "link" ? (
+            <ChatLinkMessage
               message={message}
               isMine={isMine}
               onLongPress={onLongPress}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
 import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
@@ -30,7 +30,63 @@ const getInitials = (value: string) => {
   return `${tokens[0].slice(0, 1)}${tokens[tokens.length - 1].slice(0, 1)}`.toUpperCase();
 };
 
-const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ name, avatarUrl }) => {
+const resolveParticipantDisplayName = (
+  conversation: ChatConversation | null | undefined,
+  userId: string,
+) => {
+  const participant = conversation?.participants?.find(
+    (item) => String(item?.user_id || '') === String(userId || ''),
+  );
+
+  return (
+    String(participant?.nickname || '').trim() ||
+    String(participant?.display_name || '').trim() ||
+    String(participant?.name || '').trim() ||
+    ''
+  );
+};
+
+const personalizeSystemAddMessage = (
+  message: ChatMessage,
+  conversation: ChatConversation | null | undefined,
+  currentUserId: string,
+) => {
+  const action = String(message?.system_meta?.action || '').toLowerCase();
+  if (action !== 'member_added') {
+    return message;
+  }
+
+  const addedUserIds = Array.isArray(message?.system_meta?.added_user_ids)
+    ? message.system_meta?.added_user_ids || []
+    : [];
+
+  if (!addedUserIds.length) {
+    return message;
+  }
+
+  const addedDisplayNames = addedUserIds.map((id) => {
+    if (String(id) === String(currentUserId)) {
+      return 'bạn';
+    }
+
+    return resolveParticipantDisplayName(conversation, String(id)) || 'Thành viên';
+  });
+
+  const addedBy = String(message?.system_meta?.added_by || message?.sender_id || '');
+  const adderName =
+    String(addedBy) === String(currentUserId)
+      ? 'bạn'
+      : resolveParticipantDisplayName(conversation, addedBy) || String(message?.sender_name || 'Ai đó');
+
+  const contentText = `${addedDisplayNames.join(', ')} được ${adderName} thêm vào nhóm`;
+
+  return {
+    ...message,
+    content: [contentText],
+  };
+};
+
+export const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ name, avatarUrl }) => {
   const [hasError, setHasError] = useState(false);
   const showImage = !!avatarUrl && !hasError;
 
@@ -75,6 +131,7 @@ type Props = {
   accentColor: string;
   mineAccentColor: string;
   footerComponent?: React.ReactNode;
+  onDeleteConversation?: () => void;
 };
 
 export const ChatMessagesList: React.FC<Props> = ({
@@ -99,6 +156,7 @@ export const ChatMessagesList: React.FC<Props> = ({
   mineAccentColor,
   footerComponent,
   conversation,
+  onDeleteConversation,
 }) => {
   const { user, chatUserId } = useAuth();
   const currentUserId = String(chatUserId || user?.id || userIdForChat || '');
@@ -113,6 +171,7 @@ export const ChatMessagesList: React.FC<Props> = ({
         removeClippedSubviews
         drawDistance={560}
         scrollEventThrottle={16}
+        estimatedItemSize={120}
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
         // showsVerticalScrollIndicator={false}
@@ -137,6 +196,14 @@ export const ChatMessagesList: React.FC<Props> = ({
         const isHighlighted = highlightedMessageId === getMessageKey(item);
 
         if (isSystemMessageType(item.type)) {
+          const displaySystemMessage = personalizeSystemAddMessage(item, conversation, currentUserId);
+          const action = String(item.system_meta?.action || '').toLowerCase();
+          const isOwner = String(conversation?.created_by || '') === currentUserId;
+          const isRemovedUser = String(item.system_meta?.removed_user_id || '') === currentUserId;
+          const showDeleteAction =
+            (action === 'group_dissolved' && !isOwner && item.system_meta?.show_delete_for_non_owner) ||
+            (action === 'removed_from_group' && isRemovedUser && item.system_meta?.show_delete_action);
+
           return (
             <View className="px-2">
               {showTimestamp && (
@@ -151,13 +218,24 @@ export const ChatMessagesList: React.FC<Props> = ({
 
               <View className="w-full items-center px-2">
                 <ChatMessageBubble
-                  message={item}
+                  message={displaySystemMessage}
                   isMine={false}
                   mineAccentColor={mineAccentColor}
                   showSenderName={false}
                   highlight={highlightedMessageId === getMessageKey(item)}
                   onReactionPress={onReactionPress}
                 />
+
+                {showDeleteAction && (
+                  <Pressable
+                    onPress={onDeleteConversation}
+                    className="mt-2 rounded-full border border-red-200 bg-red-50 px-4 py-2"
+                  >
+                    <Text className="text-[13px] font-semibold text-red-600">
+                      Xóa cuộc trò chuyện này
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           );

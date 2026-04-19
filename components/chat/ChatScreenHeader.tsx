@@ -27,7 +27,6 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
   onVideo,
   onMenu,
 }) => {
-  
   return (
     <LinearGradient
         colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]}
@@ -55,12 +54,16 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
           </View>
         </View>
 
-        <Pressable onPress={onPhone} className="h-11 w-10 items-center justify-center">
-          <Feather name="phone" size={18} color="#fff" />
-        </Pressable>
-        <Pressable onPress={onVideo} className="h-11 w-10 items-center justify-center">
-          <Feather name="video" size={18} color="#fff" />
-        </Pressable>
+        {onPhone && (
+          <Pressable onPress={onPhone} className="h-11 w-10 items-center justify-center">
+            <Feather name="phone" size={18} color="#fff" />
+          </Pressable>
+        )}
+        {onVideo && (
+          <Pressable onPress={onVideo} className="h-11 w-10 items-center justify-center">
+            <Feather name="video" size={18} color="#fff" />
+          </Pressable>
+        )}
         <Pressable onPress={onMenu} className="h-11 w-10 items-center justify-center">
           <Feather name="menu" size={18} color="#fff" />
         </Pressable>

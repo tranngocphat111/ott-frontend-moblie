@@ -72,6 +72,16 @@ export interface ChatMessage {
   is_pinned?: boolean;
   pinned_at?: string | null;
   pinned_by?: string | null;
+  system_meta?: {
+    action?: 'group_dissolved' | 'removed_from_group' | 'member_removed' | string;
+    dissolved_by?: string;
+    removed_user_id?: string;
+    removed_by?: string;
+    added_by?: string;
+    added_user_ids?: string[];
+    show_delete_for_non_owner?: boolean;
+    show_delete_action?: boolean;
+  } | null;
   local_temp_id?: string;
   local_status?: 'uploading' | 'success' | 'error';
   local_upload_progress?: number;

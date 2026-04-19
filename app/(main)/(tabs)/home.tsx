@@ -31,6 +31,7 @@ import {
 import { CategorySelectionModal } from '@/components/chat/modals/CategorySelectionModal';
 import { CategoryManagementModal } from '@/components/chat/modals/CategoryManagementModal';
 import { UserPickerModal } from '@/components/chat/modals/UserPickerModal';
+import { CreateGroupModal } from '@/components/chat/modals/CreateGroupModal';
 import { HomeTopSection } from '@/components/home/HomeTopSection';
 import { HomeSearchPanel } from '@/components/home/HomeSearchPanel';
 import { HomeConversationList } from '@/components/home/HomeConversationList';
@@ -129,6 +130,7 @@ export default function HomeScreen() {
   const [filterVisible, setFilterVisible] = useState(false);
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [categoryManagementVisible, setCategoryManagementVisible] = useState(false);
+  const [createGroupVisible, setCreateGroupVisible] = useState(false);
 
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -370,6 +372,7 @@ export default function HomeScreen() {
     chatSocket.on('tin_nhan', refreshInbox);
     chatSocket.on('tao_phong_moi', refreshInbox);
     chatSocket.on('cap_nhat_nhom', refreshInbox);
+    chatSocket.on('cap_nhat_phan_loai', refreshInbox);
     chatSocket.on('roi_nhom', refreshInbox);
     chatSocket.on('xoa_thanh_vien', refreshInbox);
     chatSocket.on('bi_xoa_khoi_nhom', refreshInbox);
@@ -379,6 +382,7 @@ export default function HomeScreen() {
       chatSocket.off('tin_nhan', refreshInbox);
       chatSocket.off('tao_phong_moi', refreshInbox);
       chatSocket.off('cap_nhat_nhom', refreshInbox);
+      chatSocket.off('cap_nhat_phan_loai', refreshInbox);
       chatSocket.off('roi_nhom', refreshInbox);
       chatSocket.off('xoa_thanh_vien', refreshInbox);
       chatSocket.off('bi_xoa_khoi_nhom', refreshInbox);
@@ -815,7 +819,7 @@ export default function HomeScreen() {
       />
 
       <HomeTopSection
-        onCreateConversation={() => Alert.alert('Chức năng', 'Tạo cuộc trò chuyện mới sẽ được nối sau')}
+        onCreateConversation={() => setCreateGroupVisible(true)}
         onOpenFilter={() => setFilterVisible(true)}
         onClearFilter={handleClearFilter}
         filterMode={filterMode}
@@ -940,6 +944,33 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      <CreateGroupModal
+        visible={createGroupVisible}
+        users={chatUsers.filter((u) => u.user_id !== chatUserId)}
+        loadingUsers={loadingUsers}
+        onClose={() => setCreateGroupVisible(false)}
+        onCreate={async (name, memberIds, avatarUri) => {
+          if (!chatUserId) {
+            Alert.alert('Lỗi', 'Vui lòng chọn tài khoản chat trước');
+            return;
+          }
+          try {
+            await ChatApi.createConversation({
+              creatorId: chatUserId,
+              type: 'group',
+              name,
+              memberIds,
+              avatar: avatarUri || '',
+            });
+            setCreateGroupVisible(false);
+            await loadConversations({ force: true });
+          } catch (error) {
+            console.error('Failed to create group:', error);
+            Alert.alert('Lỗi', 'Không thể tạo nhóm. Vui lòng thử lại.');
+          }
+        }}
+      />
 
       <Pressable
         onPress={handleOpenUserPicker}

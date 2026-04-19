@@ -15,7 +15,7 @@ const BLUR_HASH_PLACEHOLDER = '|rF?hV%2WCj[ayj[a|j[aybgF-jswaWbxaf8ayfbqsj[ayj[j
 const CLUSTER_WIDTH = 260;
 
 const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPress, onMediaReady }) => {
-  const [aspectRatio, setAspectRatio] = useState(1);
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
   const readyRef = useRef(false);
 
   const imageUrls = useMemo(() => {
@@ -28,6 +28,10 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
 
   const optimizedUrls = useMemo(() => {
     return imageUrls.map((url) => getOptimizedImageUrl(url, 'message') || url);
+  }, [imageUrls]);
+
+  const isLocalFile = useMemo(() => {
+    return imageUrls.some(url => /^(file:|content:|blob:|data:)/i.test(url));
   }, [imageUrls]);
 
   const markReady = useCallback(() => {
@@ -55,7 +59,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
           source={{ uri: optimizedUrls[index] || imageUrls[index] }}
           style={{ width: '100%', height: '100%', backgroundColor: '#eee' }}
           contentFit="cover"
-          cachePolicy="memory-disk"
+          cachePolicy={isLocalFile ? "none" : "memory-disk"}
           transition={120}
           placeholder={BLUR_HASH_PLACEHOLDER}
           onLoad={index === 0 ? markReady : undefined}
@@ -76,9 +80,14 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
         <Pressable onPress={() => onImagePress?.(0)} onLongPress={onLongPress}>
           <Image
             source={{ uri: optimizedUrls[0] || imageUrls[0] }}
-            style={{ width: CLUSTER_WIDTH, aspectRatio, maxHeight: 350 }}
+            style={{
+              width: CLUSTER_WIDTH,
+              ...(aspectRatio ? { aspectRatio } : { height: 200 }),
+              maxHeight: 350,
+              backgroundColor: '#f0e6dc',
+            }}
             contentFit="cover"
-            cachePolicy="memory-disk"
+            cachePolicy={isLocalFile ? "none" : "memory-disk"}
             transition={120}
             placeholder={BLUR_HASH_PLACEHOLDER}
             onLoad={(e) => {
