@@ -25,7 +25,13 @@ class ChatSocketService {
 	private socket: Socket | null = null;
 
 	private getSocketBaseUrl() {
-		return CHAT_API_CONFIG.BASE_URL.replace(/\/api\/?$/, '');
+		// Extract origin (protocol://host:port) to hit the gateway's socket.io proxy
+		try {
+			const url = new URL(CHAT_API_CONFIG.BASE_URL);
+			return `${url.protocol}//${url.host}`;
+		} catch {
+			return CHAT_API_CONFIG.BASE_URL.replace(/\/riff\/api\/chat\/?$/, '');
+		}
 	}
 
 	private ensureSocket() {
@@ -34,7 +40,7 @@ class ChatSocketService {
 		}
 
 		const socket = io(this.getSocketBaseUrl(), {
-			transports: ['websocket', 'polling'],
+			transports: ['polling', 'websocket'],
 			reconnectionAttempts: 10,
 			reconnectionDelay: 1200,
 			timeout: 10000,
