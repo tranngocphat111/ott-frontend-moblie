@@ -24,13 +24,24 @@ export function useConversationMessages(conversationId: string | undefined, user
       const leftTime = new Date(left.createdAt || left.created_at || 0).getTime();
       const rightTime = new Date(right.createdAt || right.created_at || 0).getTime();
 
-      if (leftTime !== rightTime) return leftTime - rightTime;
+      if (leftTime !== rightTime) return rightTime - leftTime;
 
-      const leftId = BigInt(String(left.msg_id || 0));
-      const rightId = BigInt(String(right.msg_id || 0));
+      const leftMsgId = String(left.msg_id || '0');
+      const rightMsgId = String(right.msg_id || '0');
+      
+      // Use numeric comparison for strings that look like numbers (Snowflake IDs)
+      if (/^\d+$/.test(leftMsgId) && /^\d+$/.test(rightMsgId)) {
+        try {
+          const lId = BigInt(leftMsgId);
+          const rId = BigInt(rightMsgId);
+          if (lId === rId) return 0;
+          return lId > rId ? -1 : 1;
+        } catch {
+          // Fallback to localeCompare if BigInt fails
+        }
+      }
 
-      if (leftId === rightId) return 0;
-      return leftId < rightId ? -1 : 1;
+      return rightMsgId.localeCompare(leftMsgId);
     });
   }, []);
 
@@ -43,11 +54,20 @@ export function useConversationMessages(conversationId: string | undefined, user
 
         if (leftPinnedAt !== rightPinnedAt) return rightPinnedAt - leftPinnedAt;
 
-        const leftId = BigInt(String(left.msg_id || 0));
-        const rightId = BigInt(String(right.msg_id || 0));
+        const leftMsgId = String(left.msg_id || '0');
+        const rightMsgId = String(right.msg_id || '0');
 
-        if (leftId === rightId) return 0;
-        return leftId > rightId ? -1 : 1;
+        if (/^\d+$/.test(leftMsgId) && /^\d+$/.test(rightMsgId)) {
+          try {
+            const lId = BigInt(leftMsgId);
+            const rId = BigInt(rightMsgId);
+            if (lId === rId) return 0;
+            return lId > rId ? -1 : 1;
+          } catch {
+             // Fallback
+          }
+        }
+        return rightMsgId.localeCompare(leftMsgId);
       });
   }, []);
 
@@ -96,7 +116,8 @@ export function useConversationMessages(conversationId: string | undefined, user
           ? (pinnedPayload as any).messages
           : [];
 
-      setMessages(normalizeMessages(normalizedMessages));
+      const sorted = normalizeMessages(normalizedMessages);
+      setMessages(sorted);
       setPinnedMessages(normalizePinnedMessages(normalizedPinned));
 
       if (shouldLoadConversationMeta && userIdForChat) {
@@ -115,9 +136,9 @@ export function useConversationMessages(conversationId: string | undefined, user
           .catch(() => undefined);
       }
 
-      const lastMessage = normalizedMessages[normalizedMessages.length - 1];
-      if (userIdForChat && lastMessage?.msg_id) {
-        void ChatApi.markAsRead(conversationId, userIdForChat, lastMessage.msg_id).catch(() => undefined);
+      const newestMessage = sorted[0];
+      if (userIdForChat && newestMessage?.msg_id) {
+        void ChatApi.markAsRead(conversationId, userIdForChat, newestMessage.msg_id).catch(() => undefined);
       }
     } catch (error) {
       if (requestId !== activeRequestIdRef.current) return;

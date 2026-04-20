@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +13,8 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
+import { Audio } from 'expo-av';
+import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
@@ -88,12 +91,12 @@ const normalizeSearchResult = (payload: any): ChatSearchResult => {
     ? payload.contacts
     : Array.isArray(payload?.users)
       ? payload.users.map((user: any) => ({
-          user_id: String(user.user_id || user._id || ''),
-          name: String(user.name || user.user_id || ''),
-          avatar: user.avatar,
-          phone: user.phone,
-          conversation_ids: [],
-        }))
+        user_id: String(user.user_id || user._id || ''),
+        name: String(user.name || user.user_id || ''),
+        avatar: user.avatar,
+        phone: user.phone,
+        conversation_ids: [],
+      }))
       : [];
 
   const result: ChatSearchResult = {
@@ -176,24 +179,24 @@ export default function HomeScreen() {
     }
 
     const task = (async () => {
-    try {
-      setLoadingUsers(true);
-      const response = await ChatApi.getAllUsers();
-      const users = Array.isArray(response) ? response : [];
-      setChatUsers(users);
+      try {
+        setLoadingUsers(true);
+        const response = await ChatApi.getAllUsers();
+        const users = Array.isArray(response) ? response : [];
+        setChatUsers(users);
 
-      const isStoredUserValid = !!chatUserId && users.some((candidate) => candidate.user_id === chatUserId);
-      if (!isStoredUserValid && users.length > 0) {
-        await setChatUserId(users[0].user_id);
+        const isStoredUserValid = !!chatUserId && users.some((candidate) => candidate.user_id === chatUserId);
+        if (!isStoredUserValid && users.length > 0) {
+          await setChatUserId(users[0].user_id);
+        }
+
+        return users;
+      } catch (error) {
+        console.warn('Cannot load users from chat-service.', error);
+        return [];
+      } finally {
+        setLoadingUsers(false);
       }
-
-      return users;
-    } catch (error) {
-      console.warn('Cannot load users from chat-service.', error);
-      return [];
-    } finally {
-      setLoadingUsers(false);
-    }
     })();
 
     loadUsersPromiseRef.current = task;
@@ -289,53 +292,53 @@ export default function HomeScreen() {
     }
 
     const task = (async () => {
-    const users = chatUsers.length > 0 ? chatUsers : await loadChatUsers();
-    const storedUserIsValid = !!chatUserId && users.some((candidate) => candidate.user_id === chatUserId);
+      const users = chatUsers.length > 0 ? chatUsers : await loadChatUsers();
+      const storedUserIsValid = !!chatUserId && users.some((candidate) => candidate.user_id === chatUserId);
 
-    let userIdForChat = storedUserIsValid ? chatUserId : users[0]?.user_id || null;
-    if (!userIdForChat) {
-      userIdForChat = await resolveAutoChatUserId();
-    }
-
-    if (!userIdForChat) {
-      setItems([]);
-      setCategories([]);
-      setIsLoading(false);
-      setIsRefreshing(false);
-      return;
-    }
-
-    try {
-      const [conversationData, categoryData] = await Promise.all([
-        ChatApi.getUserConversations(userIdForChat),
-        ChatApi.getUserCategories(userIdForChat).catch(() => [] as ChatCategory[]),
-      ]);
-
-      setItems(sortConversationItems(conversationData));
-      setCategories(Array.isArray(categoryData) ? categoryData : []);
-    } catch (error) {
-      const status = (error as any)?.details?.status;
-
-      if (status === 404) {
-        try {
-          const fallbackUserId = await resolveAutoChatUserId(true);
-          if (fallbackUserId && fallbackUserId !== userIdForChat) {
-            const retryData = await ChatApi.getUserConversations(fallbackUserId);
-            setItems(sortConversationItems(retryData));
-            return;
-          }
-        } catch (retryError) {
-          console.error('Retry with fallback user failed:', retryError);
-        }
+      let userIdForChat = storedUserIsValid ? chatUserId : users[0]?.user_id || null;
+      if (!userIdForChat) {
+        userIdForChat = await resolveAutoChatUserId();
       }
 
-      console.error('Failed to load conversations:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách cuộc trò chuyện');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-      lastConversationsLoadAtRef.current = Date.now();
-    }
+      if (!userIdForChat) {
+        setItems([]);
+        setCategories([]);
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      try {
+        const [conversationData, categoryData] = await Promise.all([
+          ChatApi.getUserConversations(userIdForChat),
+          ChatApi.getUserCategories(userIdForChat).catch(() => [] as ChatCategory[]),
+        ]);
+
+        setItems(sortConversationItems(conversationData));
+        setCategories(Array.isArray(categoryData) ? categoryData : []);
+      } catch (error) {
+        const status = (error as any)?.details?.status;
+
+        if (status === 404) {
+          try {
+            const fallbackUserId = await resolveAutoChatUserId(true);
+            if (fallbackUserId && fallbackUserId !== userIdForChat) {
+              const retryData = await ChatApi.getUserConversations(fallbackUserId);
+              setItems(sortConversationItems(retryData));
+              return;
+            }
+          } catch (retryError) {
+            console.error('Retry with fallback user failed:', retryError);
+          }
+        }
+
+        console.error('Failed to load conversations:', error);
+        Alert.alert('Lỗi', 'Không thể tải danh sách cuộc trò chuyện');
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+        lastConversationsLoadAtRef.current = Date.now();
+      }
     })();
 
     loadConversationsPromiseRef.current = task;
@@ -409,7 +412,6 @@ export default function HomeScreen() {
         });
         const normalized = normalizeSearchResult(payload);
         setSearchResults(normalized);
-        void rememberSearchContacts(normalized.contacts);
       } catch (error) {
         console.error('Search failed', error);
         setSearchResults(EMPTY_SEARCH);
@@ -589,25 +591,50 @@ export default function HomeScreen() {
   const hasSearchQuery = searchText.trim().length > 0;
 
   const openConversation = useCallback(
-    (conversationId: string) => {
+    (conversationId: string, messageId?: string) => {
       if (!conversationId) return;
-      router.push({ pathname: '/chat/[conversationId]', params: { conversationId } } as any);
+
+      // Save to history when clicking a result
+      const matchedConv = items.find(item => String(item.conversation._id || '') === conversationId);
+      if (matchedConv) {
+        const historyItem = {
+          user_id: matchedConv.conversation.type === 'private'
+            ? (matchedConv.conversation.participants?.find(p => String(p.user_id) !== String(chatUserId))?.user_id || '')
+            : 'group',
+          name: matchedConv.conversation.name || 'Đoạn chat',
+          avatar: getConversationAvatar(matchedConv.conversation, chatUserId),
+          conversation_id: conversationId
+        };
+        void rememberSearchContacts([{
+          user_id: historyItem.user_id,
+          name: historyItem.name,
+          avatar: historyItem.avatar,
+          conversation_ids: [conversationId]
+        } as any]);
+      }
+
+      const params: any = { conversationId };
+      if (messageId) params.highlightedMessageId = messageId;
+
+      router.push({
+        pathname: '/chat/[conversationId]',
+        params
+      } as any);
     },
-    [router],
+    [router, items, chatUserId, rememberSearchContacts],
   );
 
   const handleOpenHistoryConversation = useCallback(
     (historyItem: SearchHistoryContact) => {
       const historyConversationId = String(historyItem.conversation_id || '');
-      const hasConversationInInbox =
-        historyConversationId.length > 0 &&
-        items.some((item) => String(item.conversation._id || '') === historyConversationId);
 
-      if (hasConversationInInbox) {
+      // If we have a conversation ID, just open it
+      if (historyConversationId && historyConversationId !== 'undefined') {
         openConversation(historyConversationId);
         return;
       }
 
+      // Fallback: try to find by user_id
       const fallbackConversation = items.find((item) =>
         (item.conversation.participants || []).some(
           (participant) => String(participant?.user_id || '') === String(historyItem.user_id || ''),
@@ -620,7 +647,7 @@ export default function HomeScreen() {
         return;
       }
 
-      Alert.alert('Không thể mở hội thoại', 'Không tìm thấy hội thoại phù hợp trong danh sách hiện tại.');
+      Alert.alert('Thông báo', 'Hội thoại này không còn tồn tại hoặc không thể mở.');
     },
     [items, openConversation],
   );
@@ -635,6 +662,7 @@ export default function HomeScreen() {
   }, []);
 
   const handleCloseSearch = useCallback(() => {
+    Keyboard.dismiss();
     setSearchText('');
     setSearchResults(null);
     setSearchTab('all');
@@ -644,6 +672,7 @@ export default function HomeScreen() {
   }, []);
 
   const handleClearSearchInput = useCallback(() => {
+    // Keyboard.dismiss(); // Keep keyboard if clearing input but staying in search
     setSearchText('');
     setSearchResults(null);
     setSearchTab('all');
