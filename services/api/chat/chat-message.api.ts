@@ -198,4 +198,17 @@ export const chatMessageApi = {
       isPinned,
     });
   },
+ 
+  async votePoll(
+    conversationId: string,
+    msgId: string,
+    userId: string,
+    optionIds: string[],
+  ): Promise<ChatMessage> {
+    return await chatApiClient.put(`/messages/${msgId}/vote`, {
+      conversationId,
+      userId,
+      optionIds,
+    });
+  },
 };

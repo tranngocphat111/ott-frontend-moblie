@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage } from "@/types/entities/chat";
 import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
 import {
   CornerUpLeft,
@@ -19,6 +19,8 @@ import {
   PhoneOff,
   FileText,
   UserPlus,
+  UserCog,
+  UserCheck,
   Ban,
   LogOut,
   Pin,
@@ -32,6 +34,7 @@ import { ChatImageMessage } from "./message-types/ChatImageMessage";
 import { ChatVideoMessage } from "./message-types/ChatVideoMessage";
 import { ChatAudioMessage } from "./message-types/ChatAudioMessage";
 import { ChatLinkMessage } from "./message-types/ChatLinkMessage";
+import { ChatPollMessage } from "./message-types/ChatPollMessage";
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
@@ -116,6 +119,15 @@ const getReplyUiMeta = (reply: NonNullable<ChatMessage["reply_to"]>) => {
     };
   }
 
+  if (type === "poll") {
+    return {
+      icon: TextAlignJustify,
+      label: "Bình chọn",
+      detail: reply.poll_question || "[Bình chọn]",
+      thumbnail: "",
+    };
+  }
+
   return {
     icon: TextAlignJustify,
     label: "Tin nhắn",
@@ -169,6 +181,24 @@ const getSystemNotificationUi = (type?: string | null) => {
       iconColor: "#475569",
       badgeClassName: "border-slate-200 bg-slate-100",
       textClassName: "text-slate-700",
+    };
+  }
+
+  if (normalizedType === "system_transfer_owner") {
+    return {
+      icon: UserCheck,
+      iconColor: "#059669",
+      badgeClassName: "border-emerald-100 bg-emerald-50",
+      textClassName: "text-emerald-700",
+    };
+  }
+
+  if (normalizedType === "system_role_change") {
+    return {
+      icon: UserCog,
+      iconColor: "#4f46e5",
+      badgeClassName: "border-indigo-100 bg-indigo-50",
+      textClassName: "text-indigo-700",
     };
   }
 
@@ -291,7 +321,8 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
     !isCallMessageType(message.type) &&
     (message.type === "image" ||
       message.type === "video" ||
-      message.type === "audio");
+      message.type === "audio" ||
+      message.type === "poll");
   const isCallMessage = isCallMessageType(message.type);
   const normalizedCallType = String(message.type || "").toLowerCase();
   const hideCallMessageBubble = normalizedCallType === "call_start" || normalizedCallType === "call_join";
@@ -312,7 +343,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   }
 
   return (
-    <View className={`mb-3 ${isMine ? "items-end" : "items-start"}`}>
+    <View className={`mb-3 ${message.type === 'poll' ? 'items-center' : isMine ? "items-end" : "items-start"}`}>
       {showSenderName && !isMine && (
         <Text className="mb-1 ml-1 text-[12px] font-semibold text-slate-500">
           {message.sender_name || "Thành viên"}
@@ -455,7 +486,12 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               onLongPress={onLongPress}
               onMediaReady={onMediaReady}
             />
-          ) : message.type === "audio" ? (
+      ) : message.type === "poll" ? (
+        <ChatPollMessage
+          message={message}
+          isMine={isMine}
+        />
+      ) : message.type === "audio" ? (
             <ChatAudioMessage
               message={message}
               isMine={isMine}

@@ -76,6 +76,7 @@ export default function GroupMembersScreen() {
     [members, userIdForChat],
   );
 
+  const isOwner = normalize(userIdForChat) === ownerId;
   const isAdmin = normalize(myMember?.roles) === "admin";
 
   const memberNameById = useMemo(() => {
@@ -201,6 +202,33 @@ export default function GroupMembersScreen() {
     }
   }, [conversationId, loadInfo, selectedMember, userIdForChat]);
 
+  const handleTransferOwnership = useCallback(() => {
+    const member = selectedMember;
+    const memberUserId = normalize(member?.user_id);
+    if (!conversationId || !userIdForChat || !memberUserId) return;
+
+    Alert.alert(
+      "Nhường chức trưởng nhóm",
+      "Sau khi nhường chức, bạn sẽ trở thành thành viên bình thường. Bạn chắc chắn muốn thực hiện?",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đồng ý",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await ChatApi.transferOwnership(conversationId, userIdForChat, memberUserId);
+              setActionModalVisible(false);
+              await loadInfo();
+            } catch (error: any) {
+              Alert.alert("Lỗi", error?.response?.data?.error || "Không thể chuyển quyền");
+            }
+          },
+        },
+      ],
+    );
+  }, [conversationId, loadInfo, selectedMember, userIdForChat]);
+
   const handleConfirmRemoveMember = useCallback(async () => {
     const member = selectedMember;
     const memberUserId = normalize(member?.user_id);
@@ -277,16 +305,13 @@ export default function GroupMembersScreen() {
               <Feather name="search" size={18} color={THEME_COLORS.neutral.white} />
             </Pressable>
 
-            {isAdmin ? (
-              <Pressable
-                onPress={() => setMemberModalVisible(true)}
-                className="h-10 w-10 items-center justify-center"
-              >
-                <Feather name="user-plus" size={18} color={THEME_COLORS.neutral.white} />
-              </Pressable>
-            ) : (
-              <View className="h-10 w-10" />
-            )}
+            {/* Bất cứ ai trong nhóm cũng có thể thêm thành viên */}
+            <Pressable
+              onPress={() => setMemberModalVisible(true)}
+              className="h-10 w-10 items-center justify-center"
+            >
+              <Feather name="user-plus" size={18} color={THEME_COLORS.neutral.white} />
+            </Pressable>
           </View>
         </View>
       </LinearGradient>
@@ -319,7 +344,7 @@ export default function GroupMembersScreen() {
           }
           renderItem={({ item }) => {
             const memberId = normalize(item?.user_id);
-            const isOwner = memberId === ownerId;
+            const memberIsOwner = memberId === ownerId;
             const displayName =
               normalize(item?.nickname) ||
               normalize(item?.user?.name) ||
@@ -341,16 +366,19 @@ export default function GroupMembersScreen() {
                   </Text>
                 </View>
 
-                <Pressable
-                  onPress={() => handleOpenMemberActions(item)}
-                  className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
-                >
-                  <Feather
-                    name="more-horizontal"
-                    size={16}
-                    color={THEME_COLORS.neutral.slate600}
-                  />
-                </Pressable>
+                {/* Only show more button if I am admin or owner, AND this member is not me */}
+                {(isAdmin || isOwner) && memberId !== normalize(userIdForChat) ? (
+                  <Pressable
+                    onPress={() => handleOpenMemberActions(item)}
+                    className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
+                  >
+                    <Feather
+                      name="more-horizontal"
+                      size={16}
+                      color={THEME_COLORS.neutral.slate600}
+                    />
+                  </Pressable>
+                ) : null}
               </View>
             );
           }}
@@ -387,33 +415,46 @@ export default function GroupMembersScreen() {
             {(() => {
               const member = selectedMember;
               const memberUserId = normalize(member?.user_id);
-              const isSelf = memberUserId === normalize(userIdForChat);
-              const isOwner = memberUserId === ownerId;
-              const canManage = isAdmin && !isSelf && !isOwner;
-              if (!canManage) return null;
+              const isTargetOwner = memberUserId === ownerId;
+              const isTargetAdmin = normalize(member?.roles) === "admin";
 
               return (
                 <>
-                  <Pressable
-                    onPress={() => void handleMemberRoleUpdate()}
-                    className="mb-3 rounded-2xl bg-slate-200 py-3"
-                  >
-                    <Text className="text-center text-[16px] font-medium text-slate-800">
-                      {normalize(member?.roles) === "admin"
-                        ? "Gỡ quyền quản trị viên"
-                        : "Đặt làm quản trị viên"}
-                    </Text>
-                  </Pressable>
+                  {/* Chỉ Trưởng nhóm mới có quyền phân quyền và nhường chức */}
+                  {isOwner && !isTargetOwner && (
+                    <>
+                      <Pressable
+                        onPress={() => void handleMemberRoleUpdate()}
+                        className="mb-3 rounded-2xl bg-slate-200 py-3"
+                      >
+                        <Text className="text-center text-[16px] font-medium text-slate-800">
+                          {isTargetAdmin ? "Gỡ quyền phó nhóm" : "Đặt làm phó nhóm"}
+                        </Text>
+                      </Pressable>
 
-                  <Pressable
-                    onPress={handleOpenRemoveConfirmation}
-                    className="mb-3 rounded-2xl bg-red-100 py-3"
-                  >
-                    <Text className="text-center text-[16px] font-medium text-red-600">
-                      Xóa khỏi nhóm
-                    </Text>
-                  </Pressable>
-                  </>
+                      <Pressable
+                        onPress={handleTransferOwnership}
+                        className="mb-3 rounded-2xl bg-slate-200 py-3"
+                      >
+                        <Text className="text-center text-[16px] font-medium text-slate-800">
+                          Nhường chức trưởng nhóm
+                        </Text>
+                      </Pressable>
+                    </>
+                  )}
+
+                  {/* Trưởng nhóm có thể xóa bất kỳ ai. Phó nhóm chỉ được xóa thành viên thường. */}
+                  {(isOwner || (isAdmin && !isTargetAdmin && !isTargetOwner)) && (
+                    <Pressable
+                      onPress={handleOpenRemoveConfirmation}
+                      className="mb-3 rounded-2xl bg-red-100 py-3"
+                    >
+                      <Text className="text-center text-[16px] font-medium text-red-600">
+                        Xóa khỏi nhóm
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
               );
             })()}
 

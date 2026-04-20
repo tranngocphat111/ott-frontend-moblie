@@ -16,7 +16,6 @@ import {
 } from '@/utils/chat';
 import { ChatMessageBubble } from './ChatMessageBubble';
 import { useAuth } from '@/context/Authcontext';
-import { Image as ExpoImage } from 'expo-image';
 
 const getInitials = (value: string) => {
   const normalized = String(value || '').trim();
@@ -165,7 +164,6 @@ export const ChatMessagesList: React.FC<Props> = ({
 
   // Group messages
   const displayData = React.useMemo(() => {
-    // We assume 'messages' is passed in REVERSE chronological order (newest first)
     const items: any[] = [];
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
@@ -174,13 +172,11 @@ export const ChatMessagesList: React.FC<Props> = ({
         continue;
       }
 
-      // Found a system message. Collect consecutive system messages
       let endIdx = i;
       while (endIdx + 1 < messages.length && isSystemMessageType(messages[endIdx + 1].type)) {
         endIdx++;
       }
 
-      // If it's just 1 system message, we can still group it or leave it as message. We'll group them if 2+
       const groupMsgs = messages.slice(i, endIdx + 1);
       if (groupMsgs.length >= 2) {
         const groupKey = `sys-group-${getMessageKey(groupMsgs[0])}-${getMessageKey(groupMsgs[groupMsgs.length - 1])}`;
@@ -207,11 +203,9 @@ export const ChatMessagesList: React.FC<Props> = ({
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
         renderItem={({ item, index }) => {
-          // In inverted list, next element in array is the OLDER message, prev element is the NEWER message
           const newerItem = displayData[index - 1];
           const olderItem = displayData[index + 1];
 
-          // Determine timestamps based on older item
           const getOldestMsg = (it: any) => it?.type === 'system-group' ? it.messages[it.messages.length - 1] : it?.message;
           const getNewestMsg = (it: any) => it?.type === 'system-group' ? it.messages[0] : it?.message;
 
@@ -228,7 +222,7 @@ export const ChatMessagesList: React.FC<Props> = ({
           if (item.type === 'system-group') {
             const groupMsgs = item.messages as ChatMessage[];
             const isExpanded = !!expandedGroups[item.key];
-            const visibleMsgs = isExpanded ? groupMsgs : [];
+            const visibleMsgs = isExpanded ? [...groupMsgs].reverse() : [];
 
             return (
               <View className="px-2">
@@ -357,17 +351,20 @@ export const ChatMessagesList: React.FC<Props> = ({
               )}
 
               <View
-                className={`flex-row rounded-2xl px-2 ${isMine ? 'justify-end' : 'justify-start'} ${isHighlighted ? 'bg-[#f5ece4]' : ''}`}
+                key={getMessageKey(msg)}
+                className={`w-full flex-row px-2 py-0.5 ${msg.type === 'poll' ? 'justify-center' : isMine ? 'justify-end' : 'justify-start'} ${isHighlighted ? 'bg-[#f5ece4]' : ''}`}
                 style={isHighlighted ? { paddingVertical: 4 } : undefined}
               >
-                {!isMine && clusterStart ? (
-                  <SenderAvatar name={senderName} avatarUrl={senderAvatarUrl} />
-                ) : !isMine ? (
-                  <View className="mr-2 h-8 w-8" />
-                ) : null}
+                {msg.type !== 'poll' && (
+                  !isMine && clusterStart ? (
+                    <SenderAvatar name={senderName} avatarUrl={senderAvatarUrl} />
+                  ) : !isMine ? (
+                    <View className="mr-2 h-8 w-8" />
+                  ) : null
+                )}
 
-                <View className={`${isMine ? 'items-end' : 'items-start'} max-w-[80%]`}>
-                  {showSenderName && !isMine && (
+                <View className={`${msg.type === 'poll' ? 'items-center w-full' : isMine ? 'items-end' : 'items-start'} ${msg.type === 'poll' ? '' : 'max-w-[80%]'}`}>
+                  {showSenderName && !isMine && msg.type !== 'poll' && (
                     <Text className="mb-1 ml-1 text-[12px] font-semibold text-slate-500">
                       {senderName}
                     </Text>

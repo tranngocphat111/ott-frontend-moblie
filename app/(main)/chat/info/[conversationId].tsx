@@ -231,7 +231,7 @@ export default function ChatInfoScreen() {
   );
   const isAdmin = String(myMember?.roles || "") === "admin";
   const isOwner = String(conversation?.created_by || "") === String(userIdForChat || "");
-  const canManageGroupProfile = isGroup && isAdmin;
+  const canManageGroupProfile = isGroup && (isAdmin || isOwner);
   const memberIds = useMemo(
     () => new Set(members.map((member) => String(member.user_id || ""))),
     [members],
@@ -334,6 +334,16 @@ export default function ChatInfoScreen() {
 
   const handleLeaveGroup = useCallback(async () => {
     if (!conversationId || !userIdForChat || !isGroup) return;
+
+    if (isOwner) {
+      Alert.alert(
+        "Lưu ý",
+        "Trưởng nhóm không thể rời nhóm. Vui lòng nhường chức trưởng nhóm cho thành viên khác trước khi rời.",
+        [{ text: "Đóng", style: "cancel" }]
+      );
+      return;
+    }
+
     Alert.alert("Rời nhóm", "Bạn chắc chắn muốn rời nhóm này?", [
       { text: "Hủy", style: "cancel" },
       {
@@ -342,14 +352,15 @@ export default function ChatInfoScreen() {
         onPress: async () => {
           try {
             await ChatApi.leaveGroup(conversationId, userIdForChat);
-            router.back();
+            // Redirect to home/chat list after leaving
+            router.replace("/(main)/(tabs)/home");
           } catch {
             Alert.alert("Lỗi", "Không thể rời nhóm");
           }
         },
       },
     ]);
-  }, [conversationId, userIdForChat, isGroup, router]);
+  }, [conversationId, userIdForChat, isGroup, isOwner, router]);
 
   // Local UI state
   const [tab, setTab] = useState<InfoTab>("media");
@@ -862,13 +873,6 @@ export default function ChatInfoScreen() {
                       <Pressable
                         onPress={() => {
                           if (isGroup) {
-                            if (!isAdmin) {
-                              Alert.alert(
-                                "Thông báo",
-                                "Bạn không có quyền thêm thành viên.",
-                              );
-                              return;
-                            }
                             setMemberModalVisible(true);
                             return;
                           }
@@ -953,57 +957,32 @@ export default function ChatInfoScreen() {
                         </Pressable>
                       )}
 
-                      <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
-                        <View className="flex-row items-center">
-                          <Feather
-                            name="star"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Đánh dấu bạn thân
-                          </Text>
-                        </View>
-                        <Switch
-                          // Màu của thanh trượt (Track)
-                          trackColor={{
-                            false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
-                            true: colors.primary[400], // Màu nâu đặc trưng khi bật
-                          }}
-                          // Màu của nút tròn (Thumb)
-                          thumbColor={
-                            (participant?.settings?.notification_status ||
-                              "on") !== "off"
-                              ? colors.primary[50] // Màu kem nhạt khi bật
-                              : THEME_COLORS.neutral.white // Màu trắng khi tắt
-                          }
-                          // Nền cho iOS để khớp với trạng thái OFF
-                          ios_backgroundColor={THEME_COLORS.neutral.slate300}
-                          value={isBestFriend}
-                          onValueChange={setIsBestFriend}
-                        />
-                      </View>
 
-                      <Pressable
-                        onPress={() => openStorageTab("pinned")}
-                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                      >
-                        <View className="flex-row items-center">
+
+
+
+                      {isGroup && (
+                        <Pressable
+                          onPress={() => router.push(`/(main)/chat/bulletin/${conversationId}`)}
+                          className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                        >
+                          <View className="flex-row items-center">
+                            <Feather
+                              name="layout"
+                              size={20}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                            <Text className="ml-4 text-[17px] text-slate-800">
+                              Bảng tin nhóm
+                            </Text>
+                          </View>
                           <Feather
-                            name="clock"
-                            size={20}
+                            name="chevron-right"
+                            size={18}
                             color={THEME_COLORS.neutral.slate400}
                           />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Nhật ký chung
-                          </Text>
-                        </View>
-                        <Feather
-                          name="chevron-right"
-                          size={18}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                      </Pressable>
+                        </Pressable>
+                      )}
 
                       <Pressable
                         onPress={() => openStorageTab("media")}
@@ -1174,94 +1153,10 @@ export default function ChatInfoScreen() {
                         />
                       </View>
 
-                      <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
-                        <View className="flex-row items-center">
-                          <Feather
-                            name="eye-off"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Ẩn trò chuyện
-                          </Text>
-                        </View>
-                        <Switch
-                          trackColor={{
-                            false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
-                            true: colors.primary[400], // Màu nâu đặc trưng khi bật
-                          }}
-                          // Màu của nút tròn (Thumb)
-                          thumbColor={
-                            (participant?.settings?.notification_status ||
-                              "on") !== "off"
-                              ? colors.primary[50] // Màu kem nhạt khi bật
-                              : THEME_COLORS.neutral.white // Màu trắng khi tắt
-                          }
-                          // Nền cho iOS để khớp với trạng thái OFF
-                          ios_backgroundColor={THEME_COLORS.neutral.slate300}
-                          value={isHiddenConversation}
-                          onValueChange={setIsHiddenConversation}
-                        />
-                      </View>
 
-                      <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100">
-                        <View className="flex-row items-center">
-                          <Feather
-                            name="phone-call"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Báo cuộc gọi đến
-                          </Text>
-                        </View>
-                        <Switch
-                          // Màu của thanh trượt (Track)
-                          trackColor={{
-                            false: THEME_COLORS.neutral.slate300, // Màu xám nhạt khi tắt
-                            true: colors.primary[400], // Màu nâu đặc trưng khi bật
-                          }}
-                          // Màu của nút tròn (Thumb)
-                          thumbColor={
-                            (participant?.settings?.notification_status ||
-                              "on") !== "off"
-                              ? colors.primary[50] // Màu kem nhạt khi bật
-                              : THEME_COLORS.neutral.white // Màu trắng khi tắt
-                          }
-                          // Nền cho iOS để khớp với trạng thái OFF
-                          ios_backgroundColor={THEME_COLORS.neutral.slate300}
-                          value={
-                            (participant?.settings?.notification_status ||
-                              "on") !== "off"
-                          }
-                          onValueChange={(next) =>
-                            void handleChangeNotificationStatus(
-                              next ? "on" : "off",
-                            )
-                          }
-                        />
-                      </View>
 
-                      <Pressable
-                        onPress={() => openStorageTab("links")}
-                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                      >
-                        <View className="flex-row items-center">
-                          <Feather
-                            name="settings"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Cài đặt cá nhân
-                          </Text>
-                        </View>
-                        <Feather
-                          name="chevron-right"
-                          size={18}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                      </Pressable>
+
+
                     </View>
 
                     <View className="mt-2 bg-white border-y border-slate-200">
@@ -1312,21 +1207,7 @@ export default function ChatInfoScreen() {
                         />
                       </Pressable>
 
-                      <Pressable
-                        onPress={() => openStorageTab("files")}
-                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                      >
-                        <View className="flex-row items-center">
-                          <Feather
-                            name="pie-chart"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Dung lượng trò chuyện
-                          </Text>
-                        </View>
-                      </Pressable>
+
 
                       <Pressable
                         onPress={handleDeleteConversation}
@@ -1756,9 +1637,8 @@ export default function ChatInfoScreen() {
                               : `https://${linkItem.url}`;
                             void Linking.openURL(target);
                           }}
-                          className={`flex-row items-center bg-white px-3 py-4 ${
-                            linkIndex < items.length - 1 ? 'border-b border-slate-100' : ''
-                          }`}
+                          className={`flex-row items-center bg-white px-3 py-4 ${linkIndex < items.length - 1 ? 'border-b border-slate-100' : ''
+                            }`}
                         >
                           <View className="mr-3 h-10 w-10 items-center justify-center rounded-md bg-slate-100">
                             <Feather
