@@ -31,6 +31,17 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+chatApiClient.interceptors.request.use(
+  async (config: InternalAxiosRequestConfig) => {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // ─── Refresh queue (tránh gọi refresh nhiều lần cùng lúc) ─
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];

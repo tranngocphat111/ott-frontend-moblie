@@ -9,11 +9,9 @@ export const API_CONFIG = {
 };
 
 export const CHAT_API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_CHAT_API_URL || 'http://192.168.1.22:5000/api',
-  TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
-  HEADERS: {
-    'Content-Type': 'application/json',
-  },
+  BASE_URL: `${API_CONFIG.BASE_URL.replace(/\/$/, '')}/chat`,
+  TIMEOUT: API_CONFIG.TIMEOUT,
+  HEADERS: API_CONFIG.HEADERS,
 };
 
 export const MEDIA_CONFIG = {
