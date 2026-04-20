@@ -12,6 +12,9 @@ export interface SendMessagePayload {
   size?: number;
   fileName?: string;
   replyToMsgId?: string;
+  pollQuestion?: string;
+  pollMultipleChoice?: boolean;
+  pollOptions?: Array<{ id: string; name: string; voters: string[] }>;
 }
 
 export interface ChatPresignedUrlResponse {

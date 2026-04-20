@@ -4,6 +4,7 @@ import { Keyboard } from 'react-native';
 export const useChatPanels = () => {
   const [voicePanelVisible, setVoicePanelVisible] = useState(false);
   const [imagePanelVisible, setImagePanelVisible] = useState(false);
+  const [extraPanelVisible, setExtraPanelVisible] = useState(false);
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
 
   const hasSelectedMedia = selectedMediaIds.length > 0;
@@ -15,6 +16,7 @@ export const useChatPanels = () => {
   const closeAllPanels = useCallback((options?: { clearMediaSelection?: boolean }) => {
     setVoicePanelVisible(false);
     setImagePanelVisible(false);
+    setExtraPanelVisible(false);
     if (options?.clearMediaSelection !== false) {
       setSelectedMediaIds([]);
     }
@@ -27,6 +29,7 @@ export const useChatPanels = () => {
       const next = !current;
       if (next) {
         setImagePanelVisible(false);
+        setExtraPanelVisible(false);
       }
       return next;
     });
@@ -39,10 +42,28 @@ export const useChatPanels = () => {
       const next = !current;
       if (next) {
         setVoicePanelVisible(false);
+        setExtraPanelVisible(false);
       }
       setSelectedMediaIds([]);
       return next;
     });
+  }, []);
+
+  const toggleExtraPanel = useCallback(() => {
+    Keyboard.dismiss();
+    setTimeout(() => Keyboard.dismiss(), 100);
+    setExtraPanelVisible((current) => {
+      const next = !current;
+      if (next) {
+        setVoicePanelVisible(false);
+        setImagePanelVisible(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const closeExtraPanel = useCallback(() => {
+    setExtraPanelVisible(false);
   }, []);
 
   const closeImagePanel = useCallback(() => {
@@ -62,15 +83,19 @@ export const useChatPanels = () => {
   return {
     voicePanelVisible,
     imagePanelVisible,
+    extraPanelVisible,
     selectedMediaIds,
     hasSelectedMedia,
     setVoicePanelVisible,
     setImagePanelVisible,
+    setExtraPanelVisible,
     setSelectedMediaIds,
     clearSelectedMedia,
     closeAllPanels,
     toggleVoicePanel,
     toggleImagePanel,
+    toggleExtraPanel,
+    closeExtraPanel,
     closeImagePanel,
     toggleSelectMedia,
   };

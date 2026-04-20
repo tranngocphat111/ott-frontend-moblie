@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, Text, View } from 'react-native';
 import { Audio } from 'expo-av';
 import { Mic, Pause, Play } from 'lucide-react-native';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types/entities/chat';
 import { resolveMediaUrl } from '@/utils/chat';
 import { registerAudioPlaybackHandler, resetOtherAudioPlaybacks } from './audioPlaybackManager';
 

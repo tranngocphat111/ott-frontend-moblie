@@ -10,6 +10,7 @@ interface UseMessageSocketProps {
   onMessagePinned: (payload: ChatMessage) => void;
   onMessageRevoked: (payload: ChatMessage) => void;
   onMessageDeleted: (payload: ChatMessage) => void;
+  onMessageUpdated: (payload: ChatMessage) => void;
   onTypingStart?: (payload: { conversationId?: string; userId?: string }) => void;
   onTypingStop?: (payload: { conversationId?: string; userId?: string }) => void;
   onRemovedFromGroup?: (payload: any) => void;
@@ -25,6 +26,7 @@ export function useMessageSocket({
   onMessagePinned,
   onMessageRevoked,
   onMessageDeleted,
+  onMessageUpdated,
   onTypingStart,
   onTypingStop,
   onRemovedFromGroup,
@@ -43,6 +45,7 @@ export function useMessageSocket({
     chatSocket.on('tin_nhan_pin', onMessagePinned);
     chatSocket.on('tin_nhan_thu_hoi', onMessageRevoked);
     chatSocket.on('tin_nhan_da_xoa', onMessageDeleted);
+    chatSocket.on('tin_nhan_cap_nhat', onMessageUpdated);
 
     if (onTypingStart) {
       chatSocket.on('nguoi_dung_dang_soan_tin_nhan', onTypingStart as any);
@@ -72,6 +75,7 @@ export function useMessageSocket({
       chatSocket.off('tin_nhan_pin', onMessagePinned);
       chatSocket.off('tin_nhan_thu_hoi', onMessageRevoked);
       chatSocket.off('tin_nhan_da_xoa', onMessageDeleted);
+      chatSocket.off('tin_nhan_cap_nhat', onMessageUpdated);
 
       if (onTypingStart) {
         chatSocket.off('nguoi_dung_dang_soan_tin_nhan', onTypingStart as any);
@@ -101,6 +105,7 @@ export function useMessageSocket({
     onMessagePinned,
     onMessageRevoked,
     onMessageDeleted,
+    onMessageUpdated,
     onTypingStart,
     onTypingStop,
     onRemovedFromGroup,

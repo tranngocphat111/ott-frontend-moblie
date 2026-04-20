@@ -20,7 +20,24 @@ export function useConversationMessages(conversationId: string | undefined, user
   }, []);
 
   const normalizeMessages = useCallback((messageList: ChatMessage[]) => {
-    return [...messageList].sort((left, right) => {
+    const map = new Map<string, ChatMessage>();
+    
+    // Iterate to deduplicate, merging if necessary
+    messageList.forEach(item => {
+      const id = item.msg_id || item._id;
+      const key = id ? String(id) : String(item.local_temp_id || '');
+      if (!key) return;
+      
+      const existing = map.get(key);
+      if (existing) {
+         // Keep the local_temp_id if it exists, and prefer the newer/more complete item
+         map.set(key, { ...existing, ...item, local_temp_id: existing.local_temp_id || item.local_temp_id });
+      } else {
+         map.set(key, item);
+      }
+    });
+
+    return Array.from(map.values()).sort((left, right) => {
       const leftTime = new Date(left.createdAt || left.created_at || 0).getTime();
       const rightTime = new Date(right.createdAt || right.created_at || 0).getTime();
 
@@ -29,7 +46,6 @@ export function useConversationMessages(conversationId: string | undefined, user
       const leftMsgId = String(left.msg_id || '0');
       const rightMsgId = String(right.msg_id || '0');
       
-      // Use numeric comparison for strings that look like numbers (Snowflake IDs)
       if (/^\d+$/.test(leftMsgId) && /^\d+$/.test(rightMsgId)) {
         try {
           const lId = BigInt(leftMsgId);
@@ -46,18 +62,32 @@ export function useConversationMessages(conversationId: string | undefined, user
   }, []);
 
   const normalizePinnedMessages = useCallback((messageList: ChatMessage[]) => {
-    return [...messageList]
-      .filter((message) => !!message?.is_pinned)
-      .sort((left, right) => {
-        const leftPinnedAt = new Date(left.pinned_at || left.createdAt || left.created_at || 0).getTime();
-        const rightPinnedAt = new Date(right.pinned_at || right.createdAt || right.created_at || 0).getTime();
+    const map = new Map<string, ChatMessage>();
+    
+    messageList.forEach(item => {
+      if (!item?.is_pinned) return;
+      const id = item.msg_id || item._id;
+      const key = id ? String(id) : String(item.local_temp_id || '');
+      if (!key) return;
+      
+      const existing = map.get(key);
+      if (existing) {
+         map.set(key, { ...existing, ...item, local_temp_id: existing.local_temp_id || item.local_temp_id });
+      } else {
+         map.set(key, item);
+      }
+    });
 
-        if (leftPinnedAt !== rightPinnedAt) return rightPinnedAt - leftPinnedAt;
+    return Array.from(map.values()).sort((left, right) => {
+      const leftPinnedAt = new Date(left.pinned_at || left.createdAt || left.created_at || 0).getTime();
+      const rightPinnedAt = new Date(right.pinned_at || right.createdAt || right.created_at || 0).getTime();
 
-        const leftMsgId = String(left.msg_id || '0');
-        const rightMsgId = String(right.msg_id || '0');
+      if (leftPinnedAt !== rightPinnedAt) return rightPinnedAt - leftPinnedAt;
 
-        if (/^\d+$/.test(leftMsgId) && /^\d+$/.test(rightMsgId)) {
+      const leftMsgId = String(left.msg_id || '0');
+      const rightMsgId = String(right.msg_id || '0');
+
+      if (/^\d+$/.test(leftMsgId) && /^\d+$/.test(rightMsgId)) {
           try {
             const lId = BigInt(leftMsgId);
             const rId = BigInt(rightMsgId);

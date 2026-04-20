@@ -22,6 +22,8 @@ export type ChatMessageType =
   | 'file'
   | 'video'
   | 'audio'
+  | 'poll'
+  | 'system_poll'
   | ChatCallMessageType
   | ChatSystemMessageType;
 
@@ -43,6 +45,9 @@ export interface ChatMessageReplyPreview {
   media_count?: number;
   is_deleted?: boolean;
   is_revoked?: boolean;
+  poll_question?: string | null;
+  poll_options?: any[];
+  poll_multiple_choice?: boolean;
 }
 
 export interface ChatMessage {
@@ -82,6 +87,9 @@ export interface ChatMessage {
     show_delete_for_non_owner?: boolean;
     show_delete_action?: boolean;
   } | null;
+  poll_question?: string | null;
+  poll_multiple_choice?: boolean;
+  poll_options?: Array<{ id: string; name: string; voters: string[] }>;
   local_temp_id?: string;
   local_status?: 'uploading' | 'success' | 'error';
   local_upload_progress?: number;

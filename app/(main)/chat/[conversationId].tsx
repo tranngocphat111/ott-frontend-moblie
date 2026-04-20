@@ -49,6 +49,8 @@ import {
   ChatVoicePanel,
   MessageReactionsModal,
 } from "@/components/chat";
+import { ChatExtraPanel } from "@/components/chat/ChatExtraPanel";
+import { CreatePollModal } from "@/components/chat/modals/CreatePollModal";
 import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
 import { ForwardMessageModal } from "@/components/chat/modals/ForwardMessageModal";
 import { ReplacePinnedModal } from "@/components/chat/modals/ReplacePinnedModal";
@@ -668,6 +670,7 @@ export default function ChatDetailScreen() {
   const [forwardConversations, setForwardConversations] = useState<ChatConversationWithParticipant[]>([]);
   const [forwardLoading, setForwardLoading] = useState(false);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [pollModalVisible, setPollModalVisible] = useState(false);
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
   const initialMediaReadyRef = useRef<Set<string>>(new Set());
@@ -676,6 +679,7 @@ export default function ChatDetailScreen() {
   const {
     voicePanelVisible,
     imagePanelVisible,
+    extraPanelVisible,
     selectedMediaIds,
     hasSelectedMedia,
     setVoicePanelVisible,
@@ -683,6 +687,7 @@ export default function ChatDetailScreen() {
     closeAllPanels,
     toggleVoicePanel,
     toggleImagePanel,
+    toggleExtraPanel,
     closeImagePanel,
     toggleSelectMedia,
   } = useChatPanels();
@@ -2112,6 +2117,22 @@ export default function ChatDetailScreen() {
     [conversationId, loadConversation],
   );
 
+  const handleMessageUpdated = useCallback(
+    (payload: ChatMessage) => {
+      const payloadConvId = String((payload as any).conversation_id || (payload as any).conversationId || "");
+      if (payloadConvId !== String(conversationId)) return;
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          String(msg.msg_id || msg._id || "") === String(payload.msg_id || payload._id || "")
+            ? { ...msg, ...payload }
+            : msg
+        )
+      );
+    },
+    [conversationId, setMessages]
+  );
+
   // Setup socket listeners
   useMessageSocket({
     conversationId,
@@ -2121,6 +2142,7 @@ export default function ChatDetailScreen() {
     onMessagePinned: handleMessagePinned,
     onMessageRevoked: handleMessageRevoked,
     onMessageDeleted: handleMessageDeleted,
+    onMessageUpdated: handleMessageUpdated,
     onTypingStart: handleTypingStart,
     onTypingStop: handleTypingStop,
     onRemovedFromGroup: handleRemovedFromGroup,
@@ -2147,6 +2169,29 @@ export default function ChatDetailScreen() {
       },
     ]);
   }, [conversationId, router, userIdForChat]);
+
+  const handleCreatePoll = useCallback(async (data: { question: string; options: { id: string; name: string; voters: string[] }[]; multipleChoice: boolean }) => {
+    if (!conversationId || !userIdForChat) return;
+
+    try {
+      await ChatApi.sendMessage({
+        conversationId,
+        senderId: userIdForChat,
+        content: "Khảo sát",
+        type: "poll",
+        pollQuestion: data.question,
+        pollMultipleChoice: data.multipleChoice,
+        pollOptions: data.options,
+        replyToMsgId: replyToMessage?.msg_id,
+      });
+      setReplyToMessage(null);
+      setPendingScrollToBottom();
+      setPollModalVisible(false);
+    } catch (error) {
+      console.error("Failed to create poll:", error);
+      Alert.alert("Lỗi", "Không thể tạo khảo sát. Vui lòng thử lại.");
+    }
+  }, [conversationId, userIdForChat, replyToMessage?.msg_id, setPendingScrollToBottom]);
 
   // Send message
   const onSendMessage = useCallback(async () => {
@@ -2373,9 +2418,12 @@ export default function ChatDetailScreen() {
             onSend={() => void onSendMessage()}
             onToggleImagePanel={toggleImagePanel}
             onToggleVoicePanel={toggleVoicePanel}
+            onToggleExtraPanel={toggleExtraPanel}
             onPickFile={() => void pickFileAndSend()}
             imagePanelActive={imagePanelVisible}
             voicePanelActive={voicePanelVisible}
+            extraPanelActive={extraPanelVisible}
+            isGroup={isGroup}
             replyToMessage={replyToMessage}
             onCancelReply={() => setReplyToMessage(null)}
             disabled={!conversationId || !userIdForChat || isSendingAttachment}
@@ -2443,6 +2491,17 @@ export default function ChatDetailScreen() {
               }
             }}
             formatVoiceDuration={formatVoiceDuration}
+          />
+        )}
+
+        {!isChatLocked && extraPanelVisible && (
+          <ChatExtraPanel
+            visible={extraPanelVisible}
+            onClose={() => toggleExtraPanel()}
+            onPickFile={() => void pickFileAndSend()}
+            onOpenPoll={() => setPollModalVisible(true)}
+            accentColor={CHAT_BROWN}
+            height={CHAT_PANEL_HEIGHT}
           />
         )}
       </KeyboardAvoidingView>
@@ -2622,6 +2681,12 @@ export default function ChatDetailScreen() {
         isSubmitting={isForwarding}
         onClose={closeForwardModal}
         onConfirm={handleConfirmForward}
+      />
+
+      <CreatePollModal
+        visible={pollModalVisible}
+        onClose={() => setPollModalVisible(false)}
+        onSubmit={handleCreatePoll}
       />
     </SafeAreaView>
   );

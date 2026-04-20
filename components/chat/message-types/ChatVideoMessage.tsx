@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Play } from 'lucide-react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types/entities/chat';
 import { resolveMediaUrl } from '@/utils/chat';
 
 type Props = {

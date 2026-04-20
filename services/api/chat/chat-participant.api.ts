@@ -138,6 +138,17 @@ export const chatParticipantApi = {
     });
   },
 
+  async transferOwnership(
+    conversationId: string,
+    currentOwnerId: string,
+    newOwnerId: string,
+  ): Promise<any> {
+    return await chatApiClient.put(`/participants/transfer-owner/${conversationId}`, {
+      currentOwnerId,
+      newOwnerId,
+    });
+  },
+
   async markAsRead(
     conversationId: string,
     userId: string,

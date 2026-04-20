@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types/entities/chat';
 import { getOptimizedImageUrl, resolveMediaUrl } from '@/utils/chat';
 
 type Props = {
@@ -19,25 +19,23 @@ const calculateAspectRatio = (width?: number | string, height?: number | string)
   const w = Number(width);
   const h = Number(height);
   if (!w || !h || isNaN(w) || isNaN(h)) return null;
-  return Math.min(Math.max(w / h, 0.7), 1.5);
+  return Math.min(Math.max(w / h, 0.7), 1.5); // Giới hạn tỷ lệ từ 0.7 đến 1.5 để ảnh không bị quá dài hoặc quá dẹt
 };
 
 const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPress, onMediaReady }) => {
   const readyRef = useRef(false);
 
-  // Cố gắng trích xuất width và height từ message để cố định layout ngay từ lúc khởi tạo
-  // (Yêu cầu: Lúc gửi ảnh lên, bạn cần thêm `width` và `height` vào object content của ảnh)
-  const firstContentItem = Array.isArray(message.content) ? message.content[0] : null;
-  const initialImageWidth = (message as any).image_width || (firstContentItem as any)?.width;
-  const initialImageHeight = (message as any).image_height || (firstContentItem as any)?.height;
+  // Trích xuất width và height từ message để cố định layout ngay từ mili-giây đầu tiên
+  const initialAspectRatio = useMemo(() => {
+    const firstContentItem = Array.isArray(message.content) ? message.content[0] : null;
+    const initialImageWidth = (message as any).image_width || (firstContentItem as any)?.width;
+    const initialImageHeight = (message as any).image_height || (firstContentItem as any)?.height;
 
-  // Tính toán trước tỉ lệ nếu có sẵn số liệu
-  const initialAspectRatio = useMemo(
-    () => calculateAspectRatio(initialImageWidth, initialImageHeight),
-    [initialImageWidth, initialImageHeight]
-  );
+    return calculateAspectRatio(initialImageWidth, initialImageHeight);
+  }, [message.content, (message as any).image_width, (message as any).image_height]);
 
-  const [aspectRatio, setAspectRatio] = useState<number | null>(initialAspectRatio);
+  // Nếu không có kích thước lúc gửi, ta set mặc định tỷ lệ là 1 (hình vuông) để giữ chỗ, tránh bị nhảy chiều cao
+  const [aspectRatio, setAspectRatio] = useState<number>(initialAspectRatio || 1);
 
   const imageUrls = useMemo(() => {
     if (!Array.isArray(message.content)) return [];
@@ -103,7 +101,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
             source={{ uri: optimizedUrls[0] || imageUrls[0] }}
             style={{
               width: CLUSTER_WIDTH,
-              ...(aspectRatio ? { aspectRatio } : { height: 200 }),
+              aspectRatio: aspectRatio, // Đã có fallback an toàn, không dùng height tĩnh nữa
               maxHeight: 350,
               backgroundColor: '#f0e6dc',
             }}
@@ -112,11 +110,12 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
             transition={120}
             placeholder={BLUR_HASH_PLACEHOLDER}
             onLoad={(e) => {
-              // Chỉ ép lại aspect ratio nếu lúc trước ta chưa biết kích thước (VD: tin nhắn cũ load từ server)
+              // Nếu ban đầu server/app không có truyền width/height vào message, cập nhật lại sau khi load xong
               if (!initialAspectRatio) {
                 const width = e.source?.width || 1;
                 const height = e.source?.height || 1;
-                setAspectRatio(calculateAspectRatio(width, height));
+                const newRatio = calculateAspectRatio(width, height);
+                if (newRatio) setAspectRatio(newRatio);
               }
               markReady();
             }}

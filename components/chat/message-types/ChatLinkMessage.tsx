@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Alert, Linking, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { ExternalLink, Globe, Link2 } from 'lucide-react-native';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types/entities/chat';
 
 type Props = {
   message: ChatMessage;

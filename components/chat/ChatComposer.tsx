@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { Keyboard, Pressable, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types/entities/chat';
 import { getMessageBodyText } from '@/utils/chat';
 
 interface ChatComposerProps {
@@ -11,8 +11,10 @@ interface ChatComposerProps {
   onToggleImagePanel?: () => void;
   onToggleVoicePanel?: () => void;
   onPickFile?: () => void;
+  onToggleExtraPanel?: () => void;
   imagePanelActive?: boolean;
   voicePanelActive?: boolean;
+  extraPanelActive?: boolean;
   replyToMessage?: ChatMessage | null;
   onCancelReply?: () => void;
   disabled?: boolean;
@@ -22,6 +24,7 @@ interface ChatComposerProps {
   onSendSelected?: () => void;
   onInputFocus?: () => void;
   onInputPressIn?: () => void;
+  isGroup?: boolean;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -31,8 +34,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onToggleImagePanel,
   onToggleVoicePanel,
   onPickFile,
+  onToggleExtraPanel,
   imagePanelActive = false,
   voicePanelActive = false,
+  extraPanelActive = false,
   replyToMessage,
   onCancelReply,
   disabled = false,
@@ -42,6 +47,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onSendSelected,
   onInputFocus,
   onInputPressIn,
+  isGroup = false,
 }) => {
   const textInputRef = useRef<TextInput>(null);
   const canSend = value.trim().length > 0 && !disabled;
@@ -103,17 +109,31 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             </Pressable>
           ) : (
             <View className="flex-row items-center gap-1">
-              <Pressable
-                className={actionButtonClass}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  textInputRef.current?.blur();
-                  onPickFile?.();
-                }}
-                disabled={disabled}
-              >
-                <Feather name="file" size={18} color="#475569" />
-              </Pressable>
+              {isGroup ? (
+                <Pressable
+                  className={actionButtonClass}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    textInputRef.current?.blur();
+                    onToggleExtraPanel?.();
+                  }}
+                  disabled={disabled}
+                >
+                  <Feather name="more-horizontal" size={20} color={extraPanelActive ? accentColor : '#475569'} />
+                </Pressable>
+              ) : (
+                <Pressable
+                  className={actionButtonClass}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    textInputRef.current?.blur();
+                    onPickFile?.();
+                  }}
+                  disabled={disabled}
+                >
+                  <Feather name="paperclip" size={20} color="#475569" />
+                </Pressable>
+              )}
               <Pressable
                 className={actionButtonClass}
                 onPress={() => {

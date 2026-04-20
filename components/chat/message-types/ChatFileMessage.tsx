@@ -3,7 +3,7 @@ import { Alert, Pressable, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Download, FileArchive, FileAudio2, FileCode2, FileImage, FileSpreadsheet, FileText, FileVideo } from 'lucide-react-native';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types/entities/chat';
 import { resolveMediaUrl } from '@/utils/chat';
 
 type Props = {
