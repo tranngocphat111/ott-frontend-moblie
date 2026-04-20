@@ -10,6 +10,7 @@ type Props = {
   message: ChatMessage;
   isMine: boolean;
   accentColor?: string;
+  fullWidth?: boolean;
 };
 
 type AudioSource = {
@@ -98,7 +99,7 @@ const Waveform = ({ isPlaying }: { isPlaying: boolean }) => {
   );
 };
 
-export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor = '#d2a177' }) => {
+export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor = '#d2a177', fullWidth }) => {
   const audioId = useMemo(() => message.msg_id || message._id, [message._id, message.msg_id]);
   const source = useMemo(() => getAudioSource(message), [message]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -265,7 +266,7 @@ export const ChatAudioMessage: React.FC<Props> = ({ message, isMine, accentColor
   const displayTotalDuration = formatDuration(totalDuration);
 
   return (
-    <View className={`flex-row items-center gap-3.5 rounded-xl border px-3 py-3 shadow-sm ${isMine ? 'border-[#e6cdb3] bg-[#efdccb]' : 'border-[#eadfd3] bg-white'}`} style={{ minWidth: 220 }}>
+    <View className={`flex-row items-center gap-3.5 rounded-xl border px-3 py-3 shadow-sm ${fullWidth ? 'w-full' : ''} ${isMine ? 'border-[#e6cdb3] bg-[#efdccb]' : 'border-[#eadfd3] bg-white'}`} style={fullWidth ? undefined : { minWidth: 220 }}>
       <Pressable
         onPress={togglePlayback}
         className={`h-11 w-11 items-center justify-center rounded-full ${isMine ? 'bg-[#dfc0a4]' : 'bg-[#f7f3f0]'}`}

@@ -43,6 +43,9 @@ import {
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
 import { CreateGroupModal } from "@/components/chat/modals/CreateGroupModal";
+import { ChatImagePreviewModal } from "@/components/chat/ChatImagePreviewModal";
+import { ChatFileMessage } from "@/components/chat/message-types/ChatFileMessage";
+import { ChatAudioMessage } from "@/components/chat/message-types/ChatAudioMessage";
 
 type InfoTab = "members" | "pinned" | "media" | "files" | "links";
 type StorageTab = "media" | "videos" | "files" | "links" | "audios";
@@ -363,6 +366,7 @@ export default function ChatInfoScreen() {
   const [groupNameInput, setGroupNameInput] = useState("");
   const [updatingGroupAvatar, setUpdatingGroupAvatar] = useState(false);
   const [createGroupModalVisible, setCreateGroupModalVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // For 1-1 chats: identify the other user
   const otherMember = useMemo(
@@ -1545,16 +1549,17 @@ export default function ChatInfoScreen() {
                         );
                         if (!mediaUri) return null;
                         return (
-                          <View
+                          <Pressable
                             key={`${message._id || message.msg_id || index}`}
                             className="mb-1 mr-1 h-28 w-[31.8%] overflow-hidden rounded-md bg-slate-200"
+                            onPress={() => setSelectedImage(mediaUri)}
                           >
                             <Image
                               source={{ uri: mediaUri }}
                               className="h-full w-full"
                               resizeMode="cover"
                             />
-                          </View>
+                          </Pressable>
                         );
                       })}
                     </View>
@@ -1595,9 +1600,10 @@ export default function ChatInfoScreen() {
                         );
                         if (!mediaUri) return null;
                         return (
-                          <View
+                          <Pressable
                             key={`${message._id || message.msg_id || index}`}
                             className="mb-1 mr-1 h-28 w-[31.8%] overflow-hidden rounded-md bg-slate-200"
+                            onPress={() => setSelectedImage(mediaUri)}
                           >
                             <Image
                               source={{ uri: mediaUri }}
@@ -1611,7 +1617,7 @@ export default function ChatInfoScreen() {
                                 color={THEME_COLORS.neutral.white}
                               />
                             </View>
-                          </View>
+                          </Pressable>
                         );
                       })}
                     </View>
@@ -1679,34 +1685,9 @@ export default function ChatInfoScreen() {
                         "Thành viên";
 
                       return (
-                        <View
-                          key={`${message._id || message.msg_id || index}`}
-                          className="mb-2 flex-row items-center rounded-xl bg-white px-3 py-3 border border-slate-200"
-                        >
-                          <View className="mr-3 h-10 w-10 items-center justify-center rounded-md bg-slate-100">
-                            <Feather
-                              name={fileTypeIcon as any}
-                              size={16}
-                              color={fileTypeColor}
-                            />
-                          </View>
-                          <View className="flex-1">
-                            <Text
-                              className="text-[16px] text-slate-900"
-                              numberOfLines={1}
-                            >
-                              {fileName}
-                            </Text>
-                            <Text className="text-[13px] text-slate-500">
-                              {Math.max(1, Math.round(size / 1024))} KB -{" "}
-                              {sender}
-                            </Text>
-                          </View>
-                          <Feather
-                            name="more-horizontal"
-                            size={16}
-                            color={THEME_COLORS.neutral.slate500}
-                          />
+                        <View key={`${message._id || message.msg_id || index}`} className={`mb-1 py-3 px-1 ${index < items.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                          <Text className="mb-1.5 ml-1 text-[13px] font-semibold text-slate-600">{sender}</Text>
+                          <ChatFileMessage message={message} isMine={false} fullWidth />
                         </View>
                       );
                     })}
@@ -1761,7 +1742,7 @@ export default function ChatInfoScreen() {
                     <Text className="mb-2 text-[18px] font-semibold text-slate-700">
                       {label}
                     </Text>
-                    {items.map((linkItem) => {
+                    {items.map((linkItem, linkIndex) => {
                       const title = linkItem.url.replace(/^https?:\/\//i, "");
                       return (
                         <Pressable
@@ -1775,7 +1756,9 @@ export default function ChatInfoScreen() {
                               : `https://${linkItem.url}`;
                             void Linking.openURL(target);
                           }}
-                          className="mb-2 flex-row rounded-xl bg-white px-3 py-3 border border-slate-200"
+                          className={`flex-row items-center bg-white px-3 py-4 ${
+                            linkIndex < items.length - 1 ? 'border-b border-slate-100' : ''
+                          }`}
                         >
                           <View className="mr-3 h-10 w-10 items-center justify-center rounded-md bg-slate-100">
                             <Feather
@@ -1855,31 +1838,9 @@ export default function ChatInfoScreen() {
                           : Number((content as any)?.size || 0);
 
                       return (
-                        <View
-                          key={`${message._id || message.msg_id || index}`}
-                          className="mb-2 flex-row items-center rounded-xl bg-white px-3 py-3 border border-slate-200"
-                        >
-                          <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-primary-500">
-                            <Feather
-                              name="play"
-                              size={18}
-                              color={THEME_COLORS.neutral.white}
-                            />
-                          </View>
-                          <View className="flex-1">
-                            <Text className="text-[27px] text-slate-900">
-                              00:03
-                            </Text>
-                            <Text className="text-[13px] text-slate-500">
-                              {Math.max(1, Math.round(size / 1024))} KB -{" "}
-                              {sender}
-                            </Text>
-                          </View>
-                          <Feather
-                            name="more-horizontal"
-                            size={16}
-                            color={THEME_COLORS.neutral.slate500}
-                          />
+                        <View key={`${message._id || message.msg_id || index}`} className={`w-full py-3 px-1 ${index < items.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                          <Text className="mb-1.5 ml-1 text-[13px] font-semibold text-slate-600">{sender}</Text>
+                          <ChatAudioMessage message={message} isMine={false} fullWidth />
                         </View>
                       );
                     })}
@@ -2074,6 +2035,14 @@ export default function ChatInfoScreen() {
               Alert.alert('Lỗi', 'Không thể tạo nhóm. Vui lòng thử lại.');
             }
           }}
+        />
+      )}
+
+      {selectedImage && (
+        <ChatImagePreviewModal
+          selectedImage={selectedImage}
+          messages={mediaMessages}
+          onClose={() => setSelectedImage(null)}
         />
       )}
     </SafeAreaView>

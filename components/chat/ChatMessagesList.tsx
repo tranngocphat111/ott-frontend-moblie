@@ -161,48 +161,188 @@ export const ChatMessagesList: React.FC<Props> = ({
   const { user, chatUserId } = useAuth();
   const currentUserId = String(chatUserId || user?.id || userIdForChat || '');
 
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  // Group messages
+  const displayData = React.useMemo(() => {
+    // We assume 'messages' is passed in REVERSE chronological order (newest first)
+    const items: any[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (!isSystemMessageType(msg.type)) {
+        items.push({ type: 'message', message: msg, key: getMessageKey(msg) });
+        continue;
+      }
+
+      // Found a system message. Collect consecutive system messages
+      let endIdx = i;
+      while (endIdx + 1 < messages.length && isSystemMessageType(messages[endIdx + 1].type)) {
+        endIdx++;
+      }
+
+      // If it's just 1 system message, we can still group it or leave it as message. We'll group them if 2+
+      const groupMsgs = messages.slice(i, endIdx + 1);
+      if (groupMsgs.length >= 2) {
+        const groupKey = `sys-group-${getMessageKey(groupMsgs[0])}-${getMessageKey(groupMsgs[groupMsgs.length - 1])}`;
+        items.push({ type: 'system-group', messages: groupMsgs, key: groupKey });
+      } else {
+        items.push({ type: 'message', message: msg, key: getMessageKey(msg) });
+      }
+      i = endIdx;
+    }
+    return items;
+  }, [messages, getMessageKey]);
+
   return (
     <View className="relative flex-1">
       <FlashList
         ref={listRef}
-        data={messages}
-        keyExtractor={getMessageKey}
+        inverted={true}
+        data={displayData}
+        keyExtractor={(item) => item.key}
         onScroll={onScroll}
         removeClippedSubviews
         drawDistance={560}
         scrollEventThrottle={16}
-        estimatedItemSize={120}
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
-        // showsVerticalScrollIndicator={false}
         renderItem={({ item, index }) => {
-        const prevMessage = messages[index - 1];
-        const nextMessage = messages[index + 1];
-        const isMine = String(item.sender_id) === String(userIdForChat || '');
-        const clusterStart = shouldBreakMessageCluster(
-          prevMessage?.createdAt || prevMessage?.created_at,
-          item.createdAt || item.created_at,
-          prevMessage?.sender_id,
-          item.sender_id,
-        );
-        const showTimestamp = shouldShowTimestampAtClusterEnd(
-          item.createdAt || item.created_at,
-          nextMessage?.createdAt || nextMessage?.created_at,
-        );
-        const showSenderName = isGroup && !isMine && clusterStart;
-        const senderName = getMessageSenderName(item, conversation);
-        const senderAvatar = item.sender_avatar || getMessageSenderAvatar(conversation, item.sender_id, currentUserId, item.sender_avatar);
-        const senderAvatarUrl = getOptimizedImageUrl(senderAvatar, 'avatar') || resolveMediaUrl(senderAvatar);
-        const isHighlighted = highlightedMessageId === getMessageKey(item);
+          // In inverted list, next element in array is the OLDER message, prev element is the NEWER message
+          const newerItem = displayData[index - 1];
+          const olderItem = displayData[index + 1];
 
-        if (isSystemMessageType(item.type)) {
-          const displaySystemMessage = personalizeSystemAddMessage(item, conversation, currentUserId);
-          const action = String(item.system_meta?.action || '').toLowerCase();
-          const isOwner = String(conversation?.created_by || '') === currentUserId;
-          const isRemovedUser = String(item.system_meta?.removed_user_id || '') === currentUserId;
-          const showDeleteAction =
-            (action === 'group_dissolved' && !isOwner && item.system_meta?.show_delete_for_non_owner) ||
-            (action === 'removed_from_group' && isRemovedUser && item.system_meta?.show_delete_action);
+          // Determine timestamps based on older item
+          const getOldestMsg = (it: any) => it?.type === 'system-group' ? it.messages[it.messages.length - 1] : it?.message;
+          const getNewestMsg = (it: any) => it?.type === 'system-group' ? it.messages[0] : it?.message;
+
+          const currentOldest = getOldestMsg(item);
+          const currentNewest = getNewestMsg(item);
+          const olderNewest = getNewestMsg(olderItem);
+          const newerOldest = getOldestMsg(newerItem);
+
+          const showTimestamp = shouldShowTimestampAtClusterEnd(
+            olderNewest?.createdAt || olderNewest?.created_at,
+            currentOldest?.createdAt || currentOldest?.created_at,
+          );
+
+          if (item.type === 'system-group') {
+            const groupMsgs = item.messages as ChatMessage[];
+            const isExpanded = !!expandedGroups[item.key];
+            const visibleMsgs = isExpanded ? groupMsgs : [];
+
+            return (
+              <View className="px-2">
+                {showTimestamp && (
+                  <View className="my-2 w-full items-center">
+                    <View className="rounded-full bg-slate-200 px-3 py-1">
+                      <Text className="text-[11px] font-medium text-slate-600">
+                        {formatMessageTimestampLabel(currentOldest?.createdAt || currentOldest?.created_at)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {!isExpanded && (
+                  <View className="my-1 w-full items-center">
+                    <Pressable
+                      onPress={() => setExpandedGroups(prev => ({ ...prev, [item.key]: true }))}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1"
+                    >
+                      <Text className="text-[12px] text-slate-600 font-medium">Xem {groupMsgs.length} thông báo</Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {visibleMsgs.map((sysMsg: ChatMessage) => {
+                  const displaySystemMessage = personalizeSystemAddMessage(sysMsg, conversation, currentUserId);
+                  return (
+                    <View key={getMessageKey(sysMsg)} className="w-full items-center px-2 py-0.5">
+                      <ChatMessageBubble
+                        message={displaySystemMessage}
+                        isMine={false}
+                        mineAccentColor={mineAccentColor}
+                        showSenderName={false}
+                        highlight={highlightedMessageId === getMessageKey(sysMsg)}
+                        onReactionPress={onReactionPress}
+                      />
+                    </View>
+                  );
+                })}
+
+                {isExpanded && (
+                  <View className="my-1 w-full items-center">
+                    <Pressable
+                      onPress={() => setExpandedGroups(prev => ({ ...prev, [item.key]: false }))}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1"
+                    >
+                      <Text className="text-[12px] text-slate-600 font-medium">Thu gọn thông báo</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            );
+          }
+
+          const msg = item.message as ChatMessage;
+          const isMine = String(msg.sender_id) === String(userIdForChat || '');
+          const clusterStart = shouldBreakMessageCluster(
+            olderNewest?.createdAt || olderNewest?.created_at,
+            msg.createdAt || msg.created_at,
+            olderNewest?.sender_id,
+            msg.sender_id,
+          );
+
+          const showSenderName = isGroup && !isMine && clusterStart;
+          const senderName = getMessageSenderName(msg, conversation);
+          const senderAvatar = msg.sender_avatar || getMessageSenderAvatar(conversation, msg.sender_id, currentUserId, msg.sender_avatar);
+          const senderAvatarUrl = getOptimizedImageUrl(senderAvatar, 'avatar') || resolveMediaUrl(senderAvatar);
+          const isHighlighted = highlightedMessageId === getMessageKey(msg);
+
+          if (isSystemMessageType(msg.type)) {
+            const displaySystemMessage = personalizeSystemAddMessage(msg, conversation, currentUserId);
+            const action = String(msg.system_meta?.action || '').toLowerCase();
+            const isOwner = String(conversation?.created_by || '') === currentUserId;
+            const isRemovedUser = String(msg.system_meta?.removed_user_id || '') === currentUserId;
+            const showDeleteAction =
+              (action === 'group_dissolved' && !isOwner && msg.system_meta?.show_delete_for_non_owner) ||
+              (action === 'removed_from_group' && isRemovedUser && msg.system_meta?.show_delete_action);
+
+            return (
+              <View className="px-2">
+                {showTimestamp && (
+                  <View className="my-2 w-full items-center">
+                    <View className="rounded-full bg-slate-200 px-3 py-1">
+                      <Text className="text-[11px] font-medium text-slate-600">
+                        {formatMessageTimestampLabel(msg.createdAt || msg.created_at)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                <View className="w-full items-center px-2">
+                  <ChatMessageBubble
+                    message={displaySystemMessage}
+                    isMine={false}
+                    mineAccentColor={mineAccentColor}
+                    showSenderName={false}
+                    highlight={isHighlighted}
+                    onReactionPress={onReactionPress}
+                  />
+
+                  {showDeleteAction && (
+                    <Pressable
+                      onPress={onDeleteConversation}
+                      className="mt-2 rounded-full border border-red-200 bg-red-50 px-4 py-2"
+                    >
+                      <Text className="text-[13px] font-semibold text-red-600">
+                        Xóa cuộc trò chuyện này
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            );
+          }
 
           return (
             <View className="px-2">
@@ -210,78 +350,41 @@ export const ChatMessagesList: React.FC<Props> = ({
                 <View className="my-2 w-full items-center">
                   <View className="rounded-full bg-slate-200 px-3 py-1">
                     <Text className="text-[11px] font-medium text-slate-600">
-                      {formatMessageTimestampLabel(item.createdAt || item.created_at)}
+                      {formatMessageTimestampLabel(msg.createdAt || msg.created_at)}
                     </Text>
                   </View>
                 </View>
               )}
 
-              <View className="w-full items-center px-2">
-                <ChatMessageBubble
-                  message={displaySystemMessage}
-                  isMine={false}
-                  mineAccentColor={mineAccentColor}
-                  showSenderName={false}
-                  highlight={highlightedMessageId === getMessageKey(item)}
-                  onReactionPress={onReactionPress}
-                />
+              <View
+                className={`flex-row rounded-2xl px-2 ${isMine ? 'justify-end' : 'justify-start'} ${isHighlighted ? 'bg-[#f5ece4]' : ''}`}
+                style={isHighlighted ? { paddingVertical: 4 } : undefined}
+              >
+                {!isMine && clusterStart ? (
+                  <SenderAvatar name={senderName} avatarUrl={senderAvatarUrl} />
+                ) : !isMine ? (
+                  <View className="mr-2 h-8 w-8" />
+                ) : null}
 
-                {showDeleteAction && (
-                  <Pressable
-                    onPress={onDeleteConversation}
-                    className="mt-2 rounded-full border border-red-200 bg-red-50 px-4 py-2"
-                  >
-                    <Text className="text-[13px] font-semibold text-red-600">
-                      Xóa cuộc trò chuyện này
+                <View className={`${isMine ? 'items-end' : 'items-start'} max-w-[80%]`}>
+                  {showSenderName && !isMine && (
+                    <Text className="mb-1 ml-1 text-[12px] font-semibold text-slate-500">
+                      {senderName}
                     </Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-          );
-        }
+                  )}
 
-        return (
-          <View className="px-2">
-            {showTimestamp && (
-              <View className="my-2 w-full items-center">
-                <View className="rounded-full bg-slate-200 px-3 py-1">
-                  <Text className="text-[11px] font-medium text-slate-600">
-                    {formatMessageTimestampLabel(item.createdAt || item.created_at)}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <View
-              className={`flex-row rounded-2xl px-2 ${isMine ? 'justify-end' : 'justify-start'} ${isHighlighted ? 'bg-[#f5ece4]' : ''}`}
-              style={isHighlighted ? { paddingVertical: 4 } : undefined}
-            >
-              {!isMine && clusterStart ? (
-                <SenderAvatar name={senderName} avatarUrl={senderAvatarUrl} />
-              ) : !isMine ? (
-                <View className="mr-2 h-8 w-8" />
-              ) : null}
-
-              <View className={`${isMine ? 'items-end' : 'items-start'} max-w-[80%]`}>
-                {showSenderName && !isMine && (
-                  <Text className="mb-1 ml-1 text-[12px] font-semibold text-slate-500">
-                    {senderName}
-                  </Text>
-                )}
-
-                <ChatMessageBubble
-                  message={item}
-                  isMine={isMine}
-                  mineAccentColor={mineAccentColor}
-                  showSenderName={false}
-                  highlight={isHighlighted}
-                  onReactionPress={onReactionPress}
-                  onMediaReady={onMediaReady}
-                  onPress={
-                    item.type === 'video'
-                      ? () => {
-                          const firstContent = Array.isArray(item.content) ? item.content[0] : item.content;
+                  <ChatMessageBubble
+                    message={msg}
+                    isMine={isMine}
+                    mineAccentColor={mineAccentColor}
+                    showSenderName={false}
+                    highlight={isHighlighted}
+                    onReactionPress={onReactionPress}
+                    onMediaReady={onMediaReady}
+                    onPress={
+                      msg.type === 'video'
+                        ? () => {
+                          const firstContent = Array.isArray(msg.content) ? msg.content[0] : msg.content;
                           const raw = typeof firstContent === 'string'
                             ? firstContent
                             : firstContent && typeof firstContent === 'object'
@@ -292,30 +395,28 @@ export const ChatMessagesList: React.FC<Props> = ({
                             onImagePreview(selected);
                           }
                         }
-                      : isCallMessageType(item.type)
-                        ? () => onCallPress?.(item)
-                      : undefined
-                  }
-                  onLongPress={(event) => onMessageLongPress(item, event)}
-                  onReplyPress={() => item.reply_to_msg_id && onReplyPress(item.reply_to_msg_id)}
-                  onImagePress={(imageIndex) => {
-                    // Keep extraction logic aligned with ChatImageMessage (content items -> url only),
-                    // otherwise indexes can diverge and open the wrong image.
-                    const imageItems = Array.isArray(item.content)
-                      ? item.content
+                        : isCallMessageType(msg.type)
+                          ? () => onCallPress?.(msg)
+                          : undefined
+                    }
+                    onLongPress={(event) => onMessageLongPress(msg, event)}
+                    onReplyPress={() => msg.reply_to_msg_id && onReplyPress(msg.reply_to_msg_id)}
+                    onImagePress={(imageIndex) => {
+                      const imageItems = Array.isArray(msg.content)
+                        ? msg.content
                           .map((content) => (typeof content === 'string' ? content : (content as any)?.url))
                           .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
                           .map((value) => resolveMediaUrl(String(value)))
-                      : [];
+                        : [];
 
-                    const selected = imageItems[imageIndex];
-                    if (selected) onImagePreview(selected);
-                  }}
-                />
+                      const selected = imageItems[imageIndex];
+                      if (selected) onImagePreview(selected);
+                    }}
+                  />
+                </View>
               </View>
             </View>
-          </View>
-        );
+          );
         }}
         ListEmptyComponent={
           <View className="flex-1 items-center justify-center px-6 py-24">
@@ -327,10 +428,10 @@ export const ChatMessagesList: React.FC<Props> = ({
           </View>
         }
         ListFooterComponent={
-          footerComponent ? <View className="pb-2 pt-1">{footerComponent}</View> : null
+          loading && !displayData.length ? null :
+            footerComponent ? <View className="pb-2 pt-1">{footerComponent}</View> : <View className="pb-2 pt-1" />
         }
       />
-
     </View>
   );
 };

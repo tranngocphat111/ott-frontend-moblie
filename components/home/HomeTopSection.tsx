@@ -99,86 +99,68 @@ export function HomeTopSection({
           paddingTop: insets.top + 10,
         }}
       >
-        {!isActiveSearch ? (
-          <View className="flex-row items-center gap-3">
-            <View
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                height: 40,
-                borderRadius: 14,
-                paddingHorizontal: 14,
-                backgroundColor: 'rgba(255,255,255,0.22)',
-              }}
+        <View className="flex-row items-center">
+          <View
+            style={{
+              width: isActiveSearch ? 36 : 0,
+              opacity: isActiveSearch ? 1 : 0,
+              overflow: 'hidden',
+              marginRight: isActiveSearch ? 8 : 0
+            }}
+          >
+            <Pressable
+              onPress={onCloseSearch}
+              className="h-9 w-9 items-center justify-center"
+              hitSlop={8}
             >
-              <Feather name="search" size={18} color={THEME_COLORS.neutral.white} />
-              <TextInput
-                value={searchText}
-                onChangeText={onSearchTextChange}
-                placeholder="Tìm kiếm"
-                placeholderTextColor={THEME_COLORS.neutral.white}
-                onFocus={onSearchFocus}
-                onBlur={onSearchBlur}
-                style={{
-                  marginLeft: 12,
-                  flex: 1,
-                  height: 40,
-                  paddingVertical: 0,
-                  fontSize: 14,
-                  color: THEME_COLORS.neutral.white,
-                }}
-              />
-              {searchText.length > 0 && (
-                <Pressable onPress={onClearSearch}>
-                  <Feather name="x-circle" size={18} color={THEME_COLORS.neutral.white} />
-                </Pressable>
-              )}
-            </View>
-            {renderActionButtons()}
-          </View>
-        ) : (
-          <View className="flex-row items-center gap-2">
-            <Pressable onPress={onCloseSearch} className="h-9 w-9 items-center justify-center">
               <Feather name="chevron-left" size={22} color={THEME_COLORS.neutral.white} />
             </Pressable>
-            <View
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                height: 40,
-                borderRadius: 14,
-                paddingHorizontal: 14,
-                backgroundColor: 'white',
-              }}
-            >
-              <Feather name="search" size={18} color={THEME_COLORS.primary[900]} />
-              <TextInput
-                value={searchText}
-                onChangeText={onSearchTextChange}
-                placeholder="Tìm kiếm"
-                placeholderTextColor={THEME_COLORS.primary[900]}
-                onFocus={onSearchFocus}
-                onBlur={onSearchBlur}
-                style={{
-                  marginLeft: 12,
-                  flex: 1,
-                  height: 40,
-                  paddingVertical: 0,
-                  fontSize: 14,
-                  color: THEME_COLORS.primary[900],
-                }}
-              />
-              {searchText.length > 0 && (
-                <Pressable onPress={onClearSearch}>
-                  <Feather name="x-circle" size={18} color={THEME_COLORS.primary[900]} />
-                </Pressable>
-              )}
-            </View>
-            {renderActionButtons()}
           </View>
-        )}
+
+          <View
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              height: 35,
+              borderRadius: 14,
+              paddingHorizontal: 14,
+              backgroundColor: isActiveSearch ? 'white' : 'rgba(255,255,255,0.22)',
+            }}
+          >
+            <Feather
+              name="search"
+              size={18}
+              color={isActiveSearch ? THEME_COLORS.primary[900] : THEME_COLORS.neutral.white}
+            />
+            <TextInput
+              value={searchText}
+              onChangeText={onSearchTextChange}
+              placeholder="Tìm kiếm"
+              placeholderTextColor={isActiveSearch ? THEME_COLORS.primary[900] : THEME_COLORS.neutral.white}
+              onFocus={onSearchFocus}
+              onBlur={onSearchBlur}
+              style={{
+                marginLeft: 12,
+                flex: 1,
+                height: 40,
+                paddingVertical: 0,
+                fontSize: 14,
+                color: isActiveSearch ? THEME_COLORS.primary[900] : THEME_COLORS.neutral.white,
+              }}
+            />
+            {searchText.length > 0 && (
+              <Pressable onPress={onClearSearch}>
+                <Feather
+                  name="x-circle"
+                  size={18}
+                  color={isActiveSearch ? THEME_COLORS.primary[900] : THEME_COLORS.neutral.white}
+                />
+              </Pressable>
+            )}
+          </View>
+          {renderActionButtons()}
+        </View>
       </LinearGradient>
 
       {!isActiveSearch && <View className="border-b border-slate-200 bg-white" />}

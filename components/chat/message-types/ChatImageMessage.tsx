@@ -14,9 +14,30 @@ type Props = {
 const BLUR_HASH_PLACEHOLDER = '|rF?hV%2WCj[ayj[a|j[aybgF-jswaWbxaf8ayfbqsj[ayj[j[ayj[ayj[ayj[ayj[ayj[ayj[ay';
 const CLUSTER_WIDTH = 260;
 
+// Hàm hỗ trợ tính tỉ lệ khung hình (Aspect Ratio) an toàn
+const calculateAspectRatio = (width?: number | string, height?: number | string) => {
+  const w = Number(width);
+  const h = Number(height);
+  if (!w || !h || isNaN(w) || isNaN(h)) return null;
+  return Math.min(Math.max(w / h, 0.7), 1.5);
+};
+
 const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPress, onMediaReady }) => {
-  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
   const readyRef = useRef(false);
+
+  // Cố gắng trích xuất width và height từ message để cố định layout ngay từ lúc khởi tạo
+  // (Yêu cầu: Lúc gửi ảnh lên, bạn cần thêm `width` và `height` vào object content của ảnh)
+  const firstContentItem = Array.isArray(message.content) ? message.content[0] : null;
+  const initialImageWidth = (message as any).image_width || (firstContentItem as any)?.width;
+  const initialImageHeight = (message as any).image_height || (firstContentItem as any)?.height;
+
+  // Tính toán trước tỉ lệ nếu có sẵn số liệu
+  const initialAspectRatio = useMemo(
+    () => calculateAspectRatio(initialImageWidth, initialImageHeight),
+    [initialImageWidth, initialImageHeight]
+  );
+
+  const [aspectRatio, setAspectRatio] = useState<number | null>(initialAspectRatio);
 
   const imageUrls = useMemo(() => {
     if (!Array.isArray(message.content)) return [];
@@ -91,9 +112,12 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
             transition={120}
             placeholder={BLUR_HASH_PLACEHOLDER}
             onLoad={(e) => {
-              const width = e.source?.width || 1;
-              const height = e.source?.height || 1;
-              setAspectRatio(Math.min(Math.max(width / height, 0.7), 1.5));
+              // Chỉ ép lại aspect ratio nếu lúc trước ta chưa biết kích thước (VD: tin nhắn cũ load từ server)
+              if (!initialAspectRatio) {
+                const width = e.source?.width || 1;
+                const height = e.source?.height || 1;
+                setAspectRatio(calculateAspectRatio(width, height));
+              }
               markReady();
             }}
             onError={markReady}

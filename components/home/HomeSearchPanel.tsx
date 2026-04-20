@@ -37,7 +37,7 @@ type HomeSearchPanelProps = {
   onOpenHistoryConversation: (item: HomeSearchHistoryContact) => void;
   onDeleteHistoryItem: (userId: string) => void;
   onClearHistory: () => void;
-  onOpenConversation: (conversationId: string) => void;
+  onOpenConversation: (conversationId: string, messageId?: string) => void;
   onLoadMore: (section: keyof HomeSearchVisibleCounts) => void;
   searchAvatarByUserId: Map<string, string>;
   searchAvatarByConversationId: Map<string, string>;
@@ -106,7 +106,13 @@ const SearchSectionHeader = ({ label, count }: { label: string; count: number })
   <Text className="mb-2 text-[13px] font-semibold text-slate-700">{`${label} (${count})`}</Text>
 );
 
-const previewMessage = (item: any) => String(item?.preview || '').trim() || '[Tin nhắn]';
+const previewMessage = (item: any) => {
+  if (item.type === 'audio') return 'Tin nhắn thoại';
+  if (item.type === 'image') return '[Hình ảnh]';
+  if (item.type === 'video') return '[Video]';
+  const preview = item?.preview || (Array.isArray(item.content) ? item.content[0] : item.content);
+  return String(preview || '').trim() || '[Tin nhắn]';
+};
 
 const previewFile = (item: any) => String(item?.file_name || item?.key || '').trim() || '[Tệp]';
 
@@ -181,7 +187,7 @@ export function HomeSearchPanel({
             </View>
 
             {!isEditingHistory ? (
-              <ScrollView  horizontal  showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View className="flex-row pt-2 gap-4 pb-1">
                   {recentContactHistory.map((item) => (
                     <Pressable
@@ -256,7 +262,7 @@ export function HomeSearchPanel({
           <View className="mb-4">
             <SearchSectionHeader label="Hội thoại" count={mergedConversationResults.length} />
             <View className="rounded-2xl bg-white p-4 shadow-sm">
-              {mergedConversationResults.slice(0, searchVisibleCounts.conversations).map((item) => (
+              {mergedConversationResults.slice(0, searchVisibleCounts.conversations).map((item, index) => (
                 <Pressable
                   key={item.key}
                   onPress={() => {
@@ -264,7 +270,10 @@ export function HomeSearchPanel({
                       onOpenConversation(item.conversationId);
                     }
                   }}
-                  className="mb-2 flex-row items-center rounded-lg px-3 py-2"
+                  className={`flex-row items-center px-3 py-3 ${index < Math.min(mergedConversationResults.length, searchVisibleCounts.conversations) - 1
+                    ? 'border-b border-slate-100'
+                    : ''
+                    }`}
                 >
                   <SearchAvatar label={item.label} avatar={item.avatar} icon={item.icon} />
                   <View className="ml-3 flex-1">
@@ -290,11 +299,14 @@ export function HomeSearchPanel({
               {(searchResults.messages || [])
                 .filter((item) => !senderFilter || String(item.sender_id || '') === senderFilter)
                 .slice(0, searchVisibleCounts.messages)
-                .map((item) => (
+                .map((item, index) => (
                   <Pressable
                     key={item._id}
-                    onPress={() => onOpenConversation(String(item.conversation_id || ''))}
-                    className="mb-2 flex-row items-start rounded-lg px-3 py-2"
+                    onPress={() => onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || item._id || ''))}
+                    className={`flex-row items-start px-3 py-3 ${index < Math.min((searchResults.messages || []).filter((msg) => !senderFilter || String(msg.sender_id || '') === senderFilter).length, searchVisibleCounts.messages) - 1
+                      ? 'border-b border-slate-100'
+                      : ''
+                      }`}
                   >
                     <SearchAvatar
                       label={item.sender_name || item.sender_id || 'Tin nhắn'}
@@ -332,11 +344,14 @@ export function HomeSearchPanel({
           <View className="mb-4">
             <SearchSectionHeader label="Tệp và ghi âm" count={(searchResults.files || []).length + (searchResults.media || []).length} />
             <View className="rounded-2xl bg-white p-4 shadow-sm">
-              {(searchResults.files || []).slice(0, searchVisibleCounts.files).map((item: ChatSearchFileItem) => (
+              {(searchResults.files || []).slice(0, searchVisibleCounts.files).map((item: ChatSearchFileItem, index: number) => (
                 <Pressable
                   key={item._id}
-                  onPress={() => onOpenConversation(String(item.conversation_id || ''))}
-                  className="mb-2 flex-row items-start rounded-lg px-3 py-2"
+                  onPress={() => onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || item.message_id || ''))}
+                  className={`flex-row items-start px-3 py-3 ${index < Math.min((searchResults.messages || []).filter((msg) => !senderFilter || String(msg.sender_id || '') === senderFilter).length, searchVisibleCounts.messages) - 1
+                    ? 'border-b border-slate-100'
+                    : ''
+                    }`}
                 >
                   <SearchAvatar
                     label={item.sender_name || item.sender_id || 'File'}
@@ -363,8 +378,11 @@ export function HomeSearchPanel({
               {(searchResults.media || []).slice(0, searchVisibleCounts.media).map((item: any, idx: number) => (
                 <Pressable
                   key={`${item._id || item.message_id || idx}`}
-                  onPress={() => onOpenConversation(String(item.conversation_id || ''))}
-                  className="mb-2 flex-row items-start rounded-lg px-3 py-2"
+                  onPress={() => onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || item.message_id || ''))}
+                  className={`flex-row items-start px-3 py-3 ${idx < Math.min((searchResults.media || []).length, searchVisibleCounts.media) - 1
+                    ? 'border-b border-slate-100'
+                    : ''
+                    }`}
                 >
                   <SearchAvatar
                     label={item.sender_name || item.sender_id || 'Media'}

@@ -18,6 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
+import * as VideoThumbnails from "expo-video-thumbnails";
 import * as Sharing from "expo-sharing";
 import { Audio } from "expo-av";
 import { StatusBar } from "expo-status-bar";
@@ -112,6 +113,7 @@ const isSameMessageById = (left: ChatMessage, right: ChatMessage) => {
     (leftDbId && (leftDbId === rightDbId || leftDbId === rightMsgId))
   );
 };
+
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const MAX_VIDEO_UPLOAD_SIZE = 100 * 1024 * 1024;
 const CHAT_BROWN_DARK = '#b78457';
@@ -126,6 +128,9 @@ type ChatPanelMediaAsset = {
   mediaType: MediaLibrary.MediaTypeValue;
   filename?: string;
   uri: string;
+  thumbnailUri?: string;
+  width?: number;
+  height?: number;
 };
 
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -291,7 +296,7 @@ const buildOptimisticImageMessage = (params: {
   localId: string;
   conversationId: string;
   senderId: string;
-  assets: Array<{ uri: string; fileName?: string | null; fileSize?: number | null }>;
+  assets: Array<{ uri: string; fileName?: string | null; fileSize?: number | null; width?: number; height?: number }>;
   replyToMsgId?: string | null;
 }) => {
   const now = new Date().toISOString();
@@ -306,6 +311,8 @@ const buildOptimisticImageMessage = (params: {
       url: asset.uri,
       name: sanitizeFileName(asset.fileName || `image_${Date.now()}_${index}.jpg`),
       size: Number(asset.fileSize || 0),
+      width: asset.width,
+      height: asset.height,
     })),
     type: 'image' as const,
     created_at: now,
@@ -550,7 +557,12 @@ const ChatTypingIndicator = ({
 export default function ChatDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const { conversationId, previewUrl, highlightedMessageId: searchHighlightedMessageId } =
+    useLocalSearchParams<{
+      conversationId: string;
+      previewUrl?: string;
+      highlightedMessageId?: string;
+    }>();
   const { user, chatUserId } = useAuth();
 
   const userIdForChat = chatUserId || user?.id;
@@ -629,6 +641,12 @@ export default function ChatDetailScreen() {
     null,
   );
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (previewUrl) {
+      setSelectedImage(previewUrl);
+    }
+  }, [previewUrl]);
   const [showPinnedList, setShowPinnedList] = useState(false);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -1211,11 +1229,37 @@ export default function ChatDetailScreen() {
         (payload.assets || []).map(async (asset) => {
           try {
             const detail = await MediaLibrary.getAssetInfoAsync(asset.id);
+            const uri = detail.localUri || asset.uri;
+            let thumbnailUri: string | undefined;
+
+            if (asset.mediaType === "video") {
+              try {
+                // Ensure we have a renderable URI for VideoThumbnails
+                const thumbSource = detail.localUri || asset.uri;
+                if (thumbSource) {
+                  // Try to generate thumbnail with a very small offset for speed
+                  VideoThumbnails.getThumbnailAsync(thumbSource, {
+                    time: 50,
+                    quality: 0.4,
+                  }).then(res => {
+                    setMediaAssets(prev => prev.map(a => a.id === asset.id ? { ...a, thumbnailUri: res.uri } : a));
+                  }).catch(() => {
+                    // Fallback: use uri directly if thumbnail fails
+                  });
+                }
+              } catch (e) {
+                console.warn("Could not generate video thumbnail for asset:", asset.id, e);
+              }
+            }
+
             return {
               id: asset.id,
               mediaType: asset.mediaType,
               filename: asset.filename,
-              uri: detail.localUri || asset.uri,
+              uri,
+              thumbnailUri,
+              width: asset.width,
+              height: asset.height,
             };
           } catch {
             return {
@@ -1310,6 +1354,8 @@ export default function ChatDetailScreen() {
         fileName?: string | null;
         mimeType?: string | null;
         fileSize?: number | null;
+        width?: number;
+        height?: number;
       }>,
     ) => {
       if (!conversationId || !userIdForChat || assets.length === 0) return;
@@ -1400,9 +1446,9 @@ export default function ChatDetailScreen() {
               current.map((item) =>
                 (item._id === localTempId || item.local_temp_id === localTempId)
                   ? {
-                      ...item,
-                      local_upload_progress: overall,
-                    }
+                    ...item,
+                    local_upload_progress: overall,
+                  }
                   : item,
               ),
             );
@@ -1423,9 +1469,9 @@ export default function ChatDetailScreen() {
             current.map((item) =>
               (item._id === localTempId || item.local_temp_id === localTempId)
                 ? {
-                    ...createdMessage,
-                    local_temp_id: item.local_temp_id || localTempId,
-                  }
+                  ...createdMessage,
+                  local_temp_id: item.local_temp_id || localTempId,
+                }
                 : item,
             ),
           ),
@@ -1438,10 +1484,10 @@ export default function ChatDetailScreen() {
           current.map((item) =>
             (item._id === localTempId || item.local_temp_id === localTempId)
               ? {
-                  ...item,
-                  local_status: 'error',
-                  local_error: 'Không thể gửi ảnh',
-                }
+                ...item,
+                local_status: 'error',
+                local_error: 'Không thể gửi ảnh',
+              }
               : item,
           ),
         );
@@ -1453,10 +1499,12 @@ export default function ChatDetailScreen() {
 
   const pickImagesAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
+    setIsSendingAttachment(true);
     dismissKeyboard();
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
+      setIsSendingAttachment(false);
       Alert.alert("Quyền truy cập", "Bạn cần cấp quyền thư viện ảnh để gửi ảnh.");
       return;
     }
@@ -1467,9 +1515,11 @@ export default function ChatDetailScreen() {
       allowsMultipleSelection: true,
       selectionLimit: 10,
     });
-    if (result.canceled || result.assets.length === 0) return;
+    if (result.canceled || result.assets.length === 0) {
+      setIsSendingAttachment(false);
+      return;
+    }
 
-    setIsSendingAttachment(true);
     try {
       const imageAssets = result.assets.filter((asset) => String(asset.type || '').toLowerCase() !== 'video');
       const videoAssets = result.assets.filter((asset) => String(asset.type || '').toLowerCase() === 'video');
@@ -1500,10 +1550,12 @@ export default function ChatDetailScreen() {
 
   const takePhotoAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
+    setIsSendingAttachment(true);
     dismissKeyboard();
 
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
+      setIsSendingAttachment(false);
       Alert.alert("Quyền truy cập", "Bạn cần cấp quyền camera để chụp ảnh.");
       return;
     }
@@ -1512,11 +1564,21 @@ export default function ChatDetailScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.9,
     });
-    if (result.canceled || result.assets.length === 0) return;
+    if (result.canceled || result.assets.length === 0) {
+      setIsSendingAttachment(false);
+      return;
+    }
 
-    setIsSendingAttachment(true);
     try {
-      await uploadAndSendImages(result.assets);
+      await uploadAndSendImages(
+        result.assets.map((asset) => ({
+          uri: asset.uri,
+          fileName: asset.fileName || `image_${Date.now()}.jpg`,
+          mimeType: getMimeType(asset.fileName, 'image/jpeg'),
+          width: asset.width,
+          height: asset.height,
+        })),
+      );
       closeImagePanel();
     } catch (error) {
       console.error("Failed to send camera image:", error);
@@ -1529,6 +1591,7 @@ export default function ChatDetailScreen() {
 
   const pickFileAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
+    setIsSendingAttachment(true);
     dismissKeyboard();
 
     const result = await DocumentPicker.getDocumentAsync({
@@ -1536,7 +1599,10 @@ export default function ChatDetailScreen() {
       copyToCacheDirectory: true,
       multiple: true,
     });
-    if (result.canceled || !result.assets?.length) return;
+    if (result.canceled || !result.assets?.length) {
+      setIsSendingAttachment(false);
+      return;
+    }
 
     const validAssets = result.assets.filter((asset) => {
       const fileName = String(asset.name || '');
@@ -1552,9 +1618,11 @@ export default function ChatDetailScreen() {
       const skipped = result.assets.length - validAssets.length;
       Alert.alert("Lưu ý", `${skipped} tệp vượt quá giới hạn (50MB file, 100MB video) đã được bỏ qua.`);
     }
-    if (validAssets.length === 0) return;
+    if (validAssets.length === 0) {
+      setIsSendingAttachment(false);
+      return;
+    }
 
-    setIsSendingAttachment(true);
     try {
       for (let index = 0; index < validAssets.length; index += 1) {
         const asset = validAssets[index];
@@ -1692,6 +1760,8 @@ export default function ChatDetailScreen() {
             uri: asset.uri,
             fileName: asset.filename || `image_${Date.now()}.jpg`,
             mimeType: getMimeType(asset.filename, 'image/jpeg'),
+            width: asset.width,
+            height: asset.height,
           })),
         );
       }
@@ -1805,8 +1875,17 @@ export default function ChatDetailScreen() {
     useCallback(() => {
       void loadConversation();
       void loadRecentMedia(true);
+
+      // Handle highlighting from search results
+      if (searchHighlightedMessageId) {
+        // Small delay to ensure list is ready
+        setTimeout(() => {
+          highlightMessage(searchHighlightedMessageId);
+        }, 300);
+      }
+
       return cleanupHighlight;
-    }, [loadConversation, cleanupHighlight, loadRecentMedia]),
+    }, [loadConversation, cleanupHighlight, loadRecentMedia, searchHighlightedMessageId, highlightMessage]),
   );
 
   useEffect(() => {
@@ -1992,28 +2071,28 @@ export default function ChatDetailScreen() {
       dissolvedByName?: string;
       deleteForOwner?: boolean;
     }) => {
-        if (String(payload?.conversationId || "") !== String(conversationId)) {
-          return;
-        }
+      if (String(payload?.conversationId || "") !== String(conversationId)) {
+        return;
+      }
 
-        if (payload?.deleteForOwner) {
-          chatSocket.leaveConversation(String(conversationId));
-          try {
-            if (userIdForChat) {
-              await ChatApi.deleteConversationForMe(conversationId, userIdForChat);
-            }
-          } catch (err) {
-            console.error("Error deleting conversation:", err);
+      if (payload?.deleteForOwner) {
+        chatSocket.leaveConversation(String(conversationId));
+        try {
+          if (userIdForChat) {
+            await ChatApi.deleteConversationForMe(conversationId, userIdForChat);
           }
-          setTimeout(() => {
-            if (router.dismissAll) router.dismissAll();
-            router.replace("/(main)/(tabs)/home");
-          }, 300);
-        } else {
-          setIsChatLocked(true);
-          chatSocket.leaveConversation(String(conversationId));
-          void loadConversation();
+        } catch (err) {
+          console.error("Error deleting conversation:", err);
         }
+        setTimeout(() => {
+          if (router.dismissAll) router.dismissAll();
+          router.replace("/(main)/(tabs)/home");
+        }, 300);
+      } else {
+        setIsChatLocked(true);
+        chatSocket.leaveConversation(String(conversationId));
+        void loadConversation();
+      }
     },
     [conversationId, userIdForChat, router, loadConversation],
   );
@@ -2122,7 +2201,14 @@ export default function ChatDetailScreen() {
           accentStart={CHAT_BROWN_DARK}
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
-          onBack={handleBack}
+          onBack={() => {
+            if (router.canGoBack()) {
+              // If we came from search, it's better to replace to avoid weird stacks
+              router.replace("/(main)/(tabs)/home");
+            } else {
+              router.replace("/(main)/(tabs)/home");
+            }
+          }}
           onPhone={isMyDocuments ? undefined : () => void openWebCall('voice')}
           onVideo={isMyDocuments ? undefined : () => void openWebCall('video')}
           onMenu={() =>
@@ -2205,55 +2291,62 @@ export default function ChatDetailScreen() {
           }}
         />
 
-        <View className="flex-1 po">
-          <ChatMessagesList
-            loading={loading}
-            preparing={false}
-            messages={displayMessages}
-            conversation={conversation}
-            listRef={listRef as any}
-            onScroll={onScroll as any}
-            onContentSizeChange={handleContentSizeChange}
-            onScrollToIndexFailed={(info) => {
-              requestAnimationFrame(() => {
-                listRef.current?.scrollToOffset({
-                  offset: Math.max(info.averageItemLength * info.index, 0),
-                  animated: true,
-                });
-              });
+        <View className="flex-1">
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={() => {
+              closeAllPanels();
+              Keyboard.dismiss();
             }}
-            userIdForChat={userIdForChat}
-            isGroup={isGroup}
-            highlightedMessageId={highlightedMessageId}
-            getMessageKey={getMessageKey}
-            onMessageLongPress={(message) => openMessageMenu(message)}
-            onReplyPress={(replyToMsgId) => highlightMessage(replyToMsgId)}
-            onImagePreview={(imageUrl) => setSelectedImage(imageUrl)}
-            onCallPress={handleCallMessagePress}
-            onReactionPress={(message) => setReactionDetailsMessage(message)}
-            onMediaReady={handleInitialMediaReady}
-            accentColor={CHAT_BROWN}
-            mineAccentColor={CHAT_BROWN_SOFT}
-            footerComponent={
-              <ChatTypingIndicator
-                typingUserNames={typingUserNames}
-                senderName={typingIndicatorSenderName}
-                senderAvatarUrl={typingIndicatorSenderAvatarUrl}
-                isGroup={isGroup}
-              />
-            }
-            onDeleteConversation={handleDeleteConversationForMe}
-          />
+          >
+            <ChatMessagesList
+              loading={loading}
+              preparing={false}
+              messages={displayMessages}
+              conversation={conversation}
+              listRef={listRef as any}
+              onScroll={onScroll as any}
+              onContentSizeChange={handleContentSizeChange}
+              onScrollToIndexFailed={(info) => {
+                requestAnimationFrame(() => {
+                  listRef.current?.scrollToOffset({
+                    offset: Math.max(info.averageItemLength * info.index, 0),
+                    animated: true,
+                  });
+                });
+              }}
+              userIdForChat={userIdForChat}
+              isGroup={isGroup}
+              highlightedMessageId={highlightedMessageId}
+              getMessageKey={getMessageKey}
+              onMessageLongPress={(message) => openMessageMenu(message)}
+              onReplyPress={(replyToMsgId) => highlightMessage(replyToMsgId)}
+              onImagePreview={(imageUrl) => setSelectedImage(imageUrl)}
+              onCallPress={handleCallMessagePress}
+              onReactionPress={(message) => setReactionDetailsMessage(message)}
+              onMediaReady={handleInitialMediaReady}
+              accentColor={CHAT_BROWN}
+              mineAccentColor={CHAT_BROWN_SOFT}
+              footerComponent={
+                <ChatTypingIndicator
+                  typingUserNames={typingUserNames}
+                  senderName={typingIndicatorSenderName}
+                  senderAvatarUrl={typingIndicatorSenderAvatarUrl}
+                  isGroup={isGroup}
+                />
+              }
+              onDeleteConversation={handleDeleteConversationForMe}
+            />
 
-          {showScrollToBottom && (
-            <Pressable
-              onPress={scrollToBottom}
-              className="absolute bottom-4 right-4 h-11 w-11 items-center justify-center rounded-full border border-[#d8b79a] bg-[#b78457] shadow-lg"
-            >
-              <Feather name="chevron-down" size={20} color="#ffffff" />
-            </Pressable>
-          )}
- 
+            {showScrollToBottom && (
+              <Pressable
+                onPress={scrollToBottom}
+                className="absolute bottom-4 right-4 h-11 w-11 items-center justify-center rounded-full border border-[#d8b79a] bg-[#b78457] shadow-lg"
+              >
+                <Feather name="chevron-down" size={20} color="#ffffff" />
+              </Pressable>
+            )}
+          </Pressable>
         </View>
 
         {uploadProgress && (
@@ -2510,6 +2603,7 @@ export default function ChatDetailScreen() {
         }}
         onConfirm={handleConfirmReplacePinned}
       />
+
 
       <MessageReactionsModal
         visible={!!reactionDetailsMessage}

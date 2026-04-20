@@ -10,6 +10,7 @@ type Props = {
   message: ChatMessage;
   isMine: boolean;
   onLongPress?: (event: any) => void;
+  fullWidth?: boolean;
 };
 
 const getFirstContent = (message: ChatMessage) => {
@@ -76,7 +77,7 @@ const getTypeVisual = (ext: string) => {
   return { label: 'FILE', bg: '#7d93aa', fg: '#ffffff', icon: FileText };
 };
 
-export const ChatFileMessage: React.FC<Props> = ({ message, isMine, onLongPress }) => {
+export const ChatFileMessage: React.FC<Props> = ({ message, isMine, onLongPress, fullWidth }) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const fileName = getFileName(message);
   const ext = getExt(fileName);
@@ -130,7 +131,7 @@ export const ChatFileMessage: React.FC<Props> = ({ message, isMine, onLongPress 
 
   return (
     <Pressable
-      className={`w-[260px] rounded-xl p-2 py-1.5`}
+      className={`${fullWidth ? 'w-full' : 'w-[260px]'} rounded-xl p-2 py-1.5`}
       onPress={() => void handleDownloadFile()}
       onLongPress={onLongPress}
       delayLongPress={150}
