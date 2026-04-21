@@ -158,7 +158,14 @@ React.useEffect(() => {
       >
         <View className="flex-row items-center">
           <View className="relative mr-3">
-            {avatar ? (
+            {avatar === 'SPECIAL_AVATAR_SELF' || 
+             title?.toLowerCase().includes('my documents') || 
+             title?.toLowerCase().includes('truyền file') || 
+             title?.toLowerCase().includes('cloud của tôi') ? (
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-slate-200">
+                <Text className="text-2xl">📁</Text>
+              </View>
+            ) : avatar ? (
               <Image source={{ uri: avatar }} className="h-14 w-14 rounded-full bg-slate-100" />
             ) : (
               <View className="h-14 w-14 items-center justify-center rounded-full bg-slate-200">
@@ -202,9 +209,19 @@ React.useEffect(() => {
 
             <View className="flex-row items-center justify-between gap-3">
               <Text className="flex-1 text-[13px] leading-5 text-slate-500" numberOfLines={1}>
-                {!isSystemLastMessage && conversation.last_message?.sender_id === String(currentUserId || '')
-                  ? `Bạn: ${previewText}`
-                  : previewText}
+                {(() => {
+                  if (!conversation.last_message) return previewText;
+                  if (isSystemLastMessage) return previewText;
+                  
+                  const isMe = String(conversation.last_message.sender_id || '') === String(currentUserId || '');
+                  if (isMe) return `Bạn: ${previewText}`;
+                  
+                  if (conversation.type === 'group') {
+                    return `${conversation.last_message.sender_name || 'Thành viên'}: ${previewText}`;
+                  }
+                  
+                  return previewText;
+                })()}
               </Text>
 
               {unreadCount > 0 && (

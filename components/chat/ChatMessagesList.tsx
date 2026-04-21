@@ -87,11 +87,18 @@ const personalizeSystemAddMessage = (
 
 export const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ name, avatarUrl }) => {
   const [hasError, setHasError] = useState(false);
-  const showImage = !!avatarUrl && !hasError;
+  const showImage = !!avatarUrl && avatarUrl !== 'SPECIAL_AVATAR_SELF' && !hasError;
 
   return (
     <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
-      {showImage ? (
+      {avatarUrl === 'SPECIAL_AVATAR_SELF' ||
+       name?.toLowerCase().includes('my documents') ||
+       name?.toLowerCase().includes('truyền file') ||
+       name?.toLowerCase().includes('cloud của tôi') ? (
+        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+          <Text className="text-[16px]">📁</Text>
+        </View>
+      ) : showImage ? (
         <Image
           source={{ uri: avatarUrl }}
           className="h-full w-full"

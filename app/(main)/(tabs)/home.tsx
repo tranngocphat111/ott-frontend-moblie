@@ -33,11 +33,11 @@ import {
 } from '@/components/chat/modals/ConversationFilterModal';
 import { CategorySelectionModal } from '@/components/chat/modals/CategorySelectionModal';
 import { CategoryManagementModal } from '@/components/chat/modals/CategoryManagementModal';
-import { UserPickerModal } from '@/components/chat/modals/UserPickerModal';
 import { CreateGroupModal } from '@/components/chat/modals/CreateGroupModal';
 import { HomeTopSection } from '@/components/home/HomeTopSection';
 import { HomeSearchPanel } from '@/components/home/HomeSearchPanel';
 import { HomeConversationList } from '@/components/home/HomeConversationList';
+import { AddFriendModal } from '@/components/chat/modals/AddFriendModal';
 
 type SearchTab = 'all' | 'contacts' | 'conversations' | 'messages' | 'files';
 const SEARCH_CONTACT_HISTORY_KEY = 'ott-chat-search-contact-history';
@@ -122,18 +122,18 @@ const normalizeSearchResult = (payload: any): ChatSearchResult => {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { chatUserId, setChatUserId } = useAuth();
+  const { chatUserId } = useAuth();
 
   const [searchText, setSearchText] = useState('');
   const [items, setItems] = useState<ChatConversationWithParticipant[]>([]);
   const [chatUsers, setChatUsers] = useState<ChatServiceUser[]>([]);
   const [categories, setCategories] = useState<ChatCategory[]>([]);
 
-  const [pickerVisible, setPickerVisible] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [categoryManagementVisible, setCategoryManagementVisible] = useState(false);
   const [createGroupVisible, setCreateGroupVisible] = useState(false);
+  const [addFriendVisible, setAddFriendVisible] = useState(false);
 
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -162,50 +162,7 @@ export default function HomeScreen() {
   const loadConversationsRef = useRef<(options?: { force?: boolean }) => Promise<void>>(async () => undefined);
   const suppressSocketRefreshUntilRef = useRef(0);
 
-  const selectedUser = useMemo(
-    () => chatUsers.find((candidate) => candidate.user_id === chatUserId) || null,
-    [chatUsers, chatUserId],
-  );
 
-  const loadChatUsers = useCallback(async (options?: { force?: boolean }) => {
-    const force = Boolean(options?.force);
-
-    if (!force && chatUsers.length > 0) {
-      return chatUsers;
-    }
-
-    if (loadUsersPromiseRef.current) {
-      return loadUsersPromiseRef.current;
-    }
-
-    const task = (async () => {
-      try {
-        setLoadingUsers(true);
-        const response = await ChatApi.getAllUsers();
-        const users = Array.isArray(response) ? response : [];
-        setChatUsers(users);
-
-        const isStoredUserValid = !!chatUserId && users.some((candidate) => candidate.user_id === chatUserId);
-        if (!isStoredUserValid && users.length > 0) {
-          await setChatUserId(users[0].user_id);
-        }
-
-        return users;
-      } catch (error) {
-        console.warn('Cannot load users from chat-service.', error);
-        return [];
-      } finally {
-        setLoadingUsers(false);
-      }
-    })();
-
-    loadUsersPromiseRef.current = task;
-    try {
-      return await task;
-    } finally {
-      loadUsersPromiseRef.current = null;
-    }
-  }, [chatUserId, chatUsers, setChatUserId]);
 
   useEffect(() => {
     void (async () => {
@@ -260,24 +217,21 @@ export default function HomeScreen() {
     });
   }, []);
 
-  const resolveAutoChatUserId = useCallback(async (force = false): Promise<string | null> => {
-    if (!force && chatUserId) {
-      return chatUserId;
-    }
-
+  const loadChatUsers = useCallback(async () => {
+    setLoadingUsers(true);
     try {
-      const users = chatUsers.length > 0 ? chatUsers : await loadChatUsers();
-      const firstMongoUserId = users.find((candidate) => candidate?.user_id)?.user_id;
-      if (firstMongoUserId) {
-        await setChatUserId(firstMongoUserId);
-        return firstMongoUserId;
-      }
+      const users = await ChatApi.getAllUsers();
+      setChatUsers(users);
     } catch (error) {
-      console.warn('Cannot load users from chat-service.', error);
+      console.error('Failed to load chat users:', error);
+    } finally {
+      setLoadingUsers(false);
     }
+  }, []);
 
-    return null;
-  }, [chatUserId, chatUsers, loadChatUsers, setChatUserId]);
+  useEffect(() => {
+    void loadChatUsers();
+  }, [loadChatUsers]);
 
   const loadConversations = useCallback(async (options?: { force?: boolean }) => {
     if (loadConversationsPromiseRef.current) {
@@ -292,14 +246,7 @@ export default function HomeScreen() {
     }
 
     const task = (async () => {
-      const users = chatUsers.length > 0 ? chatUsers : await loadChatUsers();
-      const storedUserIsValid = !!chatUserId && users.some((candidate) => candidate.user_id === chatUserId);
-
-      let userIdForChat = storedUserIsValid ? chatUserId : users[0]?.user_id || null;
-      if (!userIdForChat) {
-        userIdForChat = await resolveAutoChatUserId();
-      }
-
+      let userIdForChat = chatUserId;
       if (!userIdForChat) {
         setItems([]);
         setCategories([]);
@@ -319,19 +266,6 @@ export default function HomeScreen() {
       } catch (error) {
         const status = (error as any)?.details?.status;
 
-        if (status === 404) {
-          try {
-            const fallbackUserId = await resolveAutoChatUserId(true);
-            if (fallbackUserId && fallbackUserId !== userIdForChat) {
-              const retryData = await ChatApi.getUserConversations(fallbackUserId);
-              setItems(sortConversationItems(retryData));
-              return;
-            }
-          } catch (retryError) {
-            console.error('Retry with fallback user failed:', retryError);
-          }
-        }
-
         console.error('Failed to load conversations:', error);
         Alert.alert('Lỗi', 'Không thể tải danh sách cuộc trò chuyện');
       } finally {
@@ -347,7 +281,7 @@ export default function HomeScreen() {
     } finally {
       loadConversationsPromiseRef.current = null;
     }
-  }, [chatUserId, chatUsers, loadChatUsers, resolveAutoChatUserId]);
+  }, [chatUserId]);
 
   useEffect(() => {
     loadConversationsRef.current = loadConversations;
@@ -432,21 +366,6 @@ export default function HomeScreen() {
     void loadConversations({ force: true });
   }, [loadConversations]);
 
-  const handleOpenUserPicker = useCallback(async () => {
-    if (chatUsers.length === 0) {
-      await loadChatUsers();
-    }
-    setPickerVisible(true);
-  }, [chatUsers.length, loadChatUsers]);
-
-  const handleSelectChatUser = useCallback(
-    async (userId: string) => {
-      await setChatUserId(userId);
-      setPickerVisible(false);
-      void loadConversations({ force: true });
-    },
-    [loadConversations, setChatUserId],
-  );
 
   const handleToggleCategory = useCallback((categoryId: string) => {
     setDraftCategoryIds((current) =>
@@ -809,14 +728,6 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME_COLORS.surface.sunken }} edges={['left', 'right']}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
-      <UserPickerModal
-        visible={pickerVisible}
-        users={chatUsers}
-        selectedUserId={chatUserId}
-        loading={loadingUsers}
-        onClose={() => setPickerVisible(false)}
-        onSelectUser={(userId) => void handleSelectChatUser(userId)}
-      />
 
       <ConversationFilterModal
         visible={filterVisible}
@@ -847,8 +758,14 @@ export default function HomeScreen() {
         onReload={() => void loadConversations()}
       />
 
+      <AddFriendModal
+        visible={addFriendVisible}
+        onClose={() => setAddFriendVisible(false)}
+      />
+
       <HomeTopSection
         onCreateConversation={() => setCreateGroupVisible(true)}
+        onAddFriend={() => setAddFriendVisible(true)}
         onOpenFilter={() => setFilterVisible(true)}
         onClearFilter={handleClearFilter}
         filterMode={filterMode}
@@ -1001,30 +918,6 @@ export default function HomeScreen() {
         }}
       />
 
-      <Pressable
-        onPress={handleOpenUserPicker}
-        style={{
-          position: 'absolute',
-          right: 16,
-          bottom: 96,
-          width: 58,
-          height: 58,
-          borderRadius: 29,
-          backgroundColor: THEME_COLORS.primary[600],
-          alignItems: 'center',
-          justifyContent: 'center',
-          shadowColor: '#000',
-          shadowOpacity: 0.2,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 8,
-        }}
-      >
-        <Feather name="users" size={18} color={THEME_COLORS.neutral.white} />
-        <Text className="mt-0.5 text-[10px] font-semibold text-white" numberOfLines={1}>
-          {selectedUser?.name ? String(selectedUser.name).slice(0, 4) : 'TEST'}
-        </Text>
-      </Pressable>
     </SafeAreaView>
   );
 }

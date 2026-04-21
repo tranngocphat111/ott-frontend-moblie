@@ -242,9 +242,19 @@ function HomeConversationListBody({
                       </Text>
                     </View>
                     <Text className="text-[13px] leading-5 text-slate-500" numberOfLines={1}>
-                      {!activeIsSystemLastMessage && activeItem.conversation.last_message?.sender_id === String(currentUserId || '')
-                        ? `Bạn: ${activePreviewText}`
-                        : activePreviewText}
+                      {(() => {
+                        if (!activeItem?.conversation.last_message) return activePreviewText;
+                        if (activeIsSystemLastMessage) return activePreviewText;
+                        
+                        const isMe = String(activeItem.conversation.last_message.sender_id || '') === String(currentUserId || '');
+                        if (isMe) return `Bạn: ${activePreviewText}`;
+                        
+                        if (activeItem.conversation.type === 'group') {
+                          return `${activeItem.conversation.last_message.sender_name || 'Thành viên'}: ${activePreviewText}`;
+                        }
+                        
+                        return activePreviewText;
+                      })()}
                     </Text>
                   </View>
                 </View>

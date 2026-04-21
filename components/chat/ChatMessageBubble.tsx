@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
 import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
+import { THEME_COLORS } from "@/constants/theme";
 import {
   CornerUpLeft,
   ImageIcon,
@@ -140,12 +141,13 @@ const getReplyUiMeta = (reply: NonNullable<ChatMessage["reply_to"]>) => {
 const getSystemNotificationUi = (type?: string | null) => {
   const normalizedType = String(type || "").toLowerCase();
 
-  if (normalizedType === "system_add") {
+  if (normalizedType === "system_add" || normalizedType === "system_friend_request") {
+    const isFriendReq = normalizedType === "system_friend_request";
     return {
       icon: UserPlus,
-      iconColor: "#0f766e",
-      badgeClassName: "border-teal-100 bg-teal-50",
-      textClassName: "text-teal-700",
+      iconColor: isFriendReq ? THEME_COLORS.primary[600] : "#0f766e",
+      badgeClassName: isFriendReq ? "border-primary-100 bg-primary-50" : "border-teal-100 bg-teal-50",
+      textClassName: isFriendReq ? "text-primary-700" : "text-teal-700",
     };
   }
 
@@ -170,9 +172,9 @@ const getSystemNotificationUi = (type?: string | null) => {
   if (normalizedType === "system_pin") {
     return {
       icon: Pin,
-      iconColor: "#2563eb",
-      badgeClassName: "border-blue-100 bg-blue-50",
-      textClassName: "text-blue-700",
+      iconColor: THEME_COLORS.primary[600],
+      badgeClassName: "border-primary-100 bg-primary-50",
+      textClassName: "text-primary-700",
     };
   }
 

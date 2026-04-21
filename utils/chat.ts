@@ -66,7 +66,7 @@ const getFilenameFromValue = (value: string) => {
 };
 
 export const resolveMediaUrl = (value?: string | null) => {
-  if (!value) return '';
+  if (!value || value === 'SPECIAL_AVATAR_SELF') return value || '';
   if (/^https?:\/\//i.test(value)) return encodeURI(value);
   if (/^(file:|content:|ph:|assets-library:|blob:|data:)/i.test(value)) return value;
 
@@ -381,13 +381,17 @@ export const getConversationAvatar = (
 ) => {
   if (!conversation) return '';
 
-  if (conversation.avatar) return conversation.avatar;
+  if (conversation.is_self_conversation && !conversation.avatar) {
+    return 'SPECIAL_AVATAR_SELF';
+  }
+
+  if (conversation.avatar) return resolveMediaUrl(conversation.avatar);
 
   const otherParticipant = conversation.participants?.find(
     (participant) => normalizeId(participant.user_id) !== normalizeId(currentUserId || ''),
   );
 
-  return otherParticipant?.avatar || '';
+  return resolveMediaUrl(otherParticipant?.avatar || '');
 };
 
 export const getMessageSenderName = (
@@ -412,12 +416,13 @@ export const getMessageSenderAvatar = (
   currentUserId?: string | null,
   fallbackAvatar?: string | null,
 ) => {
-  if (fallbackAvatar) return fallbackAvatar;
+  if (fallbackAvatar) return resolveMediaUrl(fallbackAvatar);
   if (!conversation || !senderId) return '';
 
   if (conversation.type === 'private') {
     return getConversationAvatar(conversation, currentUserId);
   }
 
-  return findParticipantByUserId(conversation, senderId)?.avatar || '';
+  const avatar = findParticipantByUserId(conversation, senderId)?.avatar;
+  return resolveMediaUrl(avatar || '');
 };

@@ -50,6 +50,7 @@ import {
   MessageReactionsModal,
 } from "@/components/chat";
 import { ChatExtraPanel } from "@/components/chat/ChatExtraPanel";
+import { FriendRequestBar } from "@/components/chat/FriendRequestBar";
 import { CreatePollModal } from "@/components/chat/modals/CreatePollModal";
 import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
 import { ForwardMessageModal } from "@/components/chat/modals/ForwardMessageModal";
@@ -414,11 +415,18 @@ const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({
   avatarUrl,
 }) => {
   const [hasError, setHasError] = useState(false);
-  const showImage = !!avatarUrl && !hasError;
+  const showImage = !!avatarUrl && avatarUrl !== 'SPECIAL_AVATAR_SELF' && !hasError;
 
   return (
     <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
-      {showImage ? (
+      {avatarUrl === 'SPECIAL_AVATAR_SELF' ||
+       name?.toLowerCase().includes('my documents') ||
+       name?.toLowerCase().includes('truyền file') ||
+       name?.toLowerCase().includes('cloud của tôi') ? (
+        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+          <Text className="text-[16px]">📁</Text>
+        </View>
+      ) : showImage ? (
         <Image
           source={{ uri: avatarUrl }}
           className="h-full w-full"
@@ -671,6 +679,20 @@ export default function ChatDetailScreen() {
   const [forwardLoading, setForwardLoading] = useState(false);
   const [isForwarding, setIsForwarding] = useState(false);
   const [pollModalVisible, setPollModalVisible] = useState(false);
+  const [relationship, setRelationship] = useState<any>(null);
+
+  const fetchRelationship = useCallback(async () => {
+    if (!conversationId || !userIdForChat || conversation?.type === 'group') return;
+    const otherParticipant = conversation?.participants?.find(p => String(p.user_id || p._id) !== String(userIdForChat));
+    if (!otherParticipant) return;
+    
+    const rel = await ChatApi.fetchRelationshipStatus(String(userIdForChat), String(otherParticipant.user_id || otherParticipant._id));
+    setRelationship(rel);
+  }, [conversationId, userIdForChat, conversation?.type, conversation?.participants]);
+
+  useEffect(() => {
+    fetchRelationship();
+  }, [fetchRelationship]);
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
   const initialMediaReadyRef = useRef<Set<string>>(new Set());
@@ -2263,6 +2285,13 @@ export default function ChatDetailScreen() {
             } as any)
           }
         />
+
+        {relationship && relationship.status?.toUpperCase() === 'PENDING' && relationship.receiver_id === String(userIdForChat) && (
+          <FriendRequestBar 
+            relationshipId={relationship._id} 
+            onStatusChange={fetchRelationship}
+          />
+        )}
 
         {isMyDocuments && (
           <View className="border-b border-[#ead8c7] bg-[#fff9f4] px-3 py-2">

@@ -753,7 +753,14 @@ export default function ChatInfoScreen() {
                 <View className="items-center bg-white px-4 py-4">
                   <View className="relative h-20 w-20">
                     <View className="h-20 w-20 overflow-hidden rounded-full bg-slate-200 items-center justify-center">
-                      {avatar ? (
+                      {avatar === 'SPECIAL_AVATAR_SELF' || 
+                       title?.toLowerCase().includes('my documents') ||
+                       title?.toLowerCase().includes('truyền file') ||
+                       title?.toLowerCase().includes('cloud của tôi') ? (
+                        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+                          <Text className="text-[32px]">📁</Text>
+                        </View>
+                      ) : avatar ? (
                         <Image
                           source={{ uri: avatar }}
                           className="h-full w-full"

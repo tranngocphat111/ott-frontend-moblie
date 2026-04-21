@@ -88,9 +88,18 @@ const SearchAvatar = ({ label, avatar, icon }: SearchAvatarProps) => {
   const avatarUri = normalizeAvatarUri(avatar);
   const initials = getInitials(label);
 
+  const isSelf = avatar === 'SPECIAL_AVATAR_SELF' ||
+                 label?.toLowerCase().includes('my documents') ||
+                 label?.toLowerCase().includes('truyền file') ||
+                 label?.toLowerCase().includes('cloud của tôi');
+
   return (
     <View className="h-11 w-11 overflow-hidden rounded-2xl bg-primary-600/12 items-center justify-center">
-      {avatarUri ? (
+      {isSelf ? (
+        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+          <Text className="text-[18px]">📁</Text>
+        </View>
+      ) : avatarUri ? (
         <Image source={{ uri: avatarUri }} className="h-full w-full" />
       ) : (
         <View className="h-full w-full items-center justify-center bg-primary-600/12">
