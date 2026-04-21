@@ -254,6 +254,7 @@ export const ChatMessagesList: React.FC<Props> = ({
                       <ChatMessageBubble
                         message={displaySystemMessage}
                         isMine={false}
+                        conversation={conversation}
                         mineAccentColor={mineAccentColor}
                         showSenderName={false}
                         highlight={highlightedMessageId === getMessageKey(sysMsg)}
@@ -373,6 +374,7 @@ export const ChatMessagesList: React.FC<Props> = ({
                   <ChatMessageBubble
                     message={msg}
                     isMine={isMine}
+                    conversation={conversation}
                     mineAccentColor={mineAccentColor}
                     showSenderName={false}
                     highlight={isHighlighted}

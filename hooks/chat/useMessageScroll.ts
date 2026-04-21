@@ -3,6 +3,8 @@ import { FlatList } from 'react-native';
 import { ChatApi } from '@/services/api';
 import type { ChatMessage } from '@/types/entities/chat';
 
+import { countVisualItems } from '@/utils/chat';
+
 interface UseMessageScrollProps {
   conversationId: string | undefined;
   userIdForChat: string | undefined;
@@ -74,13 +76,37 @@ export function useMessageScroll({
     setLoadingOlder(true);
     try {
       const payload = await ChatApi.getOlderMessages(conversationId, before, PAGE_SIZE, userIdForChat);
-      const nextMessages = normalizeMessages(payload.messages || []);
+      let batchMessages = normalizeMessages(payload.messages || []);
+      let hasMore = payload.hasMore;
+      let attempts = 0;
 
-      if (nextMessages.length > 0) {
-        setMessages((current) => normalizeMessages([...current, ...nextMessages]));
+      // Ensure we load enough "logical" items in this batch to fill the viewport
+      // Increase target to 20 and allow up to 5 attempts to fill the gap.
+      while (hasMore && countVisualItems(batchMessages) < 20 && attempts < 5) {
+        attempts++;
+        const oldestInBatch = batchMessages[batchMessages.length - 1];
+        if (!oldestInBatch?.msg_id) break;
+
+        try {
+          const nextPayload = await ChatApi.getOlderMessages(conversationId, oldestInBatch.msg_id, PAGE_SIZE, userIdForChat);
+          const nextMessages = normalizeMessages(nextPayload.messages || []);
+          if (nextMessages.length === 0) {
+            hasMore = false;
+            break;
+          }
+          batchMessages = [...batchMessages, ...nextMessages];
+          hasMore = nextPayload.hasMore;
+        } catch (err) {
+          console.error('Batch auto-fill failed:', err);
+          break;
+        }
       }
 
-      setHasMoreOlder(payload.hasMore);
+      if (batchMessages.length > 0) {
+        setMessages((current) => normalizeMessages([...current, ...batchMessages]));
+      }
+
+      setHasMoreOlder(hasMore);
     } catch (error) {
       console.error('Failed to load older messages:', error);
     } finally {

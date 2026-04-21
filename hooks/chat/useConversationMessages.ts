@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { ChatApi } from '@/services/api';
 import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
+import { countVisualItems } from '@/utils/chat';
 
 const PAGE_SIZE = 20;
 
@@ -134,21 +135,44 @@ export function useConversationMessages(conversationId: string | undefined, user
 
       if (requestId !== activeRequestIdRef.current) return;
 
-      const normalizedMessages = Array.isArray(messagePayload)
+      const rawMessages = Array.isArray(messagePayload)
         ? messagePayload
         : Array.isArray((messagePayload as any)?.messages)
           ? (messagePayload as any).messages
           : [];
 
-      const normalizedPinned = Array.isArray(pinnedPayload)
-        ? pinnedPayload
-        : Array.isArray((pinnedPayload as any)?.messages)
-          ? (pinnedPayload as any).messages
-          : [];
+      let initialMessages = normalizeMessages(rawMessages);
+      let hasMore = Array.isArray(messagePayload) ? false : !!(messagePayload as any)?.hasMore;
+      let attempts = 0;
 
-      const sorted = normalizeMessages(normalizedMessages);
-      setMessages(sorted);
-      setPinnedMessages(normalizePinnedMessages(normalizedPinned));
+      // Auto-fill logic: if visual items are few, fetch older messages automatically
+      while (hasMore && countVisualItems(initialMessages) < 20 && attempts < 5) {
+        attempts++;
+        const oldest = initialMessages[initialMessages.length - 1];
+        if (!oldest?.msg_id) break;
+
+        try {
+          const olderPayload = await ChatApi.getOlderMessages(
+            conversationId,
+            oldest.msg_id,
+            PAGE_SIZE,
+            userIdForChat,
+          );
+          const olderBatch = normalizeMessages(olderPayload.messages || []);
+          if (olderBatch.length === 0) {
+            hasMore = false;
+            break;
+          }
+          initialMessages = normalizeMessages([...initialMessages, ...olderBatch]);
+          hasMore = olderPayload.hasMore;
+        } catch (err) {
+          console.error('Initial auto-fill failed:', err);
+          break;
+        }
+      }
+
+      setMessages(initialMessages);
+      setPinnedMessages(normalizePinnedMessages(pinnedPayload));
 
       if (shouldLoadConversationMeta && userIdForChat) {
         void ChatApi.getUserConversations(userIdForChat)
@@ -166,7 +190,7 @@ export function useConversationMessages(conversationId: string | undefined, user
           .catch(() => undefined);
       }
 
-      const newestMessage = sorted[0];
+      const newestMessage = initialMessages[0];
       if (userIdForChat && newestMessage?.msg_id) {
         void ChatApi.markAsRead(conversationId, userIdForChat, newestMessage.msg_id).catch(() => undefined);
       }
