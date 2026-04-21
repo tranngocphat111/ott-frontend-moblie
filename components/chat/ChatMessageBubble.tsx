@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import type { ChatMessage } from "@/types/entities/chat";
+import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
 import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
 import {
   CornerUpLeft,
@@ -48,6 +48,7 @@ interface ChatMessageBubbleProps {
   onReactionPress?: (message: ChatMessage, emoji: string) => void;
   onMediaReady?: (messageId: string) => void;
   mineAccentColor?: string;
+  conversation?: ChatConversation | null;
 }
 
 const getReactionSummary = (message: ChatMessage) => {
@@ -250,9 +251,9 @@ const getCallDisplayCopy = (message: ChatMessage) => {
   const callTimeLabel = Number.isNaN(callDate.getTime())
     ? ""
     : callDate.toLocaleTimeString("vi-VN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   const durationText = rawContent
     .split(" - ")
@@ -283,6 +284,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   onReactionPress,
   onMediaReady,
   mineAccentColor = "#dff0ff",
+  conversation,
 }) => {
   const contentText = getMessageBodyText(message);
   const reactions = useMemo(() => getReactionSummary(message), [message]);
@@ -414,14 +416,14 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               : undefined,
             highlight
               ? {
-                  borderColor: "#b78457",
-                  borderWidth: 2,
-                  shadowColor: "#8b5e34",
-                  shadowOpacity: 0.24,
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowRadius: 10,
-                  elevation: 7,
-                }
+                borderColor: "#b78457",
+                borderWidth: 2,
+                shadowColor: "#8b5e34",
+                shadowOpacity: 0.24,
+                shadowOffset: { width: 0, height: 0 },
+                shadowRadius: 10,
+                elevation: 7,
+              }
               : undefined,
           ]}
         >
@@ -486,12 +488,13 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               onLongPress={onLongPress}
               onMediaReady={onMediaReady}
             />
-      ) : message.type === "poll" ? (
-        <ChatPollMessage
-          message={message}
-          isMine={isMine}
-        />
-      ) : message.type === "audio" ? (
+          ) : message.type === "poll" ? (
+            <ChatPollMessage
+              message={message}
+              isMine={isMine}
+              conversation={conversation}
+            />
+          ) : message.type === "audio" ? (
             <ChatAudioMessage
               message={message}
               isMine={isMine}

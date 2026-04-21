@@ -1,18 +1,21 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import type { ChatMessage } from '@/types/entities/chat';
+import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
 import { chatMessageApi } from '@/services/api/chat/chat-message.api';
 import { useAuth } from '@/context/Authcontext';
+import { PollVoterDetailModal } from '../modals/PollVoterDetailModal';
 
 interface ChatPollMessageProps {
   message: ChatMessage;
   isMine: boolean;
+  conversation?: ChatConversation | null;
 }
 
-export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMine }) => {
+export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMine, conversation }) => {
   const { chatUserId, user } = useAuth();
   const currentUserId = String(chatUserId || user?.id || '');
+  const [voterModalVisible, setVoterModalVisible] = useState(false);
 
   const totalVoters = useMemo(() => {
     const voters = new Set<string>();
@@ -126,7 +129,10 @@ export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMin
         </View>
 
         {/* Poll Footer */}
-        <View className="mt-5 flex-row items-center justify-between border-t border-slate-100 pt-4">
+        <Pressable 
+          onPress={() => setVoterModalVisible(true)}
+          className="mt-5 flex-row items-center justify-between border-t border-slate-100 pt-4 active:opacity-60"
+        >
           <View className="flex-row items-center gap-1.5">
             <Feather name="users" size={12} color="#94a3b8" />
             <Text className="text-[12px] font-semibold text-slate-400">
@@ -134,14 +140,20 @@ export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMin
             </Text>
           </View>
           <View className="flex-row -space-x-2">
-            {/* Mock avatars for extra "premium" feel if we had voter data, 
-                 but we'll just show a nice icon for now */}
             <View className="h-6 w-6 rounded-full border-2 border-white bg-slate-100 items-center justify-center">
               <Feather name="more-horizontal" size={10} color="#94a3b8" />
             </View>
           </View>
-        </View>
+        </Pressable>
       </View>
+
+      <PollVoterDetailModal
+        visible={voterModalVisible}
+        message={message}
+        conversation={conversation}
+        onClose={() => setVoterModalVisible(false)}
+        currentUserId={currentUserId}
+      />
     </View>
   );
 };

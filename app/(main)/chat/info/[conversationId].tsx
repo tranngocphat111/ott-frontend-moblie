@@ -196,6 +196,7 @@ export default function ChatInfoScreen() {
     fileMessages,
     linkMessages,
     voiceMessages,
+    isDissolved,
     loadInfo,
   } = useConversationInfo(conversationId, userIdForChat);
   const {
@@ -766,7 +767,7 @@ export default function ChatInfoScreen() {
                       )}
                     </View>
 
-                    {isGroup && canManageGroupProfile && (
+                    {isGroup && canManageGroupProfile && !isDissolved && (
                       <Pressable
                         onPress={() => void handlePickGroupAvatar()}
                         className="absolute bottom-0 right-0 h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white"
@@ -785,7 +786,6 @@ export default function ChatInfoScreen() {
                   </View>
 
                   <View className="mt-3 flex-row justify-center items-center w-full px-10">
-                    {/* Thẻ View bọc Title làm mốc (Relative) */}
                     <View className="relative">
                       <Text
                         style={{
@@ -798,17 +798,15 @@ export default function ChatInfoScreen() {
                       >
                         {title}
                       </Text>
-
-                      {/* Icon được đặt Absolute để nó "bay" bên cạnh mà không chiếm diện tích trong hàng */}
-                      {isGroup && canManageGroupProfile && (
+                      {isGroup && canManageGroupProfile && !isDissolved && (
                         <Pressable
                           onPress={handleOpenRenameGroup}
                           className="absolute p-1"
                           style={{
-                            left: '100%', // Đẩy icon ra bắt đầu từ điểm kết thúc của Text
-                            marginLeft: 4, // Khoảng cách nhỏ giữa chữ và icon
+                            left: '100%',
+                            marginLeft: 4,
                             top: '50%',
-                            transform: [{ translateY: -12 }], // Căn giữa icon theo chiều dọc (điều chỉnh số này tùy size icon)
+                            transform: [{ translateY: -12 }],
                           }}
                         >
                           <Feather
@@ -821,111 +819,123 @@ export default function ChatInfoScreen() {
                     </View>
                   </View>
 
-                  {isMyDocuments ? (
-                    <View className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <View className="flex-row items-center justify-between">
-                        <Text className="text-[16px] font-semibold text-slate-800">
-                          Dung lượng
-                        </Text>
-                        <Text className="text-[14px] text-slate-600">
-                          {myDocumentsStorageUsedMb} MB / 500 MB
-                        </Text>
-                      </View>
-                      <View className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                        <View
-                          className="h-full rounded-full bg-primary-600"
-                          style={{
-                            width: `${Math.min(100, (myDocumentsStorageUsedMb / 500) * 100)}%`,
-                          }}
-                        />
-                      </View>
-                      <View className="mt-3 flex-row justify-between">
-                        <Pressable className="rounded-full bg-primary-100 px-3 py-2">
-                          <Text className="text-[12px] font-semibold text-primary-700">
-                            Thêm dung lượng
-                          </Text>
-                        </Pressable>
-                        <Pressable className="rounded-full bg-slate-200 px-3 py-2">
-                          <Text className="text-[12px] font-semibold text-slate-700">
-                            Xem và dọn dẹp
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : (
-                    <View className="mt-4 w-full flex-row items-start justify-around">
+                  {isDissolved && (
+                    <View className="mt-8 w-full border-t border-slate-100 pt-4">
                       <Pressable
-                        onPress={() => openStorageTab("links")}
-                        className="items-center"
+                        onPress={handleDeleteConversation}
+                        className="flex-row items-center justify-center rounded-xl bg-red-50 px-4 py-4"
                       >
-                        <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                          <Feather
-                            name="search"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate700}
-                          />
-                        </View>
-                        <Text className="mt-2 text-center text-[12px] text-slate-600">
-                          Tìm{`\n`}tin nhắn
-                        </Text>
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() => {
-                          if (isGroup) {
-                            setMemberModalVisible(true);
-                            return;
-                          }
-
-                          Alert.alert(
-                            "Thông báo",
-                            "Trang cá nhân sẽ được tích hợp ở bản kế tiếp.",
-                          );
-                        }}
-                        className="items-center"
-                      >
-                        <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                          <Feather
-                            name={isGroup ? "user-plus" : "user"}
-                            size={20}
-                            color={THEME_COLORS.neutral.slate700}
-                          />
-                        </View>
-                        <Text className="mt-2 text-center text-[12px] text-slate-600">
-                          {isGroup
-                            ? `Thêm${`\n`}thành viên`
-                            : `Trang${`\n`}cá nhân`}
-                        </Text>
-                      </Pressable>
-
-
-
-                      <Pressable
-                        onPress={() => {
-                          const current =
-                            participant?.settings?.notification_status || "on";
-                          void handleChangeNotificationStatus(
-                            current === "off" ? "on" : "off",
-                          );
-                        }}
-                        className="items-center"
-                      >
-                        <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                          <Feather
-                            name="bell-off"
-                            size={20}
-                            color={THEME_COLORS.neutral.slate700}
-                          />
-                        </View>
-                        <Text className="mt-2 text-center text-[12px] text-slate-600">
-                          Tắt{`\n`}thông báo
-                        </Text>
+                        <Feather name="trash-2" size={20} color={THEME_COLORS.error.border} />
+                        <Text className="ml-3 text-[17px] font-semibold text-red-600">Xóa cuộc trò chuyện</Text>
                       </Pressable>
                     </View>
                   )}
+
+                  {!isDissolved && (
+                    isMyDocuments ? (
+                      <View className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-[16px] font-semibold text-slate-800">
+                            Dung lượng
+                          </Text>
+                          <Text className="text-[14px] text-slate-600">
+                            {myDocumentsStorageUsedMb} MB / 500 MB
+                          </Text>
+                        </View>
+                        <View className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                          <View
+                            className="h-full rounded-full bg-primary-600"
+                            style={{
+                              width: `${Math.min(100, (myDocumentsStorageUsedMb / 500) * 100)}%`,
+                            }}
+                          />
+                        </View>
+                        <View className="mt-3 flex-row justify-between">
+                          <Pressable className="rounded-full bg-primary-100 px-3 py-2">
+                            <Text className="text-[12px] font-semibold text-primary-700">
+                              Thêm dung lượng
+                            </Text>
+                          </Pressable>
+                          <Pressable className="rounded-full bg-slate-200 px-3 py-2">
+                            <Text className="text-[12px] font-semibold text-slate-700">
+                              Xem và dọn dẹp
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : (
+                      <View className="mt-4 w-full flex-row items-start justify-around">
+                        <Pressable
+                          onPress={() => openStorageTab("links")}
+                          className="items-center"
+                        >
+                          <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                            <Feather
+                              name="search"
+                              size={20}
+                              color={THEME_COLORS.neutral.slate700}
+                            />
+                          </View>
+                          <Text className="mt-2 text-center text-[12px] text-slate-600">
+                            Tìm{`\n`}tin nhắn
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => {
+                            if (isGroup) {
+                              setMemberModalVisible(true);
+                              return;
+                            }
+
+                            Alert.alert(
+                              "Thông báo",
+                              "Trang cá nhân sẽ được tích hợp ở bản kế tiếp.",
+                            );
+                          }}
+                          className="items-center"
+                        >
+                          <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                            <Feather
+                              name={isGroup ? "user-plus" : "user"}
+                              size={20}
+                              color={THEME_COLORS.neutral.slate700}
+                            />
+                          </View>
+                          <Text className="mt-2 text-center text-[12px] text-slate-600">
+                            {isGroup
+                              ? `Thêm${`\n`}thành viên`
+                              : `Trang${`\n`}cá nhân`}
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => {
+                            const current =
+                              participant?.settings?.notification_status || "on";
+                            void handleChangeNotificationStatus(
+                              current === "off" ? "on" : "off",
+                            );
+                          }}
+                          className="items-center"
+                        >
+                          <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                            <Feather
+                              name={participant?.settings?.notification_status === "off" ? "bell-off" : "bell"}
+                              size={20}
+                              color={THEME_COLORS.neutral.slate700}
+                            />
+                          </View>
+                          <Text className="mt-2 text-center text-[12px] text-slate-600">
+                            {participant?.settings?.notification_status === "off" ? "Bật" : "Tắt"}{`\n`}thông báo
+                          </Text>
+                        </Pressable>
+                      </View>
+                    )
+                  )}
                 </View>
 
-                {!isMyDocuments && (
+                {!isDissolved && !isMyDocuments && (
                   <>
                     <View className="mt-2 bg-white border-y border-slate-200">
                       {/* Đổi biệt danh - for both group and 1-1 */}

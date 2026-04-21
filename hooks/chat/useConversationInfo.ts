@@ -16,6 +16,7 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
   const [fileMessages, setFileMessages] = useState<ChatMessage[]>([]);
   const [linkMessages, setLinkMessages] = useState<ChatLinkMessage[]>([]);
   const [voiceMessages, setVoiceMessages] = useState<ChatMessage[]>([]);
+  const [isDissolved, setIsDissolved] = useState(false);
 
   const loadInfo = useCallback(async () => {
     if (!conversationId || !userIdForChat) return;
@@ -52,6 +53,11 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
         ? ((messagePayload as any).messages as ChatMessage[])
         : [];
       setVoiceMessages(allMessages.filter((message) => String(message?.type || '').toLowerCase() === 'audio'));
+
+      const dissolveMsg = allMessages.find(m => 
+        String(m.system_meta?.action || '').toLowerCase() === 'group_dissolved'
+      );
+      setIsDissolved(!!dissolveMsg);
     } catch (error) {
       console.error('Failed to load chat info:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin hội thoại');
@@ -72,6 +78,7 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
     fileMessages,
     linkMessages,
     voiceMessages,
+    isDissolved,
     loadInfo,
     setCategories,
     setPinnedMessages,

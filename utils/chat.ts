@@ -125,6 +125,38 @@ export const getOptimizedImageUrl = (
 export const isSystemMessageType = (type?: string | null) =>
   String(type || '').toLowerCase().startsWith('system');
 
+export const isNotificationType = (type?: string | null) => {
+  const normalizedType = String(type || '').toLowerCase();
+  return normalizedType.startsWith('system') || normalizedType.startsWith('call') || normalizedType.startsWith('poll');
+};
+
+export const countVisualItems = (messages: ChatMessage[]) => {
+  let count = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    
+    // Non-system messages always count as 1
+    if (!isSystemMessageType(message.type)) {
+      count++;
+      continue;
+    }
+
+    // System messages are clustered. Find the end of this cluster.
+    let endIdx = i;
+    while (
+      endIdx + 1 < messages.length && 
+      isSystemMessageType(messages[endIdx + 1].type)
+    ) {
+      endIdx++;
+    }
+    
+    // The entire cluster (or a single system message) counts as 1 item in the UI
+    count++;
+    i = endIdx;
+  }
+  return count;
+};
+
 export const isCallMessageType = (type?: string | null) => {
   const normalizedType = String(type || '').toLowerCase();
   return [
