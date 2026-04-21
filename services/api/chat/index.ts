@@ -3,11 +3,14 @@ import { chatMessageApi } from './chat-message.api';
 import { chatParticipantApi } from './chat-participant.api';
 import { chatUserApi } from './chat-user.api';
 
+import { chatRelationshipApi } from './chat-relationship.api';
+
 export const ChatApi = {
   ...chatUserApi,
   ...chatConversationApi,
   ...chatParticipantApi,
   ...chatMessageApi,
+  ...chatRelationshipApi,
 };
 
 export type {

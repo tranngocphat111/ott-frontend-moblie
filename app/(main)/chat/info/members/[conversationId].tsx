@@ -19,6 +19,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/Authcontext";
 import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi } from "@/services/api";
+import { resolveMediaUrl } from "@/utils/chat";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
 
@@ -558,7 +559,7 @@ export default function GroupMembersScreen() {
                 >
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-slate-200">
                     {normalize(item?.avatar) ? (
-                      <Image source={{ uri: normalize(item?.avatar) }} className="h-full w-full rounded-full" />
+                      <Image source={{ uri: resolveMediaUrl(normalize(item?.avatar)) }} className="h-full w-full rounded-full" />
                     ) : (
                       <Feather name="user" size={16} color={THEME_COLORS.neutral.slate500} />
                     )}

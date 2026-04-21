@@ -9,6 +9,7 @@ export type SearchTab = 'all' | 'contacts' | 'conversations' | 'messages' | 'fil
 
 type HomeTopSectionProps = {
   onCreateConversation: () => void;
+  onAddFriend: () => void;
   onOpenQrScanner: () => void;
   onOpenFilter: () => void;
   onClearFilter: () => void;
@@ -28,6 +29,7 @@ type HomeTopSectionProps = {
 
 export function HomeTopSection({
   onCreateConversation,
+  onAddFriend,
   onOpenQrScanner,
   onOpenFilter,
   onClearFilter,
@@ -49,7 +51,7 @@ export function HomeTopSection({
   const isActiveSearch = isSearchMode || isSearchFocused || searchText.trim().length > 0;
 
   const menuItems = [
-    { key: 'add-friend', icon: 'user-plus' as const, label: 'Thêm bạn' },
+    { key: 'add-friend', icon: 'user-plus' as const, label: 'Thêm bạn', onPress: onAddFriend },
     { key: 'create-group', icon: 'users' as const, label: 'Tạo nhóm', onPress: onCreateConversation },
   ];
 
