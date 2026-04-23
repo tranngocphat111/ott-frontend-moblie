@@ -32,6 +32,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/Authcontext";
 import { colors, fonts, fontSizes, THEME_COLORS } from "@/constants/theme";
+import { CHAT_API_CONFIG } from "@/configuration/api";
 import { ChatApi } from "@/services/api";
 import type { ChatMessage } from "@/types/entities/chat";
 import {
@@ -44,6 +45,7 @@ import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
 import { CreateGroupModal } from "@/components/chat/modals/CreateGroupModal";
 import { ChatImagePreviewModal } from "@/components/chat/ChatImagePreviewModal";
+import { AddMemberModal } from "@/components/chat/modals/AddMemberModal";
 import { ChatFileMessage } from "@/components/chat/message-types/ChatFileMessage";
 import { ChatAudioMessage } from "@/components/chat/message-types/ChatAudioMessage";
 
@@ -52,6 +54,13 @@ type StorageTab = "media" | "videos" | "files" | "links" | "audios";
 type ViewMode = "main" | "storage";
 type StorageFilterMenu = "sender" | "time" | null;
 type TimePreset = "all" | "7d" | "30d" | "90d";
+
+const getFullUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("data:")) return url;
+  return `${CHAT_API_CONFIG.BASE_URL}/messages/files/${url}`;
+};
 
 const storageTabs: { key: StorageTab; label: string }[] = [
   { key: "media", label: "Ảnh" },
@@ -222,6 +231,61 @@ export default function ChatInfoScreen() {
       .trim()
       .toLowerCase() === "my documents",
   );
+
+  // For 1-1 chats: identify the other user
+  const otherMember = useMemo(
+    () =>
+      !isGroup
+        ? members.find(
+          (m) => String(m.user_id || "") !== String(userIdForChat || ""),
+        )
+        : undefined,
+    [isGroup, members, userIdForChat],
+  );
+
+  const [relationship, setRelationship] = useState<any>(null);
+
+  const fetchRelationship = useCallback(async () => {
+    if (!otherMember?.user_id || !userIdForChat) return;
+    try {
+      const rel = await ChatApi.fetchRelationshipStatus(userIdForChat, otherMember.user_id);
+      setRelationship(rel);
+    } catch (error) {
+      console.error("Failed to fetch relationship status:", error);
+    }
+  }, [otherMember?.user_id, userIdForChat]);
+
+  useEffect(() => {
+    if (otherMember) {
+      void fetchRelationship();
+    }
+  }, [otherMember, fetchRelationship]);
+
+  const handleUnfriend = useCallback(() => {
+    if (!userIdForChat || !otherMember?.user_id) return;
+    Alert.alert("Hủy kết bạn", `Bạn chắc chắn muốn hủy kết bạn với ${title}?`, [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Hủy kết bạn",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const success = await ChatApi.unfriend(userIdForChat, otherMember.user_id);
+            if (success) {
+              Alert.alert("Thành công", "Đã hủy kết bạn.");
+              // Optionally redirect or refresh
+              router.replace("/(main)/(tabs)/home");
+            } else {
+              Alert.alert("Lỗi", "Không thể hủy kết bạn");
+            }
+          } catch {
+            Alert.alert("Lỗi", "Không thể hủy kết bạn");
+          }
+        },
+      },
+    ]);
+  }, [userIdForChat, otherMember?.user_id, title, router]);
+
   const myMember = useMemo(
     () =>
       members.find(
@@ -363,7 +427,6 @@ export default function ChatInfoScreen() {
     ]);
   }, [conversationId, userIdForChat, isGroup, isOwner, router]);
 
-  // Local UI state
   const [tab, setTab] = useState<InfoTab>("media");
   const [viewMode, setViewMode] = useState<ViewMode>("main");
   const [memberModalVisible, setMemberModalVisible] = useState(false);
@@ -379,17 +442,6 @@ export default function ChatInfoScreen() {
   const [updatingGroupAvatar, setUpdatingGroupAvatar] = useState(false);
   const [createGroupModalVisible, setCreateGroupModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-
-  // For 1-1 chats: identify the other user
-  const otherMember = useMemo(
-    () =>
-      !isGroup
-        ? members.find(
-          (m) => String(m.user_id || "") !== String(userIdForChat || ""),
-        )
-        : undefined,
-    [isGroup, members, userIdForChat],
-  );
 
   const openStorageTab = useCallback((nextTab: InfoTab) => {
     if (nextTab === "files") {
@@ -762,7 +814,7 @@ export default function ChatInfoScreen() {
                         </View>
                       ) : avatar ? (
                         <Image
-                          source={{ uri: avatar }}
+                          source={{ uri: getFullUrl(avatar) }}
                           className="h-full w-full"
                         />
                       ) : (
@@ -1223,6 +1275,24 @@ export default function ChatInfoScreen() {
                           color={THEME_COLORS.neutral.slate400}
                         />
                       </Pressable>
+                      
+                      {!isGroup && relationship?.status === 'ACCEPTED' && (
+                        <Pressable
+                          onPress={handleUnfriend}
+                          className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                        >
+                          <View className="flex-row items-center">
+                            <Feather
+                              name="user-x"
+                              size={20}
+                              color={THEME_COLORS.error.border}
+                            />
+                            <Text className="ml-4 text-[17px] text-red-600">
+                              Hủy kết bạn
+                            </Text>
+                          </View>
+                        </Pressable>
+                      )}
 
 
 
@@ -1783,82 +1853,17 @@ export default function ChatInfoScreen() {
         </Pressable>
       </Modal>
 
-      <Modal
+      <AddMemberModal
         visible={memberModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setMemberModalVisible(false)}
-      >
-        <Pressable
-          className="flex-1 justify-end bg-black/35"
-          onPress={() => setMemberModalVisible(false)}
-        >
-          <Pressable
-            className="max-h-[70%] rounded-t-[24px] bg-white px-4 pb-5 pt-4"
-            onPress={() => undefined}
-          >
-            <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-[18px] font-bold text-slate-900">
-                Thêm thành viên
-              </Text>
-              <Pressable
-                className="h-8 w-8 items-center justify-center rounded-full bg-slate-100"
-                onPress={() => setMemberModalVisible(false)}
-              >
-                <Feather
-                  name="x"
-                  size={16}
-                  color={THEME_COLORS.neutral.slate700}
-                />
-              </Pressable>
-            </View>
-
-            <FlatList
-              data={addableUsers}
-              keyExtractor={(item) => item._id || item.user_id}
-              ListEmptyComponent={
-                <Text className="py-6 text-center text-[13px] text-slate-500">
-                  Không còn user để thêm
-                </Text>
-              }
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => void handleAddMember(item.user_id)}
-                  className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-3 py-3"
-                >
-                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-slate-200">
-                    {item.avatar ? (
-                      <Image
-                        source={{ uri: item.avatar }}
-                        className="h-full w-full rounded-full"
-                      />
-                    ) : (
-                      <Feather
-                        name="user"
-                        size={16}
-                        color={THEME_COLORS.neutral.slate500}
-                      />
-                    )}
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-[14px] font-semibold text-slate-900">
-                      {item.name || item.user_id}
-                    </Text>
-                    <Text className="text-[12px] text-slate-500">
-                      {item.user_id}
-                    </Text>
-                  </View>
-                  <Feather
-                    name="plus-circle"
-                    size={18}
-                    color={THEME_COLORS.primary[600]}
-                  />
-                </Pressable>
-              )}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
+        conversationId={conversationId}
+        currentMembers={members}
+        users={allUsers as any}
+        onClose={() => setMemberModalVisible(false)}
+        onMembersAdded={async () => {
+          await loadInfo();
+          setMemberModalVisible(false);
+        }}
+      />
 
       <Modal
         visible={nicknameModalVisible}

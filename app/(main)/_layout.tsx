@@ -10,7 +10,7 @@ export default function MainLayout() {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none', }} />
     </Stack>
   );
 }

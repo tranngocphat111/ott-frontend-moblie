@@ -18,12 +18,22 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { THEME_COLORS } from '@/constants/theme';
+import { MEDIA_CONFIG } from '@/configuration/api';
+import { useAuth } from '@/contexts/Authcontext';
+
+const getFullUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("data:")) return url;
+  return `${MEDIA_CONFIG.BASE_URL}${url}`;
+};
 
 export interface CreateGroupUser {
   _id?: string;
   user_id: string;
   name?: string;
   avatar?: string;
+  phone?: string;
   is_online?: boolean;
   last_active_at?: string;
 }
@@ -70,12 +80,16 @@ export function CreateGroupModal({
   onCreate,
 }: CreateGroupModalProps) {
   const insets = useSafeAreaInsets();
+  const { chatUserId } = useAuth();
   const [groupName, setGroupName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
   const [searchText, setSearchText] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>('recent');
   const [isCreating, setIsCreating] = useState(false);
+  const [selectedStrangers, setSelectedStrangers] = useState<CreateGroupUser[]>([]);
+  const [searchResultByPhone, setSearchResultByPhone] = useState<CreateGroupUser | null>(null);
+  const [isSearchingPhone, setIsSearchingPhone] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -84,6 +98,7 @@ export function CreateGroupModal({
       setAvatarUri(undefined);
       setSearchText('');
       setSelectedIds(new Set(preSelectedIds || []));
+      setSelectedStrangers([]);
       setTab('recent');
       setIsCreating(false);
     }
@@ -108,6 +123,9 @@ export function CreateGroupModal({
   const handleToggleUser = useCallback((userId: string) => {
     // Don't allow deselecting pre-selected users
     if (preSelectedIds?.includes(userId)) return;
+
+    const isSelecting = !selectedIds.has(userId);
+
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(userId)) {
@@ -121,7 +139,27 @@ export function CreateGroupModal({
       }
       return next;
     });
-  }, [preSelectedIds]);
+
+    // Handle stranger persistence outside the state updater
+    if (isSelecting) {
+      if (searchResultByPhone && searchResultByPhone.user_id === userId) {
+        const isFriend = users.some((u) => u.user_id === userId);
+        if (!isFriend) {
+          setSelectedStrangers((prevStrangers) => {
+            if (!prevStrangers.some((s) => s.user_id === userId)) {
+              return [...prevStrangers, searchResultByPhone];
+            }
+            return prevStrangers;
+          });
+        }
+      }
+    } else {
+      // If deselecting, remove from selectedStrangers
+      setSelectedStrangers((prevStrangers) =>
+        prevStrangers.filter((s) => s.user_id !== userId),
+      );
+    }
+  }, [preSelectedIds, searchResultByPhone, users, selectedIds]);
 
   const handleRemoveSelected = useCallback((userId: string) => {
     // Don't allow removing pre-selected users
@@ -131,16 +169,88 @@ export function CreateGroupModal({
       next.delete(userId);
       return next;
     });
+    // Also remove from selectedStrangers
+    setSelectedStrangers(prev => prev.filter(s => s.user_id !== userId));
   }, [preSelectedIds]);
+
+
+  // Search by phone if keyword is exact phone number
+  useEffect(() => {
+    const keyword = searchText.trim();
+    const isPhone = /^[0-9]{10,11}$/.test(keyword);
+
+    if (isPhone) {
+      // Check if already in friends list
+      const inFriends = users.some(u => (u as any).phone === keyword);
+      if (inFriends) {
+        setSearchResultByPhone(null);
+        return;
+      }
+
+      const timer = setTimeout(async () => {
+        setIsSearchingPhone(true);
+        try {
+          const { ChatApi } = require('@/services/api');
+          let user = await ChatApi.getUserByPhone(keyword);
+
+          // Fallback: if not found and starts with 0, try with 84
+          if (!user && keyword.startsWith('0')) {
+            user = await ChatApi.getUserByPhone('84' + keyword.substring(1));
+          }
+
+          if (user && user.user_id !== chatUserId) {
+            setSearchResultByPhone({
+              user_id: user.user_id,
+              name: user.name,
+              avatar: user.avatar,
+              phone: keyword,
+              _id: user._id,
+            });
+          } else {
+            setSearchResultByPhone(null);
+          }
+        } catch (error) {
+          console.error('Phone search failed:', error);
+          setSearchResultByPhone(null);
+        } finally {
+          setIsSearchingPhone(false);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setSearchResultByPhone(null);
+    }
+  }, [searchText, users]);
 
   const filteredUsers = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
-    if (!keyword) return users;
-    return users.filter((u) => {
-      const name = (u.name || '').toLowerCase();
-      return name.includes(keyword);
+
+    // Start with friends
+    let base = [...users];
+
+    // Add ALL selected strangers so they remain visible in the list (if in contacts tab or if search cleared)
+    selectedStrangers.forEach(stranger => {
+      if (!base.some(u => u.user_id === stranger.user_id)) {
+        base.push(stranger);
+      }
     });
-  }, [users, searchText]);
+
+    // Add current search result if not already there
+    if (searchResultByPhone && !base.some(u => u.user_id === searchResultByPhone.user_id)) {
+      base.push(searchResultByPhone);
+    }
+
+    if (!keyword) return base;
+    return base.filter((u) => {
+      const name = (u.name || '').toLowerCase();
+      const phone = (u as any).phone || '';
+
+      // Always include the explicit search result by phone
+      if (searchResultByPhone && u.user_id === searchResultByPhone.user_id) return true;
+
+      return name.includes(keyword) || phone.includes(keyword);
+    });
+  }, [users, searchText, searchResultByPhone]);
 
   const recentUsers = useMemo(() => {
     // Sort by last_active_at descending
@@ -160,8 +270,22 @@ export function CreateGroupModal({
   const displayUsers = tab === 'recent' ? recentUsers : contactUsers;
 
   const selectedUsersList = useMemo(() => {
-    return users.filter((u) => selectedIds.has(u.user_id));
-  }, [users, selectedIds]);
+    // Include friends
+    let base = [...users];
+
+    // Include all selected strangers
+    selectedStrangers.forEach(stranger => {
+      if (!base.some(u => u.user_id === stranger.user_id)) {
+        base.push(stranger);
+      }
+    });
+
+    // Also include current search result in case user just clicked it
+    if (searchResultByPhone && !base.some(u => u.user_id === searchResultByPhone.user_id)) {
+      base.push(searchResultByPhone);
+    }
+    return base.filter((u) => selectedIds.has(u.user_id));
+  }, [users, selectedIds, searchResultByPhone, selectedStrangers]);
 
   const handleCreate = useCallback(async () => {
     const trimmedName = groupName.trim();
@@ -208,18 +332,20 @@ export function CreateGroupModal({
           </View>
 
           {/* Avatar */}
-          {item.avatar ? (
-            <Image
-              source={{ uri: item.avatar }}
-              style={styles.userAvatar}
-            />
-          ) : (
-            <View style={[styles.userAvatar, styles.userAvatarPlaceholder]}>
-              <Text style={styles.userAvatarInitials}>
-                {getUserInitials(item.name)}
-              </Text>
-            </View>
-          )}
+          <View style={styles.userAvatarContainer}>
+            {item.avatar ? (
+              <Image
+                source={{ uri: getFullUrl(item.avatar) }}
+                style={styles.userAvatar}
+              />
+            ) : (
+              <View style={[styles.userAvatar, styles.userAvatarPlaceholder]}>
+                <Text style={styles.userAvatarInitials}>
+                  {getUserInitials(item.name)}
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Info */}
           <View style={styles.userInfo}>
@@ -269,7 +395,7 @@ export function CreateGroupModal({
         <View style={styles.groupInfoRow}>
           <Pressable onPress={handlePickAvatar} style={styles.avatarPicker}>
             {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.groupAvatar} />
+              <Image source={{ uri: avatarUri.startsWith('data:') || avatarUri.startsWith('file:') || avatarUri.startsWith('http') ? avatarUri : getFullUrl(avatarUri) }} style={styles.groupAvatar} />
             ) : (
               <View style={styles.groupAvatarPlaceholder}>
                 <Feather
@@ -347,6 +473,12 @@ export function CreateGroupModal({
 
         {/* User list */}
         <View style={styles.listContainer}>
+          {isSearchingPhone && (
+            <View style={{ paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color={THEME_COLORS.primary[500]} />
+              <Text style={{ color: THEME_COLORS.neutral.slate500, fontSize: 13 }}>Đang tìm kiếm...</Text>
+            </View>
+          )}
           {loadingUsers ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator
@@ -397,7 +529,7 @@ export function CreateGroupModal({
                 <View key={user.user_id} style={styles.selectedChip}>
                   {user.avatar ? (
                     <Image
-                      source={{ uri: user.avatar }}
+                      source={{ uri: getFullUrl(user.avatar) }}
                       style={styles.selectedChipAvatar}
                     />
                   ) : (
@@ -605,13 +737,20 @@ const styles = StyleSheet.create({
     backgroundColor: THEME_COLORS.primary[600],
     borderColor: THEME_COLORS.primary[600],
   },
-  userAvatar: {
+  userAvatarContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
   },
   userAvatarPlaceholder: {
+    width: 48,
+    height: 48,
     backgroundColor: THEME_COLORS.primary[100],
     alignItems: 'center',
     justifyContent: 'center',

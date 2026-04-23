@@ -184,6 +184,7 @@ export function useConversationMessages(conversationId: string | undefined, user
             );
             if (matched?.conversation) {
               setConversation(matched.conversation || null);
+              setParticipant(matched.participant || null);
               loadedConversationIdRef.current = normalizedConversationId;
             }
           })
@@ -205,11 +206,19 @@ export function useConversationMessages(conversationId: string | undefined, user
     }
   }, [conversationId, normalizeMessages, normalizePinnedMessages, userIdForChat]);
 
+  const [participant, setParticipant] = useState<any>(null);
+
+  const isDissolved = messages.some(m => 
+    String(m.system_meta?.action || '').toLowerCase() === 'group_dissolved'
+  );
+
   return {
     conversation,
+    participant,
     messages,
     pinnedMessages,
     loading,
+    isDissolved,
     setMessages,
     setPinnedMessages,
     loadConversation,

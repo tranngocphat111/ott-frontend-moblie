@@ -48,4 +48,5 @@ export const chatConversationApi = {
 
     return await chatApiClient.get(`/search/${encodeURIComponent(userId)}?${params.toString()}`);
   },
+
 };

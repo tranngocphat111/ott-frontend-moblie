@@ -160,4 +160,18 @@ export const chatParticipantApi = {
       msgId,
     });
   },
+
+  async acceptInvitation(conversationId: string, userId: string): Promise<ChatParticipant> {
+    return await chatApiClient.put('/participants/accept-invitation', {
+      conversationId,
+      userId,
+    });
+  },
+
+  async rejectInvitation(conversationId: string, userId: string): Promise<{ success: boolean }> {
+    return await chatApiClient.put('/participants/reject-invitation', {
+      conversationId,
+      userId,
+    });
+  },
 };

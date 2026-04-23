@@ -50,7 +50,7 @@ import {
   MessageReactionsModal,
 } from "@/components/chat";
 import { ChatExtraPanel } from "@/components/chat/ChatExtraPanel";
-import { FriendRequestBar } from "@/components/chat/FriendRequestBar";
+import { FriendRequestBar, GroupInvitationBar } from "@/components/chat";
 import { CreatePollModal } from "@/components/chat/modals/CreatePollModal";
 import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
 import { ForwardMessageModal } from "@/components/chat/modals/ForwardMessageModal";
@@ -398,6 +398,15 @@ const mergeMessagesByKey = (
 
 const TYPING_INDICATOR_LEFT = 12;
 
+import { CHAT_API_CONFIG } from "@/configuration/api";
+
+const getFullUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("data:")) return url;
+  return `${CHAT_API_CONFIG.BASE_URL}/messages/files/${url}`;
+};
+
 const getInitials = (value: string) => {
   const normalized = String(value || "").trim();
   if (!normalized) return "?";
@@ -420,15 +429,15 @@ const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({
   return (
     <View className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-full bg-[#f0e2d5]">
       {avatarUrl === 'SPECIAL_AVATAR_SELF' ||
-       name?.toLowerCase().includes('my documents') ||
-       name?.toLowerCase().includes('truyền file') ||
-       name?.toLowerCase().includes('cloud của tôi') ? (
+        name?.toLowerCase().includes('my documents') ||
+        name?.toLowerCase().includes('truyền file') ||
+        name?.toLowerCase().includes('cloud của tôi') ? (
         <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
           <Text className="text-[16px]">📁</Text>
         </View>
       ) : showImage ? (
         <Image
-          source={{ uri: avatarUrl }}
+          source={{ uri: getFullUrl(avatarUrl) }}
           className="h-full w-full"
           onError={() => setHasError(true)}
         />
@@ -576,12 +585,13 @@ export default function ChatDetailScreen() {
   const { user, chatUserId } = useAuth();
 
   const userIdForChat = chatUserId || user?.id;
-  // Message management hooks
   const {
     conversation,
+    participant,
     messages,
     pinnedMessages,
     loading,
+    isDissolved,
     setMessages,
     setPinnedMessages,
     loadConversation,
@@ -685,7 +695,7 @@ export default function ChatDetailScreen() {
     if (!conversationId || !userIdForChat || conversation?.type === 'group') return;
     const otherParticipant = conversation?.participants?.find(p => String(p.user_id || p._id) !== String(userIdForChat));
     if (!otherParticipant) return;
-    
+
     const rel = await ChatApi.fetchRelationshipStatus(String(userIdForChat), String(otherParticipant.user_id || otherParticipant._id));
     setRelationship(rel);
   }, [conversationId, userIdForChat, conversation?.type, conversation?.participants]);
@@ -756,9 +766,7 @@ export default function ChatDetailScreen() {
     typingIndicatorSenderParticipant?.avatar || null,
   );
 
-  const typingIndicatorSenderAvatarUrl = typingIndicatorSenderAvatarRaw
-    ? resolveMediaUrl(typingIndicatorSenderAvatarRaw)
-    : undefined;
+  const typingIndicatorSenderAvatarUrl = typingIndicatorSenderAvatarRaw || undefined;
   const hasTypingUsers = typingUserIdList.length > 0;
   const hadTypingUsersRef = useRef(false);
 
@@ -2155,6 +2163,15 @@ export default function ChatDetailScreen() {
     [conversationId, setMessages]
   );
 
+  const handleGroupUpdated = useCallback(
+    (payload: any) => {
+      const payloadConvId = String(payload?._id || payload?.conversationId || "");
+      if (payloadConvId !== String(conversationId)) return;
+      void loadConversation();
+    },
+    [conversationId, loadConversation],
+  );
+
   // Setup socket listeners
   useMessageSocket({
     conversationId,
@@ -2170,7 +2187,28 @@ export default function ChatDetailScreen() {
     onRemovedFromGroup: handleRemovedFromGroup,
     onGroupDissolved: handleGroupDissolved,
     onConversationSynced: handleConversationSynced,
+    onGroupUpdated: handleGroupUpdated,
   });
+
+  useEffect(() => {
+    const handleRelationshipUpdate = (payload: any) => {
+      // If this is a private chat, check if the update is relevant
+      if (conversation?.type === 'private') {
+        const otherParticipantId = conversation.participants?.find(p => String((p as any).user_id) !== String(userIdForChat))?.user_id;
+        if (otherParticipantId &&
+          (String(payload.requester_id) === String(otherParticipantId) ||
+            String(payload.receiver_id) === String(otherParticipantId))) {
+          console.log('[ChatScreen] Relationship status updated via socket:', payload.status);
+          setRelationship(payload);
+        }
+      }
+    };
+
+    chatSocket.on('cap_nhat_quan_he', handleRelationshipUpdate);
+    return () => {
+      chatSocket.off('cap_nhat_quan_he', handleRelationshipUpdate);
+    };
+  }, [conversation, userIdForChat]);
 
   const handleDeleteConversationForMe = useCallback(() => {
     if (!conversationId || !userIdForChat) return;
@@ -2270,7 +2308,6 @@ export default function ChatDetailScreen() {
           topInset={insets.top}
           onBack={() => {
             if (router.canGoBack()) {
-              // If we came from search, it's better to replace to avoid weird stacks
               router.replace("/(main)/(tabs)/home");
             } else {
               router.replace("/(main)/(tabs)/home");
@@ -2286,10 +2323,20 @@ export default function ChatDetailScreen() {
           }
         />
 
-        {relationship && relationship.status?.toUpperCase() === 'PENDING' && relationship.receiver_id === String(userIdForChat) && (
-          <FriendRequestBar 
-            relationshipId={relationship._id} 
+        {conversation?.type === 'private' && !isMyDocuments && !conversation.is_self_conversation && (
+          <FriendRequestBar
+            relationship={relationship}
+            conversation={conversation}
+            currentUserId={String(userIdForChat || '')}
             onStatusChange={fetchRelationship}
+          />
+        )}
+
+        {participant?.status === 'invited' && (
+          <GroupInvitationBar
+            conversationId={String(conversationId || '')}
+            userId={String(userIdForChat || '')}
+            onStatusChange={loadConversation}
           />
         )}
 
@@ -2438,7 +2485,7 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
-        {!isChatLocked ? (
+        {!isChatLocked && participant?.status !== 'invited' && !isDissolved ? (
           <ChatComposer
             value={messageText}
             onChangeText={handleTextChange}
@@ -2461,15 +2508,21 @@ export default function ChatDetailScreen() {
             onClearSelection={clearSelectedMedia}
             onSendSelected={() => void sendSelectedPanelMedia()}
           />
-        ) : (
+        ) : !isChatLocked && (participant?.status === 'invited' || isDissolved) ? (
+          <View className="mx-3 mb-2 rounded-2xl border border-[#ead8c7] bg-[#fff9f4] px-4 py-3">
+            <Text className="text-center text-[13px] font-medium text-slate-600">
+              {isDissolved ? "Nhóm này đã giải tán." : "Bạn được mời tham gia nhóm. Chấp nhận lời mời để bắt đầu trò chuyện."}
+            </Text>
+          </View>
+        ) : isChatLocked ? (
           <View className="mx-3 mb-2 rounded-2xl border border-[#ead8c7] bg-[#fff9f4] px-4 py-3">
             <Text className="text-center text-[13px] font-medium text-slate-600">
               Bạn không thể gửi tin nhắn trong cuộc trò chuyện này.
             </Text>
           </View>
-        )}
+        ) : null}
 
-        {!isChatLocked && imagePanelVisible && (
+        {!isChatLocked && participant?.status !== 'invited' && !isDissolved && imagePanelVisible && (
           <ChatMediaPanel
             visible={imagePanelVisible}
             height={CHAT_PANEL_HEIGHT}
@@ -2486,7 +2539,7 @@ export default function ChatDetailScreen() {
         )}
 
 
-        {!isChatLocked && voicePanelVisible && (
+        {!isChatLocked && participant?.status !== 'invited' && !isDissolved && voicePanelVisible && (
           <ChatVoicePanel
             height={CHAT_PANEL_HEIGHT}
             accentColor={CHAT_BROWN}
@@ -2523,7 +2576,7 @@ export default function ChatDetailScreen() {
           />
         )}
 
-        {!isChatLocked && extraPanelVisible && (
+        {!isChatLocked && participant?.status !== 'invited' && !isDissolved && extraPanelVisible && (
           <ChatExtraPanel
             visible={extraPanelVisible}
             onClose={() => toggleExtraPanel()}

@@ -16,6 +16,11 @@ import {
 } from '@/utils/chat';
 import { ChatMessageBubble } from './ChatMessageBubble';
 import { useAuth } from '@/context/Authcontext';
+import { CHAT_API_CONFIG } from '@/configuration/api';
+
+const getFullUrl = (url?: string) => {
+  return resolveMediaUrl(url);
+};
 
 const getInitials = (value: string) => {
   const normalized = String(value || '').trim();
@@ -100,7 +105,7 @@ export const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ n
         </View>
       ) : showImage ? (
         <Image
-          source={{ uri: avatarUrl }}
+          source={{ uri: getFullUrl(avatarUrl) }}
           className="h-full w-full"
           onError={() => setHasError(true)}
         />
