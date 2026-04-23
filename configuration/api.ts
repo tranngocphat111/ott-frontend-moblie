@@ -17,7 +17,7 @@ export const CHAT_API_CONFIG = {
 export const MEDIA_CONFIG = {
   BASE_URL:
     process.env.EXPO_PUBLIC_MEDIA_URL ||
-    'https://riff-storage-iuh.s3.ap-southeast-1.amazonaws.com/',
+    'https://riff-storage-iuh.s3.ap-southeast-1.amazonaws.com',
 };
 
 export const GOOGLE_CONFIG = {

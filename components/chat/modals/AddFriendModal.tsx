@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -15,11 +15,12 @@ import {
   Keyboard,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { UserPlus, Check, X, Clock } from 'lucide-react-native';
+import { UserPlus, Check, X, Clock, UserMinus, UserCheck } from 'lucide-react-native';
 import { ChatApi } from '@/services/api/chat';
 import { resolveMediaUrl } from '@/utils/chat';
 import { useAuth } from '@/context/Authcontext';
 import { THEME_COLORS } from '@/constants/theme';
+import { chatSocket } from '@/services/socket/chatSocket';
 
 interface AddFriendModalProps {
   visible: boolean;
@@ -33,6 +34,25 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
   const [searchResult, setSearchResult] = useState<any>(null);
   const [relationship, setRelationship] = useState<any>(null);
   const [error, setError] = useState('');
+
+  // Socket listener for relationship updates
+  useEffect(() => {
+    if (!chatUserId || !visible) return;
+
+    const handleRelationshipUpdate = (updatedRel: any) => {
+      // If the update is for the user currently being viewed in searchResult
+      if (searchResult && 
+          (updatedRel.requester_id === searchResult.user_id || 
+           updatedRel.receiver_id === searchResult.user_id)) {
+        setRelationship(updatedRel);
+      }
+    };
+
+    chatSocket.on('cap_nhat_quan_he', handleRelationshipUpdate);
+    return () => {
+      chatSocket.off('cap_nhat_quan_he', handleRelationshipUpdate);
+    };
+  }, [chatUserId, searchResult, visible]);
 
   const handleSearch = async () => {
     if (!phoneNumber.trim()) return;
@@ -75,6 +95,68 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!relationship?._id) return;
+    setLoading(true);
+    try {
+      const success = await ChatApi.acceptFriendRequest(relationship._id);
+      if (success) {
+        const rel = await ChatApi.fetchRelationshipStatus(chatUserId!, searchResult.user_id);
+        setRelationship(rel);
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', 'Chấp nhận kết bạn thất bại.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!relationship?._id) return;
+    setLoading(true);
+    try {
+      const success = await ChatApi.cancelFriendRequest(relationship._id);
+      if (success) {
+        const rel = await ChatApi.fetchRelationshipStatus(chatUserId!, searchResult.user_id);
+        setRelationship(rel);
+        Alert.alert('Thông báo', 'Đã hủy lời mời kết bạn.');
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', 'Hủy lời mời kết bạn thất bại.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnfriend = async () => {
+    if (!chatUserId || !searchResult?.user_id) return;
+    Alert.alert(
+      'Hủy kết bạn',
+      `Bạn có chắc chắn muốn hủy kết bạn với ${searchResult.name}?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        { 
+          text: 'Đồng ý', 
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const success = await ChatApi.unfriend(chatUserId, searchResult.user_id);
+              if (success) {
+                const rel = await ChatApi.fetchRelationshipStatus(chatUserId, searchResult.user_id);
+                setRelationship(rel);
+              }
+            } catch (err) {
+              Alert.alert('Lỗi', 'Hủy kết bạn thất bại.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getRelationshipStatus = () => {
@@ -156,27 +238,47 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
                         <Text className="text-slate-600 font-semibold">Đây là bạn</Text>
                       </View>
                     ) : status?.toUpperCase() === 'ACCEPTED' ? (
-                      <View className="flex-row items-center bg-green-50 px-4 py-2 rounded-full">
+                      <TouchableOpacity
+                        onPress={handleUnfriend}
+                        disabled={loading}
+                        className="flex-row items-center bg-green-50 border border-green-200 px-6 py-2 rounded-full active:bg-green-100"
+                      >
                         <Check size={18} color="#16a34a" />
-                        <Text className="ml-2 text-green-700 font-semibold">Bạn bè</Text>
-                      </View>
+                        <Text className="ml-2 text-green-700 font-semibold mr-1">Bạn bè</Text>
+                        <Feather name="chevron-down" size={14} color="#16a34a" />
+                      </TouchableOpacity>
                     ) : status?.toUpperCase() === 'PENDING' ? (
-                      <View className="flex-row items-center bg-primary-50 px-4 py-2 rounded-full">
-                        <Clock size={18} color={THEME_COLORS.primary[600]} />
-                        <Text className="ml-2 text-primary-700 font-semibold">Đã gửi yêu cầu</Text>
-                      </View>
+                      relationship.receiver_id === chatUserId ? (
+                        <TouchableOpacity
+                          onPress={handleAcceptRequest}
+                          disabled={loading}
+                          className="flex-row items-center bg-primary-600 px-8 py-3 rounded-full"
+                        >
+                          <UserCheck size={20} color="white" />
+                          <Text className="ml-2 text-white font-bold text-[16px]">Chấp nhận</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={handleCancelRequest}
+                          disabled={loading}
+                          className="flex-row items-center bg-primary-50 border border-primary-100 px-6 py-2.5 rounded-full active:bg-primary-100"
+                        >
+                          <Clock size={18} color={THEME_COLORS.primary[600]} />
+                          <Text className="ml-2 text-primary-700 font-semibold">Đã gửi yêu cầu (Hủy)</Text>
+                        </TouchableOpacity>
+                      )
                     ) : (
                       <TouchableOpacity
                         onPress={handleSendRequest}
                         disabled={loading}
-                        className="flex-row items-center bg-primary-600 px-6 py-3 rounded-full"
+                        className="flex-row items-center bg-primary-600 px-10 py-3 rounded-full"
                       >
                         {loading ? (
                           <ActivityIndicator color="white" size="small" />
                         ) : (
                           <>
                             <UserPlus size={20} color="white" />
-                            <Text className="ml-2 text-white font-bold">Kết bạn</Text>
+                            <Text className="ml-2 text-white font-bold text-[16px]">Kết bạn</Text>
                           </>
                         )}
                       </TouchableOpacity>

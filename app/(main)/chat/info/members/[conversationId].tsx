@@ -22,6 +22,11 @@ import { ChatApi } from "@/services/api";
 import { resolveMediaUrl } from "@/utils/chat";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
+import { CHAT_API_CONFIG } from "@/configuration/api";
+
+const getFullUrl = (url?: string) => {
+  return resolveMediaUrl(url);
+};
 
 const normalize = (value: unknown) => String(value || "").trim();
 
@@ -149,12 +154,14 @@ export default function GroupMembersScreen() {
 
   const getMemberSubtitle = useCallback(
     (member: any) => {
+      if (normalize(member?.status) === "invited") return "Chưa tham gia";
       const memberId = normalize(member?.user_id);
       if (memberId === ownerId) return "Trưởng nhóm";
       if (normalize(member?.roles) === "admin") return "Phó nhóm";
 
       const addedBy = normalize(member?.added_by);
       if (addedBy) {
+        if (addedBy === normalize(userIdForChat)) return "Thêm bởi bạn";
         const addedByName = memberNameById.get(addedBy);
         if (addedByName) return `Thêm bởi ${addedByName}`;
       }
@@ -345,6 +352,7 @@ export default function GroupMembersScreen() {
           }
           renderItem={({ item }) => {
             const memberId = normalize(item?.user_id);
+            const isMe = memberId === normalize(userIdForChat);
             const memberIsOwner = memberId === ownerId;
             const displayName =
               normalize(item?.nickname) ||
@@ -353,22 +361,48 @@ export default function GroupMembersScreen() {
               memberId;
             const subtitle = getMemberSubtitle(item);
             const avatarRaw = normalize(item?.avatar) || normalize(item?.user?.avatar);
+            
+            // Check if member is a friend
+            const friendIds = new Set(allUsers.map(u => normalize(u.user_id)));
+            const isStranger = !isMe && !friendIds.has(memberId);
 
             return (
               <View className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-3">
                 <SenderAvatar name={displayName} avatarUrl={avatarRaw} />
 
                 <View className="ml-3 flex-1">
-                  <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1}>
-                    {displayName}
-                  </Text>
-                  <Text className="text-[12px] text-slate-500" numberOfLines={1}>
+                  <View className="flex-row items-center">
+                    <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1}>
+                      {displayName}
+                    </Text>
+                    {isStranger && (
+                      <View className="ml-2 rounded-md bg-slate-100 px-1.5 py-0.5">
+                        <Text className="text-[10px] font-bold text-slate-500 uppercase">Người lạ</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text 
+                    className={`text-[12px] font-medium ${normalize(item?.status) === "invited" ? "text-amber-600" : "text-slate-500"}`} 
+                    numberOfLines={1}
+                  >
                     {subtitle}
                   </Text>
                 </View>
 
+                {isStranger ? (
+                  <Pressable
+                    onPress={() => {
+                      // Logic to add friend would go here
+                      Alert.alert("Thông báo", "Tính năng kết bạn đang được cập nhật");
+                    }}
+                    className="mr-2 rounded-full bg-primary-50 px-3 py-1.5 border border-primary-100"
+                  >
+                    <Text className="text-[12px] font-bold text-primary-600">Kết bạn</Text>
+                  </Pressable>
+                ) : null}
+
                 {/* Only show more button if I am admin or owner, AND this member is not me */}
-                {(isAdmin || isOwner) && memberId !== normalize(userIdForChat) ? (
+                {(isAdmin || isOwner) && !isMe ? (
                   <Pressable
                     onPress={() => handleOpenMemberActions(item)}
                     className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
@@ -559,7 +593,7 @@ export default function GroupMembersScreen() {
                 >
                   <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-slate-200">
                     {normalize(item?.avatar) ? (
-                      <Image source={{ uri: resolveMediaUrl(normalize(item?.avatar)) }} className="h-full w-full rounded-full" />
+                      <Image source={{ uri: getFullUrl(normalize(item?.avatar)) }} className="h-full w-full rounded-full" />
                     ) : (
                       <Feather name="user" size={16} color={THEME_COLORS.neutral.slate500} />
                     )}

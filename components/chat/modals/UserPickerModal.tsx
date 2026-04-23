@@ -1,7 +1,15 @@
 import React from 'react';
 import { FlatList, Image, Modal, Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { CHAT_API_CONFIG } from '@/configuration/api';
 import type { ChatServiceUser } from '@/services/api/chat';
+
+const getFullUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("data:")) return url;
+  return `${CHAT_API_CONFIG.BASE_URL}/messages/files/${url}`;
+};
 
 interface UserPickerModalProps {
   visible: boolean;
@@ -56,7 +64,7 @@ export const UserPickerModal: React.FC<UserPickerModalProps> = ({
                   >
                     <View className="mr-3 h-12 w-12 overflow-hidden rounded-full bg-slate-200 items-center justify-center">
                       {item.avatar ? (
-                        <Image source={{ uri: item.avatar }} className="h-full w-full" />
+                        <Image source={{ uri: getFullUrl(item.avatar) }} className="h-full w-full" />
                       ) : (
                         <Feather name="user" size={18} color="#94a3b8" />
                       )}

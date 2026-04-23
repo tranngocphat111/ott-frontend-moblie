@@ -34,4 +34,22 @@ export const chatRelationshipApi = {
       return false;
     }
   },
+
+  async unfriend(userId: string, friendId: string): Promise<boolean> {
+    try {
+      await chatApiClient.post('/relationships/unfriend', { userId, friendId });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
+  
+  async cancelFriendRequest(relationshipId: string): Promise<boolean> {
+    try {
+      await chatApiClient.post(`/relationships/cancel/${relationshipId}`);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
 };

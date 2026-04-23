@@ -10,3 +10,6 @@ export { ChatMessagesList } from './ChatMessagesList';
 export { SenderAvatar } from './ChatMessagesList';
 export { ChatImagePreviewModal } from './ChatImagePreviewModal';
 export { MessageReactionsModal } from './modals/MessageReactionsModal';
+export { GroupInvitationBar } from './GroupInvitationBar';
+export { FriendRequestBar } from './FriendRequestBar';
+

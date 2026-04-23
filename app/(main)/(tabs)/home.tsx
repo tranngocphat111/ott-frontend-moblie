@@ -218,16 +218,17 @@ export default function HomeScreen() {
   }, []);
 
   const loadChatUsers = useCallback(async () => {
+    if (!chatUserId) return;
     setLoadingUsers(true);
     try {
-      const users = await ChatApi.getAllUsers();
-      setChatUsers(users);
+      const friends = await ChatApi.getFriends(chatUserId);
+      setChatUsers(friends);
     } catch (error) {
-      console.error('Failed to load chat users:', error);
+      console.error('Failed to load friends:', error);
     } finally {
       setLoadingUsers(false);
     }
-  }, []);
+  }, [chatUserId]);
 
   useEffect(() => {
     void loadChatUsers();

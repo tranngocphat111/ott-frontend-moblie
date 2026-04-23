@@ -31,7 +31,7 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
         ChatApi.getFileMessages(conversationId).catch(() => []),
         ChatApi.getLinkMessages(conversationId).catch(() => []),
         ChatApi.getUserCategories(userIdForChat).catch(() => []),
-        ChatApi.getAllUsers().catch(() => []),
+        ChatApi.getFriends(userIdForChat).catch(() => []),
         ChatApi.getMessages(conversationId, userIdForChat).catch(() => ({ messages: [] })),
       ]);
 

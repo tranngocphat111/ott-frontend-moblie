@@ -13,4 +13,8 @@ export const chatUserApi = {
       return null;
     }
   },
+  
+  async getFriends(userId: string): Promise<ChatServiceUser[]> {
+    return await chatApiClient.get(`/relationships/${userId}/friends`);
+  },
 };
