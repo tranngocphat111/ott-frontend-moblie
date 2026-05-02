@@ -1,7 +1,7 @@
 import type { DeviceType } from '../enums';
 
 export interface LocalLoginRequest {
-  phone: string;
+  identifier: string;
   password: string;
   otpCode?: string;
   deviceId?: string;

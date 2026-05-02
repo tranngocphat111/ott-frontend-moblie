@@ -1,5 +1,5 @@
 // app/(auth)/setup-phone.tsx
-import PhoneInput from '@/components/auth/EmailInput';
+import PhoneInput from '@/components/auth/PhoneInput';
 import PrimaryButton from '@/components/common/PrimaryButton';
 import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';

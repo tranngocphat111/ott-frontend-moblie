@@ -11,7 +11,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (
-    phone: string,
+    identifier: string,
     password: string,
     otpCode?: string
   ) => Promise<{
@@ -24,7 +24,7 @@ interface AuthContextType {
     otpCode: string,
     isBackupCode: boolean
   ) => Promise<{ authenticated: boolean }>;
-  request2FAOtp: (phone: string) => Promise<void>;
+  request2FAOtp: (identifier: string) => Promise<void>;
   setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (
@@ -125,8 +125,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(poll);
   }, [isAuthenticated]);
 
-  const login = async (phone: string, password: string, otpCode?: string) => {
-    const response = await authApi.localLogin({ phone, password, otpCode });
+  const login = async (identifier: string, password: string, otpCode?: string) => {
+    const response = await authApi.localLogin({ identifier, password, otpCode });
 
     if (response.result) {
       if (response.result.requires2FA && response.result.tempToken) {
@@ -158,8 +158,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     throw new Error(response.message || '2FA verification failed');
   };
 
-  const request2FAOtp = async (phone: string) => {
-    const response = await authApi.request2FAOtp({ phone });
+  const request2FAOtp = async (identifier: string) => {
+    const response = await authApi.request2FAOtp({ identifier });
     if (!response.result) throw new Error(response.message || 'Failed to send OTP');
   };
 
@@ -172,7 +172,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (phone: string, email: string, password: string, fullName: string, otp: string) => {
     const response = await userApi.register({ phone, email, password, fullName, otp });
     if (response.result) {
-      await login(phone, password);
+      await login(phone, password); // Dùng phone khi đăng ký vì đăng ký yêu cầu phone
     }
   };
 

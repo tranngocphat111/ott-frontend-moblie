@@ -1,6 +1,5 @@
 import GoogleIcon from '@/components/auth/GoogleIcon';
 import LoginOptionButton from '@/components/auth/LoginOptionButton';
-import PhoneInput from '@/components/auth/PhoneInput';
 import TextInputField from '@/components/auth/TextInputField';
 import TwoFactorStep from '@/components/auth/TwoFactorStep';
 import PrimaryButton from '@/components/common/PrimaryButton';
@@ -26,7 +25,7 @@ export default function LoginScreen() {
   const { login, verify2FA, request2FAOtp, isLoading, errors } = useLogin();
   const { loginWithGoogle, isLoading: googleLoading, error: googleError } = useGoogleLogin();
 
-  const [phone, setPhone] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
 
   const [requires2FA, setRequires2FA] = useState(false);
@@ -48,7 +47,7 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    const result = await login(phone, password);
+    const result = await login(identifier, password);
     if (result?.requires2FA && result?.tempToken) {
       setTempToken(result.tempToken);
       setRequires2FA(true);
@@ -61,7 +60,7 @@ export default function LoginScreen() {
   };
 
   const handleResend2FA = async () => {
-    await request2FAOtp(phone);
+    await request2FAOtp(identifier);
     setOtp('');
     startCountdown();
   };
@@ -115,11 +114,16 @@ export default function LoginScreen() {
               <Text className="text-sm text-brand-600 mt-1">Nhập thông tin để tiếp tục</Text>
             </View>
 
-            <PhoneInput
-              value={phone}
-              onChangeText={setPhone}
-              error={errors.phone}
-              onClear={() => setPhone('')}
+            <TextInputField
+              label="Số điện thoại hoặc Email"
+              value={identifier}
+              onChangeText={setIdentifier}
+              placeholder="0123 456 789 hoặc email@example.com"
+              error={errors.identifier}
+              icon="user"
+              required
+              autoCapitalize="none"
+              keyboardType="email-address"
             />
 
             <TextInputField
@@ -151,7 +155,7 @@ export default function LoginScreen() {
               title="Đăng nhập"
               onPress={handleLogin}
               loading={isLoading}
-              disabled={!phone || !password || anyLoading}
+              disabled={!identifier || !password || anyLoading}
             />
 
             <View className="flex-row items-center my-6">

@@ -157,7 +157,7 @@ export const useRegister = () => {
 
       try {
         const loginResponse = await authApi.localLogin({
-          phone: data.phone,
+          identifier: data.phone,
           password: data.password,
         });
 

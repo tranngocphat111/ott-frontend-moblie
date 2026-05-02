@@ -9,7 +9,7 @@ export interface RequestPhoneOtpRequest {
 }
 
 export interface Request2FAOtpRequest {
-  phone: string;
+  identifier: string;
   ipAddress?: string;
   location?: string;
 }

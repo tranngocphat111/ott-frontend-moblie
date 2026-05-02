@@ -6,7 +6,6 @@ export const SUCCESS_MESSAGES = {
   VERIFY_SUCCESS: "Xác thực thành công.",
   TWO_FA_ENABLED: "Bật xác thực 2 bước thành công.",
   TWO_FA_DISABLED: "Tắt xác thực 2 bước thành công.",
-  INCORRECT_PASSWORD: "Mật khẩu không chính xác",
 };
 
 export const VALIDATION_MESSAGES: Record<string, string> = {
@@ -42,7 +41,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   1009: "Tài khoản này có thể được khôi phục. Vui lòng liên hệ hỗ trợ.", 
 
   // ========== AUTHENTICATION (user-service) ==========
-  1200: "Số điện thoại hoặc mật khẩu không chính xác.",
+  1200: "Thông tin đăng nhập không chính xác.",
   1201: "Tài khoản chưa có mật khẩu. Vui lòng đăng nhập bằng Google hoặc tạo mật khẩu mới.",
   1202: "Tài khoản này đã được đặt mật khẩu từ trước.",
   1203: "Mật khẩu hiện tại không chính xác.",
@@ -141,6 +140,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   // ========== BACKUP CODE ==========
   1235: "Backup code đã hết.",
   1236: "Mã backup code không hợp lệ.",
+  9997: "Mã backup code không hợp lệ.", // auth-service
 };
 
 import { AxiosError } from "axios";

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 
 interface LoginErrors {
-  phone?: string;
+  identifier?: string;
   password?: string;
   otp?: string;
   general?: string;
@@ -22,9 +22,9 @@ export function useLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<LoginErrors>({});
 
-  const validate = (phone: string, password: string): boolean => {
+  const validate = (identifier: string, password: string): boolean => {
     const newErrors: LoginErrors = {};
-    if (!phone) newErrors.phone = 'Vui lòng nhập số điện thoại';
+    if (!identifier) newErrors.identifier = 'Vui lòng nhập số điện thoại hoặc email';
     if (!password) newErrors.password = 'Vui lòng nhập mật khẩu';
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -34,14 +34,14 @@ export function useLogin() {
   };
 
   // ── Login ───────────────────────────────────────────────
-  const login = async (phone: string, password: string): Promise<LoginResult | undefined> => {
-    if (!validate(phone, password)) return;
+  const login = async (identifier: string, password: string): Promise<LoginResult | undefined> => {
+    if (!validate(identifier, password)) return;
 
     setIsLoading(true);
     setErrors({});
 
     try {
-      const response = await authApi.localLogin({ phone, password });
+      const response = await authApi.localLogin({ identifier, password });
 
       if (response.code === 1000 && response.result) {
         const { token, refreshToken, requires2FA, tempToken } = response.result;
@@ -96,9 +96,9 @@ export function useLogin() {
     }
   };
 
-  const request2FAOtp = async (phone: string) => {
+  const request2FAOtp = async (identifier: string) => {
     try {
-      await authApi.request2FAOtp({ phone });
+      await authApi.request2FAOtp({ identifier });
     } catch (error: any) {
       setErrors({ general: error?.message || 'Không thể gửi lại OTP' });
     }
@@ -109,12 +109,28 @@ export function useLogin() {
 
 function getErrorMessage(code?: number, fallback?: string): string {
   switch (code) {
-    case 1002: return 'Số điện thoại hoặc mật khẩu không đúng';
-    case 1003: return 'Tài khoản chưa có mật khẩu. Vui lòng đăng nhập bằng Google hoặc OTP.';
-    case 1004: return 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.';
-    case 1005: return 'Mã OTP không đúng';
-    case 1006: return 'Mã OTP đã hết hạn. Vui lòng gửi lại.';
-    case 1007: return 'Nhập sai quá nhiều lần. Vui lòng gửi lại mã mới.';
+    // ── Auth-service error codes ──
+    case 1002: return 'Tài khoản không tồn tại.';
+    case 1003: return 'Tài khoản chưa được kích hoạt.';
+    case 1004: return 'Tài khoản của bạn đã bị khóa tạm thời.';
+    case 1005: return 'Tài khoản này đã bị xóa.';
+    case 1006: return 'Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn.';
+    case 1007: return 'Bạn không có quyền thực hiện hành động này.';
+    case 2001: return 'Mật khẩu không chính xác.';
+    case 2005: return 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.';
+    case 2006: return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+    // ── OTP errors ──
+    case 4001: return 'Mã OTP không tồn tại hoặc đã hết hạn.';
+    case 4002: return 'Mã OTP này đã được sử dụng.';
+    case 4003: return 'Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.';
+    case 4004: return 'Bạn đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.';
+    case 4005: return 'Bạn đã yêu cầu gửi OTP quá nhiều lần. Vui lòng thử lại sau.';
+    case 4006: return 'Mã OTP không hợp lệ.';
+    // ── Validation errors ──
+    case 5001: return 'Định dạng số điện thoại không hợp lệ.';
+    case 5002: return 'Định dạng email không hợp lệ.';
+    // ── Backup code ──
+    case 9999: return 'Mã backup code không hợp lệ.';
     default: return fallback || 'Đã xảy ra lỗi. Vui lòng thử lại.';
   }
 }
