@@ -112,6 +112,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
+    const handleUserInfoUpdated = (payload: {
+      userId: string;
+      fullName?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+      bio?: string;
+    }) => {
+      setUser((prevUser) => {
+        if (prevUser && prevUser.id === payload.userId) {
+          return {
+            ...prevUser,
+            fullName: payload.fullName ?? prevUser.fullName,
+            avatarUrl: payload.avatarUrl ?? prevUser.avatarUrl,
+            coverUrl: payload.coverUrl ?? prevUser.coverUrl,
+            bio: payload.bio ?? prevUser.bio,
+          };
+        }
+        return prevUser;
+      });
+    };
+
+    // Lazy load socket
+    import('../services/socket/chatSocket').then(({ chatSocket }) => {
+      chatSocket.on('cap_nhat_thong_tin_ca_nhan', handleUserInfoUpdated);
+    });
+
+    return () => {
+      import('../services/socket/chatSocket').then(({ chatSocket }) => {
+        chatSocket.off('cap_nhat_thong_tin_ca_nhan', handleUserInfoUpdated);
+      });
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
 
     const poll = setInterval(async () => {
