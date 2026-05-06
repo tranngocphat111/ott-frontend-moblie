@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { authApi, profileApi, userApi } from '../services/api';
 import { setLogoutHandler } from '../utils/logoutHandler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { UserProfileResponse } from '../types';
 
 interface AuthContextType {
@@ -112,6 +113,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
     const handleUserInfoUpdated = (payload: {
       userId: string;
       fullName?: string;
@@ -133,17 +136,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     };
 
+    const handleForceLogout = async (payload: { action: string; deviceId?: string; revokedDeviceIds?: string[] }) => {
+      console.log('AuthContext: Received buoc_dang_xuat event', payload);
+      const { action } = payload;
+      const myDeviceId = await AsyncStorage.getItem('deviceId');
+
+      if (action === 'ALL') {
+         await logout();
+      } else if (action === 'SPECIFIC' && payload.deviceId && myDeviceId === payload.deviceId) {
+         await logout();
+      } else if (action === 'OTHERS' && myDeviceId && payload.revokedDeviceIds?.includes(myDeviceId)) {
+         await logout();
+      } else if (action === 'SPECIFIC' || action === 'OTHERS') {
+         fetchUser().catch(() => {
+            logout();
+         });
+      }
+    };
+
     // Lazy load socket
     import('../services/socket/chatSocket').then(({ chatSocket }) => {
+      chatSocket.connect();
+      chatSocket.joinUserRoom(user.id);
       chatSocket.on('cap_nhat_thong_tin_ca_nhan', handleUserInfoUpdated);
+      chatSocket.on('buoc_dang_xuat', handleForceLogout);
     });
 
     return () => {
       import('../services/socket/chatSocket').then(({ chatSocket }) => {
         chatSocket.off('cap_nhat_thong_tin_ca_nhan', handleUserInfoUpdated);
+        chatSocket.off('buoc_dang_xuat', handleForceLogout);
       });
     };
-  }, []);
+  }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

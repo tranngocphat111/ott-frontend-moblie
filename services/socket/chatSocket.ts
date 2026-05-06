@@ -21,6 +21,7 @@ type ChatSocketEventMap = {
 	tin_nhan_cap_nhat: (payload: any) => void;
 	cap_nhat_quan_he: (payload: any) => void;
 	cap_nhat_thong_tin_ca_nhan: (payload: any) => void;
+	buoc_dang_xuat: (payload: any) => void;
 };
 
 class ChatSocketService {
