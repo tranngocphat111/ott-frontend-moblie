@@ -38,6 +38,9 @@ export default function EditProfileScreen() {
 
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [bio, setBio] = useState(user?.bio || '');
+  const [work, setWork] = useState(user?.work || '');
+  const [location, setLocation] = useState(user?.location || '');
+  const [relationshipStatus, setRelationshipStatus] = useState(user?.relationshipStatus || '');
   const [gender, setGender] = useState<Gender>((user?.gender as Gender) || 'OTHER');
   const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>(
     user?.dateOfBirth ? new Date(user.dateOfBirth) : undefined
@@ -72,6 +75,9 @@ export default function EditProfileScreen() {
     const success = await updateProfile({
       fullName,
       bio,
+      work,
+      location,
+      relationshipStatus,
       gender,
       dateOfBirth: dateOfBirth ? dateOfBirth.toISOString().split('T')[0] : undefined,
     });
@@ -180,6 +186,30 @@ export default function EditProfileScreen() {
               </View>
               <Text className="text-xs text-brand-500 mt-1 text-right">{bio.length}/200</Text>
             </View>
+
+            <TextInputField
+              label="Công việc"
+              value={work}
+              onChangeText={setWork}
+              placeholder="VD: Kỹ sư phần mềm"
+              icon="briefcase"
+            />
+
+            <TextInputField
+              label="Địa điểm"
+              value={location}
+              onChangeText={setLocation}
+              placeholder="VD: TP. HCM"
+              icon="map-pin"
+            />
+
+            <TextInputField
+              label="Tình trạng quan hệ"
+              value={relationshipStatus}
+              onChangeText={setRelationshipStatus}
+              placeholder="VD: Độc thân"
+              icon="heart"
+            />
 
             <View className="mb-4">
               <Text className="text-sm font-medium text-brand-700 mb-2">

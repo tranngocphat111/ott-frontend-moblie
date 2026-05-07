@@ -63,9 +63,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await SecureStore.deleteItemAsync('accessToken');
       await SecureStore.deleteItemAsync('refreshToken');
       await SecureStore.deleteItemAsync('mockChatUserId'); // Clean up any legacy mock data
-      
+
       setUser(null);
-      
+
       router.replace('/login');
       console.log('AuthContext: Logout completed, tokens cleared');
     }
@@ -121,6 +121,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       avatarUrl?: string;
       coverUrl?: string;
       bio?: string;
+      work?: string;
+      location?: string;
+      relationshipStatus?: string;
+      email?: string;
+      phone?: string;
     }) => {
       setUser((prevUser) => {
         if (prevUser && prevUser.id === payload.userId) {
@@ -130,6 +135,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             avatarUrl: payload.avatarUrl ?? prevUser.avatarUrl,
             coverUrl: payload.coverUrl ?? prevUser.coverUrl,
             bio: payload.bio ?? prevUser.bio,
+            work: payload.work ?? prevUser.work,
+            location: payload.location ?? prevUser.location,
+            relationshipStatus: payload.relationshipStatus ?? prevUser.relationshipStatus,
+            email: payload.email ?? prevUser.email,
+            phone: payload.phone ?? prevUser.phone,
           };
         }
         return prevUser;
@@ -142,15 +152,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const myDeviceId = await AsyncStorage.getItem('deviceId');
 
       if (action === 'ALL') {
-         await logout();
+        await logout();
       } else if (action === 'SPECIFIC' && payload.deviceId && myDeviceId === payload.deviceId) {
-         await logout();
+        await logout();
       } else if (action === 'OTHERS' && myDeviceId && payload.revokedDeviceIds?.includes(myDeviceId)) {
-         await logout();
+        await logout();
       } else if (action === 'SPECIFIC' || action === 'OTHERS') {
-         fetchUser().catch(() => {
-            logout();
-         });
+        fetchUser().catch(() => {
+          logout();
+        });
       }
     };
 

@@ -185,6 +185,9 @@ export default function ProfileScreen() {
             <InfoRow label="Số điện thoại" value={user?.phone} verified={user?.isPhoneVerified} />
             <InfoRow label="Email" value={user?.email} verified={user?.isEmailVerified} />
             <InfoRow label="Giới thiệu" value={user?.bio} />
+            <InfoRow label="Công việc" value={user?.work} />
+            <InfoRow label="Địa điểm" value={user?.location} />
+            <InfoRow label="Tình trạng quan hệ" value={user?.relationshipStatus} />
             <InfoRow
               label="Ngày sinh"
               value={user?.dateOfBirth ? formatDate(user.dateOfBirth) : undefined}
@@ -209,14 +212,12 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 key={index}
                 onPress={item.onPress}
-                className={`flex-row items-center py-3 ${
-                  index < menuItems.length - 1 ? 'border-b border-brand-100' : ''
-                }`}
+                className={`flex-row items-center py-3 ${index < menuItems.length - 1 ? 'border-b border-brand-100' : ''
+                  }`}
               >
                 <View
-                  className={`w-9 h-9 rounded-full justify-center items-center ${
-                    item.danger ? 'bg-red-100' : 'bg-brand-100'
-                  }`}
+                  className={`w-9 h-9 rounded-full justify-center items-center ${item.danger ? 'bg-red-100' : 'bg-brand-100'
+                    }`}
                 >
                   <Feather
                     name={item.icon as any}

@@ -26,6 +26,9 @@ export interface UserProfileResponse {
   avatarUrl?: string;
   coverUrl?: string;
   bio?: string;
+  work?: string;
+  location?: string;
+  relationshipStatus?: string;
   dateOfBirth?: string;
   gender?: Gender;
   accountType: AccountType;
