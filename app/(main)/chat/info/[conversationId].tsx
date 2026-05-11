@@ -46,6 +46,7 @@ import { SenderAvatar } from "@/components/chat";
 import { CreateGroupModal } from "@/components/chat/modals/CreateGroupModal";
 import { ChatImagePreviewModal } from "@/components/chat/ChatImagePreviewModal";
 import { AddMemberModal } from "@/components/chat/modals/AddMemberModal";
+import { GroupInviteLinkModal } from "@/components/chat/modals/GroupInviteLinkModal";
 import { ChatFileMessage } from "@/components/chat/message-types/ChatFileMessage";
 import { ChatAudioMessage } from "@/components/chat/message-types/ChatAudioMessage";
 
@@ -442,6 +443,7 @@ export default function ChatInfoScreen() {
   const [updatingGroupAvatar, setUpdatingGroupAvatar] = useState(false);
   const [createGroupModalVisible, setCreateGroupModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [inviteLinkModalVisible, setInviteLinkModalVisible] = useState(false);
 
   const openStorageTab = useCallback((nextTab: InfoTab) => {
     if (nextTab === "files") {
@@ -1031,26 +1033,49 @@ export default function ChatInfoScreen() {
 
 
                       {isGroup && (
-                        <Pressable
-                          onPress={() => router.push(`/(main)/chat/bulletin/${conversationId}`)}
-                          className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                        >
-                          <View className="flex-row items-center">
+                        <>
+                          <Pressable
+                            onPress={() => router.push(`/(main)/chat/bulletin/${conversationId}`)}
+                            className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                          >
+                            <View className="flex-row items-center">
+                              <Feather
+                                name="layout"
+                                size={20}
+                                color={THEME_COLORS.neutral.slate400}
+                              />
+                              <Text className="ml-4 text-[17px] text-slate-800">
+                                Bảng tin nhóm
+                              </Text>
+                            </View>
                             <Feather
-                              name="layout"
-                              size={20}
+                              name="chevron-right"
+                              size={18}
                               color={THEME_COLORS.neutral.slate400}
                             />
-                            <Text className="ml-4 text-[17px] text-slate-800">
-                              Bảng tin nhóm
-                            </Text>
-                          </View>
-                          <Feather
-                            name="chevron-right"
-                            size={18}
-                            color={THEME_COLORS.neutral.slate400}
-                          />
-                        </Pressable>
+                          </Pressable>
+
+                          <Pressable
+                            onPress={() => setInviteLinkModalVisible(true)}
+                            className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                          >
+                            <View className="flex-row items-center">
+                              <Feather
+                                name="link"
+                                size={20}
+                                color={THEME_COLORS.neutral.slate400}
+                              />
+                              <Text className="ml-4 text-[17px] text-slate-800">
+                                Link tham gia nhóm
+                              </Text>
+                            </View>
+                            <Feather
+                              name="chevron-right"
+                              size={18}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                          </Pressable>
+                        </>
                       )}
 
                       <Pressable
@@ -1945,6 +1970,16 @@ export default function ChatInfoScreen() {
           selectedImage={selectedImage}
           messages={mediaMessages}
           onClose={() => setSelectedImage(null)}
+        />
+      )}
+
+      {isGroup && (
+        <GroupInviteLinkModal
+          visible={inviteLinkModalVisible}
+          onClose={() => setInviteLinkModalVisible(false)}
+          conversationId={conversationId}
+          conversationName={conversation?.name || ''}
+          currentUserId={userIdForChat || ''}
         />
       )}
     </SafeAreaView>

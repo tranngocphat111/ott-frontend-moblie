@@ -49,4 +49,27 @@ export const chatConversationApi = {
     return await chatApiClient.get(`/search/${encodeURIComponent(userId)}?${params.toString()}`);
   },
 
+  async getInviteLink(conversationId: string, requesterId: string): Promise<string> {
+    const response = (await chatApiClient.post(`/conversations/${conversationId}/invite-link`, {
+      requesterId,
+    })) as any;
+    return response.inviteLink || response.invite_link || '';
+  },
+
+  async joinByInviteLink(
+    token: string,
+    userId: string,
+  ): Promise<{ conversation: any; isNewJoin: boolean }> {
+    return await chatApiClient.post('/conversations/join-by-link', { token, userId });
+  },
+
+  async getInviteLinkInfo(
+    token: string,
+    userId?: string,
+  ): Promise<{ conversation: any; isMember: boolean }> {
+    const url = userId
+      ? `/conversations/invite-link/${token}?userId=${encodeURIComponent(userId)}`
+      : `/conversations/invite-link/${token}`;
+    return await chatApiClient.get(url);
+  },
 };
