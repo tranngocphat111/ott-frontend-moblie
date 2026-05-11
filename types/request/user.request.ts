@@ -29,6 +29,9 @@ export interface SetPasswordRequest {
 export interface UpdateProfileRequest {
   fullName?: string;
   bio?: string;
+  work?: string;
+  location?: string;
+  relationshipStatus?: string;
   dateOfBirth?: string;
   gender?: Gender;
   avatarUrl?: string;
