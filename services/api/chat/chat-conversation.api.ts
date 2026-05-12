@@ -1,10 +1,15 @@
 import { chatApiClient } from '../client';
-import type { ChatConversationWithParticipant } from '@/types/entities/chat';
+import type { ChatConversation, ChatConversationWithParticipant } from '@/types/entities/chat';
 import type { ChatSearchOptions, ChatSearchResult } from './chat.types';
 
 export const chatConversationApi = {
   async getUserConversations(userId: string): Promise<ChatConversationWithParticipant[]> {
     return await chatApiClient.get(`/participants/${userId}`);
+  },
+
+  async getConversationById(conversationId: string): Promise<ChatConversation> {
+    const response = await chatApiClient.get<ChatConversation>(`/conversations/${conversationId}`);
+    return response.data;
   },
 
   async createConversation(payload: {

@@ -22,6 +22,7 @@ import { ChatApi } from "@/services/api";
 import { resolveMediaUrl } from "@/utils/chat";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
+import { AddMemberModal } from "@/components/chat/modals/AddMemberModal";
 import { CHAT_API_CONFIG } from "@/configuration/api";
 
 const getFullUrl = (url?: string) => {
@@ -63,8 +64,8 @@ export default function GroupMembersScreen() {
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
   const [searchValue, setSearchValue] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-    const [removeConfirmationVisible, setRemoveConfirmationVisible] = useState(false);
-    const [isRemovingMember, setIsRemovingMember] = useState(false);
+  const [removeConfirmationVisible, setRemoveConfirmationVisible] = useState(false);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,9 +94,9 @@ export default function GroupMembersScreen() {
       map.set(
         id,
         normalize(member?.nickname) ||
-          normalize(member?.user?.name) ||
-          normalize(member?.name) ||
-          id,
+        normalize(member?.user?.name) ||
+        normalize(member?.name) ||
+        id,
       );
     });
     return map;
@@ -105,19 +106,6 @@ export default function GroupMembersScreen() {
     () => new Set(members.map((member) => normalize(member?.user_id))),
     [members],
   );
-
-  const addableUsers = useMemo(() => {
-    const keyword = normalize(searchValue).toLowerCase();
-    return allUsers.filter((candidate) => {
-      const id = normalize(candidate?.user_id);
-      if (!id || memberIds.has(id)) return false;
-
-      if (!keyword) return true;
-
-      const name = normalize(candidate?.name).toLowerCase();
-      return id.toLowerCase().includes(keyword) || name.includes(keyword);
-    });
-  }, [allUsers, memberIds, searchValue]);
 
   const visibleMembers = useMemo(() => {
     const keyword = normalize(searchValue).toLowerCase();
@@ -154,35 +142,13 @@ export default function GroupMembersScreen() {
 
   const getMemberSubtitle = useCallback(
     (member: any) => {
-      if (normalize(member?.status) === "invited") return "Chưa tham gia";
       const memberId = normalize(member?.user_id);
       if (memberId === ownerId) return "Trưởng nhóm";
       if (normalize(member?.roles) === "admin") return "Phó nhóm";
 
-      const addedBy = normalize(member?.added_by);
-      if (addedBy) {
-        if (addedBy === normalize(userIdForChat)) return "Thêm bởi bạn";
-        const addedByName = memberNameById.get(addedBy);
-        if (addedByName) return `Thêm bởi ${addedByName}`;
-      }
-      return "Thành viên";
+      return "";
     },
     [memberNameById, ownerId],
-  );
-
-  const handleAddMember = useCallback(
-    async (newMemberId: string) => {
-      if (!conversationId || !userIdForChat) return;
-      try {
-        await ChatApi.addMembers(conversationId, userIdForChat, [newMemberId]);
-        setMemberModalVisible(false);
-        setSearchValue("");
-        await loadInfo();
-      } catch {
-        Alert.alert("Lỗi", "Không thể thêm thành viên");
-      }
-    },
-    [conversationId, userIdForChat, loadInfo],
   );
 
   const handleOpenMemberActions = useCallback((member: any) => {
@@ -361,7 +327,7 @@ export default function GroupMembersScreen() {
               memberId;
             const subtitle = getMemberSubtitle(item);
             const avatarRaw = normalize(item?.avatar) || normalize(item?.user?.avatar);
-            
+
             // Check if member is a friend
             const friendIds = new Set(allUsers.map(u => normalize(u.user_id)));
             const isStranger = !isMe && !friendIds.has(memberId);
@@ -375,18 +341,16 @@ export default function GroupMembersScreen() {
                     <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1}>
                       {displayName}
                     </Text>
-                    {isStranger && (
-                      <View className="ml-2 rounded-md bg-slate-100 px-1.5 py-0.5">
-                        <Text className="text-[10px] font-bold text-slate-500 uppercase">Người lạ</Text>
-                      </View>
-                    )}
+
                   </View>
-                  <Text 
-                    className={`text-[12px] font-medium ${normalize(item?.status) === "invited" ? "text-amber-600" : "text-slate-500"}`} 
-                    numberOfLines={1}
-                  >
-                    {subtitle}
-                  </Text>
+                  {subtitle ? (
+                    <Text
+                      className="text-[12px] font-medium text-slate-500"
+                      numberOfLines={1}
+                    >
+                      {subtitle}
+                    </Text>
+                  ) : null}
                 </View>
 
                 {isStranger ? (
@@ -546,71 +510,16 @@ export default function GroupMembersScreen() {
         </Pressable>
       </Modal>
 
-      <Modal
+      <AddMemberModal
         visible={memberModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setMemberModalVisible(false)}
-      >
-        <Pressable
-          className="flex-1 justify-end bg-black/35"
-          onPress={() => setMemberModalVisible(false)}
-        >
-          <Pressable
-            className="max-h-[72%] rounded-t-[24px] bg-white px-4 pb-5 pt-4"
-            onPress={() => undefined}
-          >
-            <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-[18px] font-bold text-slate-900">Thêm thành viên</Text>
-              <Pressable
-                className="h-8 w-8 items-center justify-center rounded-full bg-slate-100"
-                onPress={() => setMemberModalVisible(false)}
-              >
-                <Feather name="x" size={16} color={THEME_COLORS.neutral.slate700} />
-              </Pressable>
-            </View>
-
-            <View className="mb-3 flex-row items-center rounded-2xl bg-slate-100 px-3">
-              <Feather name="search" size={16} color={THEME_COLORS.neutral.slate500} />
-              <TextInput
-                value={searchValue}
-                onChangeText={setSearchValue}
-                placeholder="Tìm user để thêm"
-                className="ml-2 flex-1 py-2.5 text-[14px] text-slate-900"
-              />
-            </View>
-
-            <FlatList
-              data={addableUsers}
-              keyExtractor={(item) => normalize(item?._id) || normalize(item?.user_id)}
-              ListEmptyComponent={
-                <Text className="py-6 text-center text-[13px] text-slate-500">Không còn user để thêm</Text>
-              }
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => void handleAddMember(normalize(item?.user_id))}
-                  className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-3 py-3"
-                >
-                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-slate-200">
-                    {normalize(item?.avatar) ? (
-                      <Image source={{ uri: getFullUrl(normalize(item?.avatar)) }} className="h-full w-full rounded-full" />
-                    ) : (
-                      <Feather name="user" size={16} color={THEME_COLORS.neutral.slate500} />
-                    )}
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-[14px] font-semibold text-slate-900">
-                      {normalize(item?.name) || normalize(item?.user_id)}
-                    </Text>
-                    <Text className="text-[12px] text-slate-500">{normalize(item?.user_id)}</Text>
-                  </View>
-                  <Feather name="plus-circle" size={18} color={THEME_COLORS.primary[600]} />
-                </Pressable>
-              )}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
+        conversationId={conversationId || ""}
+        currentMembers={members}
+        users={allUsers}
+        onClose={() => setMemberModalVisible(false)}
+        onMembersAdded={() => {
+          void loadInfo();
+        }}
+      />
 
       <Modal
         visible={nicknameModalVisible}

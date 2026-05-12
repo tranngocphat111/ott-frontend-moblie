@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   Keyboard,
   Modal,
   Pressable,
@@ -11,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { Audio } from 'expo-av';
 import * as Linking from 'expo-linking';
@@ -19,7 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
 import { THEME_COLORS } from '@/constants/theme';
-import { getConversationAvatar } from '@/utils/chat';
+import { getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type {
   ChatCategory,
@@ -42,6 +43,8 @@ import { AddFriendModal } from '@/components/chat/modals/AddFriendModal';
 type SearchTab = 'all' | 'contacts' | 'conversations' | 'messages' | 'files';
 const SEARCH_CONTACT_HISTORY_KEY = 'ott-chat-search-contact-history';
 const SEARCH_LOAD_MORE_STEP = 5;
+const VIRTUAL_CONV_PREFIX = 'VIRTUAL_CONV_';
+const VIRTUAL_CONV_CACHE_KEY = 'ott-chat-virtual-conv-cache';
 
 const INITIAL_SEARCH_VISIBLE_COUNTS = {
   conversations: 5,
@@ -55,6 +58,7 @@ type SearchHistoryContact = {
   conversation_id?: string;
   name: string;
   avatar?: string;
+  phone?: string;
 };
 
 const EMPTY_SEARCH: ChatSearchResult = {
@@ -86,22 +90,27 @@ const sortConversationItems = (items: ChatConversationWithParticipant[]) => {
   });
 };
 
-const normalizeSearchResult = (payload: any): ChatSearchResult => {
-  const contacts = Array.isArray(payload?.contacts)
-    ? payload.contacts
-    : Array.isArray(payload?.users)
-      ? payload.users.map((user: any) => ({
-        user_id: String(user.user_id || user._id || ''),
-        name: String(user.name || user.user_id || ''),
+const normalizeSearchResult = (payload: any, currentUserId?: string): ChatSearchResult => {
+  const contacts: ChatSearchContactItem[] = Array.isArray(payload?.contacts)
+    ? payload.contacts.map((user: any) => ({
+        user_id: user.user_id,
+        name: user.name || user.phone || 'Người dùng',
         avatar: user.avatar,
         phone: user.phone,
-        conversation_ids: [],
+        conversation_ids: user.conversation_ids || [],
       }))
-      : [];
+    : [];
+
+  const conversations = Array.isArray(payload?.conversations)
+    ? payload.conversations.map((item: any) => ({
+        ...item,
+        name: item.name || getConversationTitle(item as any, currentUserId) || 'Cuộc trò chuyện'
+      }))
+    : [];
 
   const result: ChatSearchResult = {
     contacts,
-    conversations: Array.isArray(payload?.conversations) ? payload.conversations : [],
+    conversations,
     messages: Array.isArray(payload?.messages) ? payload.messages : [],
     files: Array.isArray(payload?.files) ? payload.files : [],
     media: Array.isArray(payload?.media) ? payload.media : [],
@@ -122,6 +131,7 @@ const normalizeSearchResult = (payload: any): ChatSearchResult => {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { chatUserId } = useAuth();
 
   const [searchText, setSearchText] = useState('');
@@ -155,6 +165,7 @@ export default function HomeScreen() {
   const [actionConversationId, setActionConversationId] = useState<string | null>(null);
   const [categoryTargetConversation, setCategoryTargetConversation] = useState<ChatConversationWithParticipant | null>(null);
   const [conversationCategoryPickerVisible, setConversationCategoryPickerVisible] = useState(false);
+  const [virtualConversationsCache, setVirtualConversationsCache] = useState<Record<string, ChatConversationWithParticipant>>({});
 
   const loadUsersPromiseRef = useRef<Promise<ChatServiceUser[]> | null>(null);
   const loadConversationsPromiseRef = useRef<Promise<void> | null>(null);
@@ -167,24 +178,33 @@ export default function HomeScreen() {
   useEffect(() => {
     void (async () => {
       try {
-        const storedHistory = await AsyncStorage.getItem(SEARCH_CONTACT_HISTORY_KEY);
-        if (!storedHistory) return;
+        const [storedHistory, storedCache] = await Promise.all([
+          AsyncStorage.getItem(SEARCH_CONTACT_HISTORY_KEY),
+          AsyncStorage.getItem(VIRTUAL_CONV_CACHE_KEY)
+        ]);
 
-        const parsedHistory = JSON.parse(storedHistory);
-        if (Array.isArray(parsedHistory)) {
-          const normalized = parsedHistory
-            .filter((item) => item && typeof item === 'object' && typeof item.user_id === 'string')
-            .map((item) => ({
-              user_id: String(item.user_id),
-              conversation_id: item.conversation_id ? String(item.conversation_id) : undefined,
-              name: String(item.name || item.user_id),
-              avatar: item.avatar ? String(item.avatar) : undefined,
-            }))
-            .slice(0, 12);
-          setRecentContactHistory(normalized);
+        if (storedHistory) {
+          const parsedHistory = JSON.parse(storedHistory);
+          if (Array.isArray(parsedHistory)) {
+            const normalized = parsedHistory
+              .filter((item) => item && typeof item === 'object' && typeof item.user_id === 'string')
+              .map((item) => ({
+                user_id: String(item.user_id),
+                conversation_id: item.conversation_id ? String(item.conversation_id) : undefined,
+                name: String(item.name || item.user_id),
+                avatar: item.avatar ? String(item.avatar) : undefined,
+                phone: item.phone ? String(item.phone) : undefined,
+              }))
+              .slice(0, 12);
+            setRecentContactHistory(normalized);
+          }
+        }
+
+        if (storedCache) {
+          setVirtualConversationsCache(JSON.parse(storedCache));
         }
       } catch (error) {
-        console.warn('Cannot load search history.', error);
+        console.warn('Cannot load search data.', error);
       }
     })();
   }, []);
@@ -198,8 +218,9 @@ export default function HomeScreen() {
       .map((contact) => ({
         conversation_id: contact.conversation_ids?.[0] ? String(contact.conversation_ids[0]) : undefined,
         user_id: String(contact.user_id),
-        name: String(contact.name || contact.user_id),
+        name: String(contact.name || contact.user_id || 'Người dùng'),
         avatar: contact.avatar,
+        phone: contact.phone,
       }));
 
     setRecentContactHistory((current) => {
@@ -235,15 +256,19 @@ export default function HomeScreen() {
   }, [loadChatUsers]);
 
   const loadConversations = useCallback(async (options?: { force?: boolean }) => {
-    if (loadConversationsPromiseRef.current) {
-      await loadConversationsPromiseRef.current;
+    const force = Boolean(options?.force);
+    const now = Date.now();
+    if (!force && now - lastConversationsLoadAtRef.current < 1500) {
       return;
     }
 
-    const force = Boolean(options?.force);
-    const now = Date.now();
-    if (!force && now - lastConversationsLoadAtRef.current < 800) {
-      return;
+    if (loadConversationsPromiseRef.current) {
+      await loadConversationsPromiseRef.current;
+      // After waiting for a previous request, check the throttle again
+      const afterWaitNow = Date.now();
+      if (!force && afterWaitNow - lastConversationsLoadAtRef.current < 1500) {
+        return;
+      }
     }
 
     const task = (async () => {
@@ -301,6 +326,9 @@ export default function HomeScreen() {
     chatSocket.joinUserRoom(chatUserId);
 
     const refreshInbox = () => {
+      // Only refresh if the home screen is active
+      if (!isFocused) return;
+
       if (Date.now() < suppressSocketRefreshUntilRef.current) {
         return;
       }
@@ -338,6 +366,7 @@ export default function HomeScreen() {
       return;
     }
 
+    let isCurrent = true;
     const timer = setTimeout(async () => {
       try {
         setSearchLoading(true);
@@ -345,17 +374,105 @@ export default function HomeScreen() {
           limit: 24,
           senderId: senderFilter || undefined,
         });
-        const normalized = normalizeSearchResult(payload);
-        setSearchResults(normalized);
+
+        if (!isCurrent) return;
+
+        const normalized = normalizeSearchResult(payload, chatUserId);
+
+        // Logic tìm người lạ qua số điện thoại (giống Web)
+        const isPhoneNumber = /^\d{8,15}$/.test(keyword);
+        if (isPhoneNumber) {
+          const hasInContacts = normalized.contacts.some(c => c.phone === keyword || c.name === keyword);
+          const hasInConversations = normalized.conversations.some(c => c.name === keyword);
+
+          if (!hasInContacts && !hasInConversations) {
+            try {
+              const stranger = await ChatApi.getUserByPhone(keyword, chatUserId);
+              if (!isCurrent) return;
+
+              if (stranger && stranger.user_id !== chatUserId) {
+                // 1. Check if the server returned an existing conversation ID
+                const serverConvId = (stranger as any).conversation_id;
+                
+                // 2. Check if we already have a conversation with this user in local items
+                const existingLocal = items.find(item => 
+                  item.conversation.type === 'private' && 
+                  item.conversation.participants?.some(p => String(p.user_id) === String(stranger.user_id))
+                );
+
+                const finalConvId = serverConvId || existingLocal?.conversation._id;
+
+                if (finalConvId) {
+                  normalized.contacts.push({
+                    user_id: stranger.user_id,
+                    name: stranger.name || stranger.phone || 'Người lạ',
+                    avatar: stranger.avatar,
+                    phone: stranger.phone,
+                    conversation_ids: [finalConvId]
+                  });
+                  normalized.total += 1;
+                } else {
+                  const virtualId = `${VIRTUAL_CONV_PREFIX}${stranger.user_id}`;
+                  const virtualConv: ChatConversationWithParticipant = {
+                    conversation: {
+                      _id: virtualId,
+                      type: 'private',
+                      name: stranger.name || stranger.phone || 'Người lạ',
+                      avatar: stranger.avatar || '',
+                      participants: [
+                        { user_id: chatUserId, display_name: 'Bạn' } as any,
+                        { user_id: stranger.user_id, display_name: stranger.name || 'Người lạ', avatar: stranger.avatar } as any
+                      ]
+                    } as any,
+                    participant: {
+                      user_id: chatUserId,
+                      conversation_id: virtualId,
+                      settings: { is_pinned: false, notification_status: 'on' }
+                    } as any
+                  };
+
+                  // Thêm vào cache và kết quả tìm kiếm
+                  setVirtualConversationsCache(prev => {
+                    const next = { ...prev, [virtualId]: virtualConv };
+                    void AsyncStorage.setItem(VIRTUAL_CONV_CACHE_KEY, JSON.stringify(next));
+                    return next;
+                  });
+
+                  normalized.contacts.push({
+                    user_id: stranger.user_id,
+                    name: stranger.name || stranger.phone || 'Người lạ',
+                    avatar: stranger.avatar,
+                    phone: stranger.phone,
+                    conversation_ids: [virtualId]
+                  });
+                  normalized.total += 1;
+                }
+              }
+            } catch (err) {
+              console.log('Stranger search failed or user not found');
+            }
+          }
+        }
+
+        if (isCurrent) {
+          setSearchResults(normalized);
+        }
       } catch (error) {
         console.error('Search failed', error);
-        setSearchResults(EMPTY_SEARCH);
+        if (isCurrent) {
+          setSearchResults(EMPTY_SEARCH);
+        }
       } finally {
-        setSearchLoading(false);
+        if (isCurrent) {
+          setSearchLoading(false);
+        }
       }
     }, 350);
 
-    return () => clearTimeout(timer);
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
   }, [searchText, chatUserId, senderFilter, rememberSearchContacts]);
 
   useEffect(() => {
@@ -465,75 +582,192 @@ export default function HomeScreen() {
   }, [searchResults, senderFilter]);
 
   const searchAvatarByUserId = useMemo(() => {
-    const map = new Map<string, string>();
+    const obj: Record<string, string> = {};
     (searchResults?.contacts || []).forEach((item) => {
       if (item.user_id && item.avatar) {
-        map.set(String(item.user_id), String(item.avatar));
+        obj[String(item.user_id)] = String(item.avatar);
       }
     });
-    return map;
+    return obj;
   }, [searchResults]);
 
   const searchAvatarByConversationId = useMemo(() => {
-    const map = new Map<string, string>();
+    const obj: Record<string, string> = {};
     (searchResults?.conversations || []).forEach((item) => {
       if (item.conversation_id && item.avatar) {
-        map.set(String(item.conversation_id), String(item.avatar));
+        obj[String(item.conversation_id)] = String(item.avatar);
       }
     });
-    return map;
+    return obj;
   }, [searchResults]);
 
   const inboxAvatarByUserId = useMemo(() => {
-    const map = new Map<string, string>();
+    const obj: Record<string, string> = {};
     items.forEach((item) => {
       (item.conversation.participants || []).forEach((participant) => {
-        if (participant?.user_id && participant?.avatar && !map.has(String(participant.user_id))) {
-          map.set(String(participant.user_id), String(participant.avatar));
+        if (participant?.user_id && participant?.avatar && !obj[String(participant.user_id)]) {
+          obj[String(participant.user_id)] = String(participant.avatar);
         }
       });
     });
-    return map;
+    return obj;
   }, [items]);
 
   const inboxAvatarByConversationId = useMemo(() => {
-    const map = new Map<string, string>();
+    const obj: Record<string, string> = {};
     items.forEach((item) => {
       const conversationId = String(item.conversation._id || '');
       const avatar = getConversationAvatar(item.conversation, chatUserId);
       if (conversationId && avatar) {
-        map.set(conversationId, avatar);
+        obj[conversationId] = avatar;
       }
     });
-    return map;
+    return obj;
   }, [items, chatUserId]);
 
   const hasSearchQuery = searchText.trim().length > 0;
 
   const openConversation = useCallback(
-    (conversationId: string, messageId?: string) => {
-      if (!conversationId) return;
+    async (conversationId: string, messageId?: string, contactId?: string) => {
+      let targetConvId = conversationId;
+      if (!targetConvId && !contactId) return;
 
-      // Save to history when clicking a result
-      const matchedConv = items.find(item => String(item.conversation._id || '') === conversationId);
-      if (matchedConv) {
-        const historyItem = {
-          user_id: matchedConv.conversation.type === 'private'
-            ? (matchedConv.conversation.participants?.find(p => String(p.user_id) !== String(chatUserId))?.user_id || '')
-            : 'group',
-          name: matchedConv.conversation.name || 'Đoạn chat',
-          avatar: getConversationAvatar(matchedConv.conversation, chatUserId),
-          conversation_id: conversationId
-        };
-        void rememberSearchContacts([{
-          user_id: historyItem.user_id,
-          name: historyItem.name,
-          avatar: historyItem.avatar,
-          conversation_ids: [conversationId]
-        } as any]);
+      let targetConv: ChatConversationWithParticipant | undefined;
+
+      // 1. If contactId is provided, PRIORITIZE finding a private conversation with them locally
+      if (contactId) {
+        const localPrivateConv = items.find(c => 
+          c.conversation.type === 'private' && 
+          c.conversation.participants?.some(p => String(p.user_id) === String(contactId))
+        );
+        if (localPrivateConv) {
+          targetConv = localPrivateConv;
+          targetConvId = localPrivateConv.conversation._id;
+        }
       }
 
-      const params: any = { conversationId };
+      // 2. If not found yet and targetConvId is provided, try to find by ID
+      if (!targetConv && targetConvId) {
+        targetConv = items.find(
+          (item) => String(item.conversation._id || '') === targetConvId,
+        );
+
+        // If not in main items, check Virtual Cache
+        if (!targetConv && targetConvId.startsWith(VIRTUAL_CONV_PREFIX)) {
+          targetConv = virtualConversationsCache[targetConvId];
+        }
+      }
+
+      // 3. If still not found and we have a contactId, try to find on server (for hidden/deleted chats)
+      if (!targetConv && contactId && chatUserId) {
+        try {
+          // This API call effectively acts as a findPrivateConversation
+          const response = await ChatApi.createConversation({
+            creatorId: chatUserId,
+            type: 'private',
+            memberIds: [contactId],
+          });
+          const fetchedConv = response?._id ? response : (response?.conversation || null);
+          
+          if (fetchedConv && fetchedConv._id && !String(fetchedConv._id).startsWith(VIRTUAL_CONV_PREFIX)) {
+            targetConv = {
+              conversation: fetchedConv,
+              participant: {
+                user_id: chatUserId,
+                conversation_id: String(fetchedConv._id),
+                settings: { is_pinned: false, notification_status: 'on' }
+              } as any
+            };
+            targetConvId = String(fetchedConv._id);
+          }
+        } catch (err) {
+          console.log('Lazy find on server failed:', err);
+        }
+      }
+
+      // 4. If still not found but targetConvId is a real ID, fetch from server (hidden/deleted chats)
+      if (!targetConv && targetConvId && !targetConvId.startsWith(VIRTUAL_CONV_PREFIX)) {
+        try {
+          const fetched = await ChatApi.getConversationById(targetConvId);
+          if (fetched) {
+            targetConv = {
+              conversation: fetched,
+              participant: {
+                user_id: chatUserId,
+                conversation_id: targetConvId,
+                settings: { is_pinned: false, notification_status: 'on' }
+              } as any
+            };
+          }
+        } catch (err) {
+          console.error('Failed to fetch hidden conversation:', err);
+        }
+      }
+
+      // 4. If still not found but we have a contactId, create a virtual conversation object (stranger)
+      if (!targetConv && contactId && chatUserId) {
+        try {
+          const targetUser = await ChatApi.getUserById(contactId);
+          if (targetUser) {
+            const virtualId = `${VIRTUAL_CONV_PREFIX}${contactId}`;
+            targetConvId = virtualId;
+            targetConv = {
+              conversation: {
+                _id: virtualId,
+                type: 'private',
+                name: targetUser.name || 'Người dùng',
+                avatar: targetUser.avatar || '',
+                participants: [
+                  { user_id: chatUserId, display_name: 'Bạn' } as any,
+                  { user_id: contactId, display_name: targetUser.name || 'Người dùng', avatar: targetUser.avatar } as any
+                ]
+              } as any,
+              participant: {
+                user_id: chatUserId,
+                conversation_id: virtualId,
+                settings: { is_pinned: false, notification_status: 'on' }
+              } as any
+            };
+            
+            // Cache it
+            setVirtualConversationsCache(prev => {
+              const next = { ...prev, [virtualId]: targetConv! };
+              void AsyncStorage.setItem(VIRTUAL_CONV_CACHE_KEY, JSON.stringify(next));
+              return next;
+            });
+          }
+        } catch (err) {
+          console.error('Failed to get user for virtual conversation:', err);
+        }
+      }
+
+      if (!targetConv) {
+        Alert.alert('Thông báo', 'Không thể mở cuộc hội thoại này.');
+        return;
+      }
+
+      // Save to history
+      const historyItem = {
+        user_id: targetConv.conversation.type === 'private'
+          ? (targetConv.conversation.participants?.find(p => String(p.user_id) !== String(chatUserId))?.user_id || '')
+          : 'group',
+        name: getConversationTitle(targetConv.conversation, chatUserId),
+        avatar: getConversationAvatar(targetConv.conversation, chatUserId),
+        conversation_id: targetConvId
+      };
+
+      void rememberSearchContacts([{
+        user_id: historyItem.user_id,
+        name: historyItem.name,
+        avatar: historyItem.avatar,
+        conversation_ids: [targetConvId]
+      } as any]);
+
+      const params: any = {
+        conversationId: targetConvId,
+        title: getConversationTitle(targetConv.conversation, chatUserId),
+        avatar: getConversationAvatar(targetConv.conversation, chatUserId)
+      };
       if (messageId) params.highlightedMessageId = messageId;
 
       router.push({
@@ -541,7 +775,7 @@ export default function HomeScreen() {
         params
       } as any);
     },
-    [router, items, chatUserId, rememberSearchContacts],
+    [router, items, chatUserId, rememberSearchContacts, virtualConversationsCache],
   );
 
   const handleOpenHistoryConversation = useCallback(
@@ -592,9 +826,9 @@ export default function HomeScreen() {
   }, []);
 
   const handleClearSearchInput = useCallback(() => {
-    // Keyboard.dismiss(); // Keep keyboard if clearing input but staying in search
-    setSearchText('');
+    // Reset search results and text together to avoid intermediate states
     setSearchResults(null);
+    setSearchText('');
     setSearchTab('all');
     setSenderFilter('');
   }, []);
@@ -784,33 +1018,105 @@ export default function HomeScreen() {
         isSearchFocused={isSearchFocused}
       />
 
-      <View className="flex-1 pt-2">
+      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
         {isSearchMode ? (
-          <HomeSearchPanel
-            searchLoading={searchLoading}
-            searchText={searchText}
-            searchResults={searchResults}
-            searchTab={searchTab}
-            senderFilter={senderFilter}
-            searchVisibleCounts={searchVisibleCounts}
-            recentContactHistory={recentContactHistory}
-            isEditingHistory={isEditingHistory}
-            onToggleEditHistory={() => setIsEditingHistory((current) => !current)}
-            onOpenHistoryConversation={handleOpenHistoryConversation}
-            onDeleteHistoryItem={deleteHistoryItem}
-            onClearHistory={clearContactSearchHistory}
-            onOpenConversation={openConversation}
-            onLoadMore={(section) => {
-              setSearchVisibleCounts((current) => ({
-                ...current,
-                [section]: current[section] + SEARCH_LOAD_MORE_STEP,
-              }));
-            }}
-            searchAvatarByUserId={searchAvatarByUserId}
-            searchAvatarByConversationId={searchAvatarByConversationId}
-            inboxAvatarByUserId={inboxAvatarByUserId}
-            inboxAvatarByConversationId={inboxAvatarByConversationId}
-          />
+          searchText.trim().length > 0 ? (
+            <HomeSearchPanel
+              searchLoading={searchLoading}
+              searchText={searchText}
+              searchResults={searchResults}
+              searchTab={searchTab}
+              senderFilter={senderFilter}
+              searchVisibleCounts={searchVisibleCounts}
+              onOpenConversation={openConversation}
+              onLoadMore={(section) => {
+                setSearchVisibleCounts((current) => ({
+                  ...current,
+                  [section as keyof typeof current]: (current[section as keyof typeof current] || 0) + SEARCH_LOAD_MORE_STEP,
+                }));
+              }}
+              searchAvatarByUserId={searchAvatarByUserId}
+              searchAvatarByConversationId={searchAvatarByConversationId}
+              inboxAvatarByUserId={inboxAvatarByUserId}
+              inboxAvatarByConversationId={inboxAvatarByConversationId}
+            />
+          ) : (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+              {recentContactHistory.length > 0 && (
+                <View style={{ marginBottom: 24 }}>
+                  <View className="mb-4 flex-row items-center justify-between">
+                    <Text className="text-[16px] font-bold text-slate-800">Tìm kiếm gần đây</Text>
+                    <Pressable onPress={() => setIsEditingHistory((v) => !v)}>
+                      <Text className="text-[14px] font-medium text-primary-600">
+                        {isEditingHistory ? 'Xong' : 'Sửa'}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  <View className="rounded-2xl bg-white p-2 shadow-sm">
+                    {recentContactHistory.map((histItem: SearchHistoryContact, index: number) => (
+                      <Pressable
+                        key={histItem.user_id}
+                        onPress={() => handleOpenHistoryConversation(histItem)}
+                        className={`flex-row items-center px-3 py-3 ${index < recentContactHistory.length - 1 ? 'border-b border-slate-50' : ''}`}
+                      >
+                        <View className="h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-primary-50">
+                          {histItem.avatar ? (
+                            <Image source={{ uri: resolveMediaUrl(histItem.avatar) }} className="h-full w-full" />
+                          ) : (
+                            <Text className="text-[15px] font-bold text-primary-600">
+                              {String(histItem.name || histItem.user_id || '?').charAt(0).toUpperCase()}
+                            </Text>
+                          )}
+                        </View>
+                        <Text className="ml-3 flex-1 text-[15px] font-medium text-slate-700" numberOfLines={1}>
+                          {String(histItem.name || histItem.phone || 'Người dùng')}
+                        </Text>
+                        {isEditingHistory && (
+                          <Pressable
+                            onPress={() => deleteHistoryItem(histItem.user_id)}
+                            className="ml-2 h-8 w-8 items-center justify-center rounded-full bg-red-50"
+                          >
+                            <Feather name="trash-2" size={16} color={THEME_COLORS.neutral.red500} />
+                          </Pressable>
+                        )}
+                      </Pressable>
+                    ))}
+                    {isEditingHistory && (
+                      <Pressable
+                        onPress={clearContactSearchHistory}
+                        className="mt-2 items-center py-2"
+                      >
+                        <Text className="text-[14px] font-semibold text-red-600">Xóa tất cả lịch sử</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              <View className="rounded-2xl bg-white p-4 shadow-sm">
+                <Text className="mb-4 text-[15px] font-bold text-slate-800 uppercase tracking-wider">Gợi ý tìm kiếm</Text>
+                <View className="mb-4 flex-row items-center">
+                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
+                    <Feather name="user" size={20} color={THEME_COLORS.primary[600]} />
+                  </View>
+                  <View className="ml-3">
+                    <Text className="text-[15px] font-semibold text-slate-800">Tìm kiếm bạn bè</Text>
+                    <Text className="text-[13px] text-slate-500">Theo tên hoặc số điện thoại</Text>
+                  </View>
+                </View>
+                <View className="flex-row items-center">
+                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-purple-50">
+                    <Feather name="message-square" size={20} color="#9333ea" />
+                  </View>
+                  <View className="ml-3">
+                    <Text className="text-[15px] font-semibold text-slate-800">Tìm tin nhắn</Text>
+                    <Text className="text-[13px] text-slate-500">Từ khóa trong hội thoại</Text>
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+          )
         ) : (
           <HomeConversationList
             items={filteredItems}
@@ -848,7 +1154,7 @@ export default function HomeScreen() {
               setCategoryTargetConversation(null);
             }}
           />
-          <View className="rounded-2xl bg-white px-4 py-4">
+          <View style={{ borderRadius: 16, backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 16 }}>
             <Text className="mb-3 text-[17px] font-semibold text-slate-900">Phân loại hội thoại</Text>
             <ScrollView style={{ maxHeight: 320 }}>
               {!!selectedConversationCategoryId && (

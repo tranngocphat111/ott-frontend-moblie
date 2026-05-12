@@ -1,4 +1,6 @@
+import { ChatApi } from '@/services/api';
 import { useQrLogin } from '@/hooks/auth/useQrLogin';
+import { useAuth } from '@/contexts/Authcontext';
 import { Feather } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -16,7 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function QrScanScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
-  const { scanQr, confirmQr, isLoading } = useQrLogin();
+  const { scanQr, confirmQr, isLoading: isQrLoading } = useQrLogin();
+  const { chatUserId } = useAuth();
 
   const isProcessing = useRef(false);
   const [scanned, setScanned] = useState(false);
@@ -26,6 +29,23 @@ export default function QrScanScreen() {
     isProcessing.current = true;
     setScanned(true);
 
+    // 1. Check if it's a group invite link
+    const inviteTokenMatch = data.match(/[?&]token=([^&]+)/) || data.match(/\/join\/([^/?]+)/);
+    const inviteToken = inviteTokenMatch ? inviteTokenMatch[1] : null;
+
+    if (inviteToken) {
+      try {
+        const groupInfo = await ChatApi.getInviteLinkInfo(inviteToken, chatUserId || undefined);
+        if (groupInfo) {
+          showGroupInviteDialog(inviteToken, groupInfo);
+          return;
+        }
+      } catch (error) {
+        console.error('Error fetching group info from QR:', error);
+      }
+    }
+
+    // 2. Otherwise, treat as QR Login
     const result = await scanQr(data);
 
     if (result?.qrId) {
@@ -33,7 +53,50 @@ export default function QrScanScreen() {
     } else {
       isProcessing.current = false;
       setScanned(false);
+      if (!inviteToken) {
+        Alert.alert('Lỗi', 'Mã QR không hợp lệ hoặc không được hỗ trợ');
+      }
     }
+  };
+
+  const showGroupInviteDialog = (token: string, groupInfo: any) => {
+    Alert.alert(
+      'Tham gia nhóm',
+      `Bạn có muốn tham gia nhóm "${groupInfo.conversation?.name || 'này'}" không?`,
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+          onPress: () => {
+            isProcessing.current = false;
+            setScanned(false);
+          },
+        },
+        {
+          text: 'Tham gia',
+          onPress: async () => {
+            try {
+              if (!chatUserId) {
+                Alert.alert('Lỗi', 'Bạn cần đăng nhập để thực hiện hành động này');
+                return;
+              }
+
+              const result = await ChatApi.joinByInviteLink(token, chatUserId);
+              if (result.conversation?._id) {
+                router.replace(`/(main)/chat/${result.conversation._id}`);
+              } else {
+                throw new Error('No conversation ID returned');
+              }
+            } catch (error) {
+              Alert.alert('Lỗi', 'Không thể tham gia nhóm. Có thể link đã hết hạn.');
+              isProcessing.current = false;
+              setScanned(false);
+            }
+          },
+        },
+      ],
+      { cancelable: false }
+    );
   };
 
   const showConfirmDialog = (qrId: string) => {

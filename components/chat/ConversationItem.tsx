@@ -208,27 +208,21 @@ React.useEffect(() => {
             )}
 
             <View className="flex-row items-center justify-between gap-3">
-              {participant.status === 'invited' ? (
-                <Text className="flex-1 text-[13px] font-medium text-brand-600" numberOfLines={1}>
-                  Lời mời tham gia nhóm
-                </Text>
-              ) : (
-                <Text className="flex-1 text-[13px] leading-5 text-slate-500" numberOfLines={1}>
-                  {(() => {
-                    if (!conversation.last_message) return previewText;
-                    if (isSystemLastMessage) return previewText;
-                    
-                    const isMe = String(conversation.last_message.sender_id || '') === String(currentUserId || '');
-                    if (isMe) return `Bạn: ${previewText}`;
-                    
-                    if (conversation.type === 'group') {
-                      return `${conversation.last_message.sender_name || 'Thành viên'}: ${previewText}`;
-                    }
-                    
-                    return previewText;
-                  })()}
-                </Text>
-              )}
+              <Text className="flex-1 text-[13px] leading-5 text-slate-500" numberOfLines={1}>
+                {(() => {
+                  if (!conversation.last_message) return previewText;
+                  if (isSystemLastMessage) return previewText;
+                  
+                  const isMe = String(conversation.last_message.sender_id || '') === String(currentUserId || '');
+                  if (isMe) return `Bạn: ${previewText}`;
+                  
+                  if (conversation.type === 'group') {
+                    return `${conversation.last_message.sender_name || 'Thành viên'}: ${previewText}`;
+                  }
+                  
+                  return previewText;
+                })()}
+              </Text>
               {unreadCount > 0 && (
                 <View className="min-w-[22px] rounded-full bg-brand-600 px-2 py-1">
                   <Text className="text-center text-[11px] font-bold text-white">

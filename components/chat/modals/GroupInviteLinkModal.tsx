@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   Modal,
   Pressable,
   ActivityIndicator,
-  Alert,
   Clipboard,
   Dimensions,
+  Share,
+  StyleSheet,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { ChatApi } from '@/services/api';
 import { useToast } from '@/contexts/ToastContext';
-import { ForwardMessageModal } from './ForwardMessageModal';
-import type { ChatConversationWithParticipant, ChatMessage } from '@/types/entities/chat';
+import { THEME_COLORS } from '@/constants/theme';
 
 interface Props {
   visible: boolean;
@@ -37,9 +37,6 @@ export const GroupInviteLinkModal: React.FC<Props> = ({
   const [inviteLink, setInviteLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'link' | 'qr'>('link');
-  const [showForward, setShowForward] = useState(false);
-  const [conversations, setConversations] = useState<ChatConversationWithParticipant[]>([]);
-  const [isForwarding, setIsForwarding] = useState(false);
 
   const fetchInviteLink = useCallback(async () => {
     if (!conversationId || !currentUserId) return;
@@ -67,132 +64,97 @@ export const GroupInviteLinkModal: React.FC<Props> = ({
   };
 
   const handleShare = async () => {
-    if (!inviteLink || !currentUserId) return;
+    if (!inviteLink) return;
     try {
-      setLoading(true);
-      const convs = await ChatApi.getUserConversations(currentUserId);
-      setConversations(convs);
-      setShowForward(true);
+      await Share.share({
+        title: `Tham gia nhóm "${conversationName}"`,
+        message: `Bạn được mời tham gia nhóm "${conversationName}" trên ứng dụng chat.\nLink tham gia: ${inviteLink}`,
+        url: inviteLink,
+      });
     } catch (error) {
-      showToast('Lỗi khi tải danh sách hội thoại', 'error');
-    } finally {
-      setLoading(false);
+      console.error('Error sharing link:', error);
     }
   };
-
-  const handleConfirmForward = async (conversationIds: string[]) => {
-    if (!inviteLink || !currentUserId) return;
-    setIsForwarding(true);
-    try {
-      for (const cid of conversationIds) {
-        await ChatApi.sendMessage({
-          conversationId: cid,
-          senderId: currentUserId,
-          content: inviteLink,
-          type: 'link'
-        });
-      }
-      showToast(`Đã chia sẻ link cho ${conversationIds.length} hội thoại!`, 'success');
-      setShowForward(false);
-      onClose();
-    } catch (error) {
-      showToast('Lỗi khi chia sẻ link', 'error');
-    } finally {
-      setIsForwarding(false);
-    }
-  };
-
-  const dummyMessage = useMemo(() => {
-    return {
-      _id: 'dummy',
-      conversation_id: '',
-      sender_id: currentUserId,
-      content: [inviteLink],
-      type: 'link',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as any;
-  }, [inviteLink, currentUserId]);
 
   if (!visible) return null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-black/50 justify-end">
-        <Pressable className="flex-1" onPress={onClose} />
-        <View className="bg-white rounded-t-[32px] px-6 pt-6 pb-10">
-          <View className="flex-row items-center justify-between mb-6">
-            <Text className="text-[20px] font-bold text-slate-900">Link tham gia nhóm</Text>
-            <Pressable onPress={onClose} className="p-2 bg-slate-100 rounded-full">
+      <View style={styles.overlay}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Link tham gia nhóm</Text>
+            <Pressable onPress={onClose} style={styles.closeButton}>
               <Feather name="x" size={20} color="#64748b" />
             </Pressable>
           </View>
 
           {/* Tab Bar */}
-          <View className="flex-row bg-slate-100 rounded-2xl p-1 mb-6">
+          <View style={styles.tabBar}>
             <Pressable
               onPress={() => setActiveTab('link')}
-              className={`flex-1 py-3 items-center rounded-xl ${activeTab === 'link' ? 'bg-white shadow-sm' : ''}`}
+              style={[styles.tabItem, activeTab === 'link' && styles.tabItemActive]}
             >
-              <Text className={`text-[14px] font-bold ${activeTab === 'link' ? 'text-primary-600' : 'text-slate-500'}`}>Link mời</Text>
+              <Text style={[styles.tabText, activeTab === 'link' && styles.tabTextActive]}>Link mời</Text>
             </Pressable>
             <Pressable
               onPress={() => setActiveTab('qr')}
-              className={`flex-1 py-3 items-center rounded-xl ${activeTab === 'qr' ? 'bg-white shadow-sm' : ''}`}
+              style={[styles.tabItem, activeTab === 'qr' && styles.tabItemActive]}
             >
-              <Text className={`text-[14px] font-bold ${activeTab === 'qr' ? 'text-primary-600' : 'text-slate-500'}`}>Mã QR</Text>
+              <Text style={[styles.tabText, activeTab === 'qr' && styles.tabTextActive]}>Mã QR</Text>
             </Pressable>
           </View>
 
           {activeTab === 'link' ? (
             <View>
-              <Text className="text-center text-slate-500 mb-6 leading-5">
+              <Text style={styles.description}>
                 Chia sẻ link này để mời mọi người tham gia nhóm{'\n'}
-                <Text className="font-bold text-slate-800">"{conversationName}"</Text>
+                <Text style={styles.boldText}>"{conversationName}"</Text>
               </Text>
 
-              <View className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-4 flex-row items-center mb-6">
-                <View className="flex-1 mr-3">
+              <View style={styles.linkCard}>
+                <View style={styles.linkContainer}>
                   {loading ? (
-                    <ActivityIndicator size="small" color="#8b5cf6" />
+                    <ActivityIndicator size="small" color={THEME_COLORS.primary[600]} />
                   ) : (
-                    <Text className="text-primary-600 font-medium" numberOfLines={1}>
+                    <Text style={styles.linkText} numberOfLines={1}>
                       {inviteLink || 'Đang tải...'}
                     </Text>
                   )}
                 </View>
-                <Pressable onPress={handleCopyLink} className="p-2">
-                  <Feather name="copy" size={18} color="#8b5cf6" />
+                <Pressable onPress={handleCopyLink} style={styles.iconButton}>
+                  <Feather name="copy" size={18} color={THEME_COLORS.primary[600]} />
                 </Pressable>
               </View>
 
-              <View className="flex-row gap-3">
+              <View style={styles.buttonRow}>
                 <Pressable
                   onPress={handleCopyLink}
-                  className="flex-1 bg-primary-600 py-4 rounded-2xl flex-row items-center justify-center shadow-lg shadow-primary-500/30"
+                  style={[styles.button, styles.primaryButton]}
                 >
                   <Feather name="copy" size={18} color="#fff" />
-                  <Text className="text-white font-bold ml-2">Sao chép link</Text>
+                  <Text style={styles.primaryButtonText}>Sao chép link</Text>
                 </Pressable>
                 <Pressable
                   onPress={handleShare}
-                  className="flex-1 bg-slate-100 py-4 rounded-2xl flex-row items-center justify-center"
+                  style={[styles.button, styles.secondaryButton]}
                 >
                   <Feather name="share-2" size={18} color="#64748b" />
-                  <Text className="text-slate-700 font-bold ml-2">Chia sẻ</Text>
+                  <Text style={styles.secondaryButtonText}>Chia sẻ</Text>
                 </Pressable>
               </View>
             </View>
           ) : (
-            <View className="items-center">
-              <Text className="text-center text-slate-500 mb-8 leading-5">
+            <View style={styles.qrContainer}>
+              <Text style={styles.description}>
                 Quét mã QR để tham gia nhóm{'\n'}
-                <Text className="font-bold text-slate-800">"{conversationName}"</Text>
+                <Text style={styles.boldText}>"{conversationName}"</Text>
               </Text>
 
-              <View className="p-6 bg-white border border-slate-100 rounded-[32px] shadow-sm mb-6">
+              <View style={styles.qrWrapper}>
                 {loading ? (
-                  <ActivityIndicator size="large" color="#8b5cf6" />
+                  <ActivityIndicator size="large" color={THEME_COLORS.primary[600]} />
                 ) : inviteLink ? (
                   <QRCode value={inviteLink} size={width * 0.5} />
                 ) : (
@@ -200,25 +162,169 @@ export const GroupInviteLinkModal: React.FC<Props> = ({
                 )}
               </View>
 
-              <Pressable onPress={fetchInviteLink} className="flex-row items-center py-2">
+              <Pressable onPress={fetchInviteLink} style={styles.refreshButton}>
                 <Feather name="refresh-cw" size={16} color="#64748b" />
-                <Text className="ml-2 text-slate-500 font-medium">Làm mới mã QR</Text>
+                <Text style={styles.refreshText}>Làm mới mã QR</Text>
               </Pressable>
             </View>
           )}
         </View>
       </View>
-
-      <ForwardMessageModal
-        visible={showForward}
-        message={dummyMessage}
-        conversations={conversations}
-        currentConversationId={conversationId}
-        currentUserId={currentUserId}
-        isSubmitting={isForwarding}
-        onClose={() => setShowForward(false)}
-        onConfirm={handleConfirmForward}
-      />
     </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    flex: 1,
+  },
+  content: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0f172a',
+  },
+  closeButton: {
+    padding: 8,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 99,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 24,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  tabItemActive: {
+    backgroundColor: 'white',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#64748b',
+  },
+  tabTextActive: {
+    color: THEME_COLORS.primary[600],
+  },
+  description: {
+    textAlign: 'center',
+    color: '#64748b',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  boldText: {
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  linkCard: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  linkContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  linkText: {
+    color: THEME_COLORS.primary[600],
+    fontWeight: '500',
+  },
+  iconButton: {
+    padding: 8,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButton: {
+    backgroundColor: THEME_COLORS.primary[600],
+    elevation: 4,
+    shadowColor: THEME_COLORS.primary[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  primaryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  secondaryButton: {
+    backgroundColor: '#f1f5f9',
+  },
+  secondaryButtonText: {
+    color: '#334155',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  qrContainer: {
+    alignItems: 'center',
+  },
+  qrWrapper: {
+    padding: 24,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    borderRadius: 32,
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  refreshText: {
+    marginLeft: 8,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+});

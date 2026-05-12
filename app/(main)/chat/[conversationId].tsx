@@ -50,7 +50,7 @@ import {
   MessageReactionsModal,
 } from "@/components/chat";
 import { ChatExtraPanel } from "@/components/chat/ChatExtraPanel";
-import { FriendRequestBar, GroupInvitationBar } from "@/components/chat";
+import { FriendRequestBar } from "@/components/chat";
 import { CreatePollModal } from "@/components/chat/modals/CreatePollModal";
 import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
 import { ForwardMessageModal } from "@/components/chat/modals/ForwardMessageModal";
@@ -576,11 +576,19 @@ const ChatTypingIndicator = ({
 export default function ChatDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversationId, previewUrl, highlightedMessageId: searchHighlightedMessageId } =
+  const { 
+    conversationId, 
+    previewUrl, 
+    highlightedMessageId: searchHighlightedMessageId,
+    title: paramTitle,
+    avatar: paramAvatar
+  } =
     useLocalSearchParams<{
       conversationId: string;
       previewUrl?: string;
       highlightedMessageId?: string;
+      title?: string;
+      avatar?: string;
     }>();
   const { user, chatUserId } = useAuth();
 
@@ -603,6 +611,38 @@ export default function ChatDetailScreen() {
     conversation?.is_self_conversation ||
     String(conversation?.name || '').trim().toLowerCase() === 'my documents',
   );
+
+  const ensureConversation = useCallback(async () => {
+    if (!conversationId || !userIdForChat) return null;
+
+    if (!String(conversationId).startsWith('VIRTUAL_CONV_')) {
+      return String(conversationId);
+    }
+
+    // Extract recipientId from virtual ID
+    const recipientId = String(conversationId).replace('VIRTUAL_CONV_', '');
+
+    try {
+      const response = await ChatApi.createConversation({
+        creatorId: userIdForChat,
+        type: 'private',
+        memberIds: [recipientId],
+      });
+
+      const realId = String(response?._id || response?.conversation?._id || '');
+      if (realId) {
+        // Update URL and state if needed, but for the current send operation, just return the realId
+        // We'll let the socket or a manual refresh update the UI later, 
+        // but to keep the user in the same "room", we should replace the route.
+        router.setParams({ conversationId: realId } as any);
+        return realId;
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to ensure conversation:', error);
+      return null;
+    }
+  }, [conversationId, userIdForChat, router]);
   const {
     listRef,
     loadingOlder,
@@ -725,8 +765,8 @@ export default function ChatDetailScreen() {
   } = useChatPanels();
 
   // Conversation metadata
-  const title = getConversationTitle(conversation, userIdForChat);
-  const avatar = getConversationAvatar(conversation, userIdForChat);
+  const title = conversation ? getConversationTitle(conversation, userIdForChat) : (paramTitle || "Tin nhắn");
+  const avatar = conversation ? getConversationAvatar(conversation, userIdForChat) : (paramAvatar || "");
   const isGroup = conversation?.type === "group";
 
   const typingUserIdList = Object.keys(typingUserIds).filter(
@@ -1327,6 +1367,12 @@ export default function ChatDetailScreen() {
     }) => {
       if (!conversationId || !userIdForChat) return;
 
+      const targetId = await ensureConversation();
+      if (!targetId) {
+        Alert.alert("Lỗi", "Không thể tạo cuộc hội thoại.");
+        return;
+      }
+
       const mimeType = getMimeType(params.fileName, params.mimeType);
       let fileSize = Number(params.fileSize || 0);
 
@@ -1367,7 +1413,7 @@ export default function ChatDetailScreen() {
         }));
       });
       await ChatApi.sendMessage({
-        conversationId,
+        conversationId: targetId,
         senderId: userIdForChat,
         content: key,
         type: params.explicitType || fileCategory || "file",
@@ -1379,7 +1425,7 @@ export default function ChatDetailScreen() {
       setPendingScrollToBottom();
       setUploadProgress(null);
     },
-    [conversationId, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
+    [conversationId, ensureConversation, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
   );
 
   const uploadAndSendImages = useCallback(
@@ -1394,6 +1440,12 @@ export default function ChatDetailScreen() {
       }>,
     ) => {
       if (!conversationId || !userIdForChat || assets.length === 0) return;
+
+      const targetId = await ensureConversation();
+      if (!targetId) {
+        Alert.alert("Lỗi", "Không thể tạo cuộc hội thoại.");
+        return;
+      }
 
       const hydratedAssets = await Promise.all(
         assets.map(async (asset) => {
@@ -1423,7 +1475,7 @@ export default function ChatDetailScreen() {
       const localTempId = `local-image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const optimisticMessage = buildOptimisticImageMessage({
         localId: localTempId,
-        conversationId,
+        conversationId: targetId,
         senderId: userIdForChat,
         assets: validAssets,
         replyToMsgId: replyToMessage?.msg_id,
@@ -1492,7 +1544,7 @@ export default function ChatDetailScreen() {
         }
 
         const createdMessage = await ChatApi.sendMessage({
-          conversationId,
+          conversationId: targetId,
           senderId: userIdForChat,
           content: keys,
           type: "image",
@@ -1529,7 +1581,7 @@ export default function ChatDetailScreen() {
         throw error;
       }
     },
-    [conversationId, normalizeMessages, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
+    [conversationId, ensureConversation, normalizeMessages, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
   );
 
   const pickImagesAndSend = useCallback(async () => {
@@ -2233,9 +2285,15 @@ export default function ChatDetailScreen() {
   const handleCreatePoll = useCallback(async (data: { question: string; options: { id: string; name: string; voters: string[] }[]; multipleChoice: boolean }) => {
     if (!conversationId || !userIdForChat) return;
 
+    const targetId = await ensureConversation();
+    if (!targetId) {
+      Alert.alert("Lỗi", "Không thể tạo cuộc hội thoại.");
+      return;
+    }
+
     try {
       await ChatApi.sendMessage({
-        conversationId,
+        conversationId: targetId,
         senderId: userIdForChat,
         content: "Khảo sát",
         type: "poll",
@@ -2253,12 +2311,20 @@ export default function ChatDetailScreen() {
     }
   }, [conversationId, userIdForChat, replyToMessage?.msg_id, setPendingScrollToBottom]);
 
+
+
   // Send message
   const onSendMessage = useCallback(async () => {
     if (!conversationId || !userIdForChat || isChatLocked) return;
 
     const trimmed = messageText.trim();
     if (!trimmed) return;
+
+    const targetId = await ensureConversation();
+    if (!targetId) {
+      Alert.alert("Lỗi", "Không thể tạo cuộc hội thoại.");
+      return;
+    }
 
     const isLink = isStandaloneLink(trimmed);
     const normalizedContent = isLink ? normalizeLink(trimmed) || trimmed : trimmed;
@@ -2267,7 +2333,7 @@ export default function ChatDetailScreen() {
 
     try {
       await ChatApi.sendMessage({
-        conversationId,
+        conversationId: targetId,
         senderId: userIdForChat,
         content: normalizedContent,
         type: isLink ? "link" : "text",
@@ -2283,6 +2349,7 @@ export default function ChatDetailScreen() {
     }
   }, [
     conversationId,
+    ensureConversation,
     isChatLocked,
     userIdForChat,
     messageText,
@@ -2332,13 +2399,7 @@ export default function ChatDetailScreen() {
           />
         )}
 
-        {participant?.status === 'invited' && (
-          <GroupInvitationBar
-            conversationId={String(conversationId || '')}
-            userId={String(userIdForChat || '')}
-            onStatusChange={loadConversation}
-          />
-        )}
+
 
         {isMyDocuments && (
           <View className="border-b border-[#ead8c7] bg-[#fff9f4] px-3 py-2">
@@ -2485,7 +2546,7 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
-        {!isChatLocked && participant?.status !== 'invited' && !isDissolved ? (
+        {!isChatLocked && !isDissolved ? (
           <ChatComposer
             value={messageText}
             onChangeText={handleTextChange}
@@ -2508,10 +2569,10 @@ export default function ChatDetailScreen() {
             onClearSelection={clearSelectedMedia}
             onSendSelected={() => void sendSelectedPanelMedia()}
           />
-        ) : !isChatLocked && (participant?.status === 'invited' || isDissolved) ? (
+        ) : !isChatLocked && isDissolved ? (
           <View className="mx-3 mb-2 rounded-2xl border border-[#ead8c7] bg-[#fff9f4] px-4 py-3">
             <Text className="text-center text-[13px] font-medium text-slate-600">
-              {isDissolved ? "Nhóm này đã giải tán." : "Bạn được mời tham gia nhóm. Chấp nhận lời mời để bắt đầu trò chuyện."}
+              Nhóm này đã giải tán.
             </Text>
           </View>
         ) : isChatLocked ? (
@@ -2522,7 +2583,7 @@ export default function ChatDetailScreen() {
           </View>
         ) : null}
 
-        {!isChatLocked && participant?.status !== 'invited' && !isDissolved && imagePanelVisible && (
+        {!isChatLocked && !isDissolved && imagePanelVisible && (
           <ChatMediaPanel
             visible={imagePanelVisible}
             height={CHAT_PANEL_HEIGHT}
@@ -2539,7 +2600,7 @@ export default function ChatDetailScreen() {
         )}
 
 
-        {!isChatLocked && participant?.status !== 'invited' && !isDissolved && voicePanelVisible && (
+        {!isChatLocked && !isDissolved && voicePanelVisible && (
           <ChatVoicePanel
             height={CHAT_PANEL_HEIGHT}
             accentColor={CHAT_BROWN}
@@ -2576,7 +2637,7 @@ export default function ChatDetailScreen() {
           />
         )}
 
-        {!isChatLocked && participant?.status !== 'invited' && !isDissolved && extraPanelVisible && (
+        {!isChatLocked && !isDissolved && extraPanelVisible && (
           <ChatExtraPanel
             visible={extraPanelVisible}
             onClose={() => toggleExtraPanel()}

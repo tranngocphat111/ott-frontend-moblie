@@ -141,9 +141,9 @@ export const ChatLinkMessage: React.FC<Props> = ({ message, isMine, onLongPress 
           <View className="bg-primary-600 px-4 py-6 flex-row items-center gap-4">
             <View className="w-14 h-14 bg-white rounded-full items-center justify-center">
               {loadingGroup ? (
-                <ActivityIndicator color="#8b5cf6" size="small" />
+                <ActivityIndicator color="#8b6642" size="small" />
               ) : (
-                <Users size={28} color="#8b5cf6" />
+                <Users size={28} color="#8b6642" />
               )}
             </View>
             <View className="flex-1">
