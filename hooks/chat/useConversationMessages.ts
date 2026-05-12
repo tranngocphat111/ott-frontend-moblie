@@ -120,6 +120,15 @@ export function useConversationMessages(conversationId: string | undefined, user
     setLoading(true);
 
     const normalizedConversationId = String(conversationId || '');
+    const isVirtual = normalizedConversationId.startsWith('VIRTUAL_CONV_');
+
+    if (isVirtual) {
+      setMessages([]);
+      setPinnedMessages([]);
+      setLoading(false);
+      return;
+    }
+
     const shouldLoadConversationMeta = loadedConversationIdRef.current !== normalizedConversationId;
 
     if (shouldLoadConversationMeta) {
@@ -129,8 +138,8 @@ export function useConversationMessages(conversationId: string | undefined, user
 
     try {
       const [messagePayload, pinnedPayload] = await Promise.all([
-        ChatApi.getMessages(conversationId, userIdForChat),
-        ChatApi.getPinnedMessages(conversationId).catch(() => [] as ChatMessage[]),
+        ChatApi.getMessages(conversationId as string, userIdForChat),
+        ChatApi.getPinnedMessages(conversationId as string).catch(() => [] as ChatMessage[]),
       ]);
 
       if (requestId !== activeRequestIdRef.current) return;

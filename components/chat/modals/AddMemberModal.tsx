@@ -197,17 +197,59 @@ export function AddMemberModal({
     setIsSubmitting(true);
     try {
       const { ChatApi } = require('@/services/api');
-      const result = await ChatApi.addMembers(
-        conversationId,
-        requesterId,
-        Array.from(selectedIds),
-      );
 
-      onMembersAdded(result.members || []);
+      // Phân loại: bạn bè và người lạ
+      const friendIds: string[] = [];
+      const strangerUsers: AddMemberUser[] = [];
+
+      selectedIds.forEach((id) => {
+        const isFriend = users.some((u) => u.user_id === id);
+        if (isFriend) {
+          friendIds.push(id);
+        } else {
+          const stranger = selectedStrangers.find((s) => s.user_id === id) || (searchResultByPhone?.user_id === id ? searchResultByPhone : null);
+          if (stranger) strangerUsers.push(stranger);
+        }
+      });
+
+      // 1. Thêm bạn bè vào nhóm trực tiếp như cũ
+      if (friendIds.length > 0) {
+        const result = await ChatApi.addMembers(
+          conversationId,
+          requesterId,
+          friendIds,
+        );
+        onMembersAdded(result.members || []);
+      }
+
+      // 2. Gửi link mời cho người lạ
+      if (strangerUsers.length > 0) {
+        // Lấy link mời của nhóm
+        const inviteLink = await ChatApi.getInviteLink(conversationId, requesterId);
+
+        for (const stranger of strangerUsers) {
+          // Tạo/Lấy hội thoại 1-1 với người lạ
+          const privateConv = await ChatApi.createConversation({
+            creatorId: requesterId,
+            type: 'private',
+            memberIds: [stranger.user_id],
+          });
+
+          // Gửi tin nhắn chứa link mời
+          await ChatApi.sendMessage({
+            conversationId: privateConv._id || privateConv.conversation?._id,
+            senderId: requesterId,
+            content: inviteLink,
+            type: 'link'
+          });
+        }
+        Alert.alert('Thành công', `Đã gửi link mời tham gia nhóm cho ${strangerUsers.length} người lạ.`);
+      }
+
       onClose();
     } catch (error) {
       console.error('Add members error:', error);
-      Alert.alert('Lỗi', 'Không thể thêm thành viên. Vui lòng thử lại.');
+      Alert.alert('Lỗi', 'Không thể hoàn thành yêu cầu. Vui lòng thử lại.');
     } finally {
       setIsSubmitting(false);
     }

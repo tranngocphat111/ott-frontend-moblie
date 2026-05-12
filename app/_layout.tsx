@@ -1,4 +1,4 @@
-import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
+import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import * as WebBrowser from 'expo-web-browser';
@@ -18,22 +18,7 @@ WebBrowser.maybeCompleteAuthSession();
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
-    const inMainGroup = segments[0] === '(main)';
-
-    if (!isAuthenticated && inMainGroup) {
-      router.replace('/(auth)/landing');
-    } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/(main)/(tabs)/home');
-    }
-  }, [isAuthenticated, isLoading, segments]);
+  const { isLoading } = useAuth();
 
   useEffect(() => {
     if (!isLoading) {
