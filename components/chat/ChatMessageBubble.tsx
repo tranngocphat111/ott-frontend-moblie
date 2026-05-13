@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
-import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
+import { getMessageBodyText, isCallMessageType, isSystemMessageType, isProbablyVietnamese } from "@/utils/chat";
 import { THEME_COLORS } from "@/constants/theme";
 import {
   CornerUpLeft,
@@ -29,6 +29,7 @@ import {
   Settings,
   Video,
   TextAlignJustify,
+  Sparkles,
 } from "lucide-react-native";
 import { ChatFileMessage } from "./message-types/ChatFileMessage";
 import { ChatImageMessage } from "./message-types/ChatImageMessage";
@@ -50,6 +51,9 @@ interface ChatMessageBubbleProps {
   onMediaReady?: (messageId: string) => void;
   mineAccentColor?: string;
   conversation?: ChatConversation | null;
+  translatedText?: string;
+  onTranslate?: () => void;
+  isTranslating?: boolean;
 }
 
 const getReactionSummary = (message: ChatMessage) => {
@@ -287,6 +291,9 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   onMediaReady,
   mineAccentColor = "#dff0ff",
   conversation,
+  translatedText,
+  onTranslate,
+  isTranslating = false,
 }) => {
   const contentText = getMessageBodyText(message);
   const reactions = useMemo(() => getReactionSummary(message), [message]);
@@ -503,7 +510,38 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               accentColor={mineAccentColor}
             />
           ) : (
-            <Text className={`text-[15px] leading-5 ${textStyle}`}>{contentText}</Text>
+            <View>
+              <Text className={`text-[15px] leading-6 ${textStyle}`}>
+                {contentText}
+              </Text>
+
+              {((translatedText || onTranslate) && !isProbablyVietnamese(contentText) && !isMine) && !message.is_revoked && (
+                <View className="mt-2 border-t border-slate-100 pt-2">
+                  {translatedText ? (
+                    <View className="bg-slate-50/50 rounded-lg p-2 border border-slate-100">
+                      <View className="flex-row items-center gap-1.5 mb-1">
+                        <Sparkles size={10} color={THEME_COLORS.primary[500]} />
+                        <Text className="text-[10px] font-bold text-primary-600 uppercase tracking-wider">Dịch bởi AI</Text>
+                      </View>
+                      <Text className="text-[14px] leading-5 text-slate-700 italic">
+                        {translatedText}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Pressable 
+                      onPress={onTranslate}
+                      disabled={isTranslating}
+                      className="flex-row items-center gap-1.5 opacity-80 active:opacity-100"
+                    >
+                      <Sparkles size={12} color={isMine ? "#b78457" : "#64748b"} />
+                      <Text className={`text-[11px] font-semibold ${isMine ? "text-[#b78457]" : "text-slate-500"}`}>
+                        {isTranslating ? "Đang dịch..." : "Dịch tin nhắn"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+            </View>
           )}
         </Pressable>
 

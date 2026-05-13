@@ -211,4 +211,27 @@ export const chatMessageApi = {
       optionIds,
     });
   },
+
+  async transcribeAudio(formData: FormData): Promise<{ text: string }> {
+    return await chatApiClient.post('/ai/transcribe', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  async getSmartReplies(conversationId: string): Promise<string[]> {
+    const response = await chatApiClient.get<string[] | { result: string[] }>('/ai/smart-replies', {
+      params: { conversationId },
+    });
+    return (response as any).result || response;
+  },
+
+  async summarizeConversation(conversationId: string): Promise<{ summary: string }> {
+    return await chatApiClient.get('/ai/summarize', {
+      params: { conversationId },
+    });
+  },
+
+  async translateText(text: string, targetLang: string = 'vi'): Promise<{ translatedText: string }> {
+    return await chatApiClient.post('/ai/translate', { text, targetLang });
+  },
 };
