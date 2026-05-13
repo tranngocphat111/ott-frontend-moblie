@@ -426,3 +426,13 @@ export const getMessageSenderAvatar = (
   const avatar = findParticipantByUserId(conversation, senderId)?.avatar;
   return resolveMediaUrl(avatar || '');
 };
+
+export const isProbablyVietnamese = (text: string): boolean => {
+  if (!text) return true;
+  // Các ký tự có dấu trong tiếng Việt
+  const vietnameseAccents = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+  // Các từ thông dụng không dấu
+  const commonVietnameseWords = /\b(la|co|khong|va|toi|anh|chi|em|ban|ong|ba|nay|kia|do|dang|da|se)\b/i;
+  
+  return vietnameseAccents.test(text) || commonVietnameseWords.test(text);
+};

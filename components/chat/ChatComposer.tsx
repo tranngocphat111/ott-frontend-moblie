@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Keyboard, Pressable, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { Mic } from 'lucide-react-native';
 import type { ChatMessage } from '@/types/entities/chat';
 import { getMessageBodyText } from '@/utils/chat';
 
@@ -25,6 +26,8 @@ interface ChatComposerProps {
   onInputFocus?: () => void;
   onInputPressIn?: () => void;
   isGroup?: boolean;
+  onSTT?: () => void;
+  isSTTLoading?: boolean;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -48,6 +51,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onInputFocus,
   onInputPressIn,
   isGroup = false,
+  onSTT,
+  isSTTLoading = false,
 }) => {
   const textInputRef = useRef<TextInput>(null);
   const canSend = value.trim().length > 0 && !disabled;
@@ -132,6 +137,20 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                   disabled={disabled}
                 >
                   <Feather name="paperclip" size={20} color="#475569" />
+                </Pressable>
+              )}
+              {onSTT && (
+                <Pressable
+                  className={actionButtonClass}
+                  onPress={onSTT}
+                  disabled={disabled || isSTTLoading}
+                >
+                  <View className="relative">
+                    <Mic size={18} color={isSTTLoading ? accentColor : '#475569'} />
+                    <View className="absolute -right-2 -top-2 rounded-sm bg-primary-500 px-0.5">
+                      <Text className="text-[7px] font-bold text-white">AI</Text>
+                    </View>
+                  </View>
                 </Pressable>
               )}
               <Pressable

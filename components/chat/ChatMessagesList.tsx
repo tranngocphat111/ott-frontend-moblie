@@ -143,6 +143,9 @@ type Props = {
   mineAccentColor: string;
   footerComponent?: React.ReactNode;
   onDeleteConversation?: () => void;
+  translatedMessages?: Record<string, string>;
+  onTranslateMessage?: (msgId: string) => void;
+  translatingMessageId?: string | null;
 };
 
 export const ChatMessagesList: React.FC<Props> = ({
@@ -168,6 +171,9 @@ export const ChatMessagesList: React.FC<Props> = ({
   footerComponent,
   conversation,
   onDeleteConversation,
+  translatedMessages = {},
+  onTranslateMessage,
+  translatingMessageId,
 }) => {
   const { user, chatUserId } = useAuth();
   const currentUserId = String(chatUserId || user?.id || userIdForChat || '');
@@ -423,6 +429,9 @@ export const ChatMessagesList: React.FC<Props> = ({
                       const selected = imageItems[imageIndex];
                       if (selected) onImagePreview(selected);
                     }}
+                    translatedText={translatedMessages[getMessageKey(msg)]}
+                    onTranslate={onTranslateMessage ? () => onTranslateMessage(getMessageKey(msg)) : undefined}
+                    isTranslating={translatingMessageId === getMessageKey(msg)}
                   />
                 </View>
               </View>

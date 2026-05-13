@@ -9,6 +9,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   Share,
   Text,
   View,
@@ -35,6 +36,7 @@ import { useAuth } from "@/context/Authcontext";
 import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi, chatSocket } from "@/services/api";
 import type {
+  ChatConversation,
   ChatConversationWithParticipant,
   ChatMessage,
   ChatMessageContent,
@@ -49,12 +51,15 @@ import {
   ChatVoicePanel,
   MessageReactionsModal,
 } from "@/components/chat";
+import { AISummaryModal } from "@/components/chat/modals/AISummaryModal";
+import { Sparkles, X } from "lucide-react-native";
 import { ChatExtraPanel } from "@/components/chat/ChatExtraPanel";
 import { FriendRequestBar } from "@/components/chat";
 import { CreatePollModal } from "@/components/chat/modals/CreatePollModal";
 import { ChatMessageActionsModal } from "@/components/chat/modals/ChatMessageActionsModal";
 import { ForwardMessageModal } from "@/components/chat/modals/ForwardMessageModal";
 import { ReplacePinnedModal } from "@/components/chat/modals/ReplacePinnedModal";
+import { STTRecordingModal } from "@/components/chat/modals/STTRecordingModal";
 import {
   getConversationAvatar,
   getConversationTitle,
@@ -731,6 +736,25 @@ export default function ChatDetailScreen() {
   const [pollModalVisible, setPollModalVisible] = useState(false);
   const [relationship, setRelationship] = useState<any>(null);
 
+  // AI States
+  const [smartReplies, setSmartReplies] = useState<string[]>([]);
+  const [isSmartReplyLoading, setIsSmartReplyLoading] = useState(false);
+  const [isSmartReplyOpen, setIsSmartReplyOpen] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summaryResult, setSummaryResult] = useState<string | null>(null);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [isSTTLoading, setIsSTTLoading] = useState(false);
+  const [isRecordingSTT, setIsRecordingSTT] = useState(false);
+  const sttRecordingRef = useRef<Audio.Recording | null>(null);
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
+  const [translatingMessageId, setTranslatingMessageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSmartReplies([]);
+    setIsSmartReplyOpen(false);
+    setTranslatedMessages({});
+  }, [conversationId]);
+
   const fetchRelationship = useCallback(async () => {
     if (!conversationId || !userIdForChat || conversation?.type === 'group') return;
     const otherParticipant = conversation?.participants?.find(p => String(p.user_id || p._id) !== String(userIdForChat));
@@ -770,6 +794,39 @@ export default function ChatDetailScreen() {
       chatSocket.off('cap_nhat_quan_he', handleRelationshipUpdate);
     };
   }, [chatSocket, userIdForChat, conversation?.participants, fetchRelationship]);
+
+  // AI: Fetch Smart Replies
+  useEffect(() => {
+    if (!conversationId || !userIdForChat || loading) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (
+      lastMessage &&
+      String(lastMessage.sender_id) !== String(userIdForChat) &&
+      !['image', 'video', 'audio', 'file'].includes(lastMessage.type)
+    ) {
+      const fetchSuggestions = async () => {
+        setIsSmartReplyLoading(true);
+        try {
+          const aiConvId = String(conversationId).startsWith('VIRTUAL_CONV_')
+            ? String(conversationId).replace('VIRTUAL_CONV_', '')
+            : conversationId;
+
+          const suggestions = await ChatApi.getSmartReplies(aiConvId);
+          setSmartReplies((suggestions || []).slice(0, 3));
+        } catch (error) {
+          console.error("Error fetching smart replies:", error);
+        } finally {
+          setIsSmartReplyLoading(false);
+        }
+      };
+      fetchSuggestions();
+    } else {
+      setSmartReplies([]);
+      setIsSmartReplyOpen(false);
+    }
+  }, [messages.length, messages[messages.length - 1]?._id, conversationId, userIdForChat, loading]);
+
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
   const initialMediaReadyRef = useRef<Set<string>>(new Set());
@@ -2433,6 +2490,131 @@ export default function ChatDetailScreen() {
     setPendingScrollToBottom,
     stopTyping,
   ]);
+
+  const handleSummarizeChat = useCallback(async () => {
+    if (!conversationId) return;
+    setIsSummarizing(true);
+    setSummaryResult(null);
+    setShowSummaryModal(true);
+    try {
+      const aiConvId = String(conversationId).startsWith('VIRTUAL_CONV_')
+        ? String(conversationId).replace('VIRTUAL_CONV_', '')
+        : conversationId;
+      const result = await ChatApi.summarizeConversation(aiConvId);
+      setSummaryResult(result.summary);
+    } catch (error) {
+      console.error("Failed to summarize chat:", error);
+      Alert.alert("Lỗi", "Không thể tóm tắt hội thoại lúc này.");
+    } finally {
+      setIsSummarizing(false);
+    }
+  }, [conversationId]);
+
+  const handleStopSTT = useCallback(async () => {
+    if (!sttRecordingRef.current) {
+      setIsRecordingSTT(false);
+      return;
+    }
+
+    try {
+      setIsSTTLoading(true);
+      await sttRecordingRef.current.stopAndUnloadAsync();
+      const uri = sttRecordingRef.current.getURI();
+      sttRecordingRef.current = null;
+      setIsRecordingSTT(false);
+
+      if (!uri) {
+        setIsSTTLoading(false);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('audio', {
+        uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+        type: 'audio/m4a',
+        name: 'stt_audio.m4a',
+      } as any);
+
+      const response = await ChatApi.transcribeAudio(formData);
+      if (response.text && response.text.trim()) {
+        setMessageText(prev => (prev ? `${prev} ${response.text}` : response.text));
+      }
+    } catch (err) {
+      console.error("STT error:", err);
+      Alert.alert("Lỗi", "Không thể xử lý giọng nói lúc này.");
+    } finally {
+      setIsSTTLoading(false);
+    }
+  }, []);
+
+  const handleCancelSTT = useCallback(async () => {
+    if (sttRecordingRef.current) {
+      await sttRecordingRef.current.stopAndUnloadAsync().catch(() => undefined);
+      sttRecordingRef.current = null;
+    }
+    setIsRecordingSTT(false);
+    setIsSTTLoading(false);
+  }, []);
+
+  const handleTranscribeVoice = useCallback(async () => {
+    if (isSTTLoading || isRecordingSTT) return;
+
+    const permission = await Audio.requestPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Quyền truy cập", "Bạn cần cấp quyền micro để sử dụng tính năng này.");
+      return;
+    }
+
+    try {
+      if (sttRecordingRef.current) {
+        await sttRecordingRef.current.stopAndUnloadAsync().catch(() => undefined);
+        sttRecordingRef.current = null;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+
+      sttRecordingRef.current = recording;
+      setIsRecordingSTT(true);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+      Alert.alert("Lỗi", "Không thể khởi động micro.");
+      setIsSTTLoading(false);
+    }
+  }, [isSTTLoading, isRecordingSTT]);
+
+  const handleSelectSmartReply = useCallback((reply: string) => {
+    setMessageText(reply);
+    setIsSmartReplyOpen(false);
+  }, []);
+
+  const handleTranslateMessage = useCallback(async (msgId: string) => {
+    if (translatingMessageId === msgId) return;
+
+    const msg = messages.find(m => getMessageKey(m) === msgId);
+    const text = msg ? getMessageBodyText(msg) : "";
+    if (!text) return;
+
+    setTranslatingMessageId(msgId);
+    try {
+      const response = await ChatApi.translateText(text, 'vi');
+      setTranslatedMessages(prev => ({
+        ...prev,
+        [msgId]: response.translatedText
+      }));
+    } catch (error) {
+      console.error("Failed to translate message:", error);
+      Alert.alert("Lỗi", "Không thể dịch tin nhắn lúc này.");
+    } finally {
+      setTranslatingMessageId(null);
+    }
+  }, [translatingMessageId, messages]);
   return (
     <SafeAreaView
       className="flex-1 bg-surface-sunken mb-6"
@@ -2458,6 +2640,7 @@ export default function ChatDetailScreen() {
           }}
           onPhone={isMyDocuments ? undefined : () => void openWebCall('voice')}
           onVideo={isMyDocuments ? undefined : () => void openWebCall('video')}
+          onSummarize={handleSummarizeChat}
           onMenu={() =>
             router.push({
               pathname: "/chat/info/[conversationId]",
@@ -2594,6 +2777,9 @@ export default function ChatDetailScreen() {
                 />
               }
               onDeleteConversation={handleDeleteConversationForMe}
+              translatedMessages={translatedMessages}
+              onTranslateMessage={handleTranslateMessage}
+              translatingMessageId={translatingMessageId}
             />
 
             {showScrollToBottom && (
@@ -2623,28 +2809,94 @@ export default function ChatDetailScreen() {
         )}
 
         {!isChatLocked && !isDissolved ? (
-          <ChatComposer
-            value={messageText}
-            onChangeText={handleTextChange}
-            onInputFocus={handleComposerInputFocus}
-            onInputPressIn={handleComposerInputPressIn}
-            onSend={() => void onSendMessage()}
-            onToggleImagePanel={toggleImagePanel}
-            onToggleVoicePanel={toggleVoicePanel}
-            onToggleExtraPanel={toggleExtraPanel}
-            onPickFile={() => void pickFileAndSend()}
-            imagePanelActive={imagePanelVisible}
-            voicePanelActive={voicePanelVisible}
-            extraPanelActive={extraPanelVisible}
-            isGroup={isGroup}
-            replyToMessage={replyToMessage}
-            onCancelReply={() => setReplyToMessage(null)}
-            disabled={!conversationId || !userIdForChat || isSendingAttachment}
-            accentColor={CHAT_BROWN}
-            selectedMediaIds={selectedMediaIds}
-            onClearSelection={clearSelectedMedia}
-            onSendSelected={() => void sendSelectedPanelMedia()}
-          />
+          <View className="relative">
+            {/* Smart Reply Trigger Button (On-demand) */}
+            {!isSmartReplyOpen && (
+              <Pressable
+                onPress={async () => {
+                  if (smartReplies.length === 0) {
+                    setIsSmartReplyOpen(true); // Open first to show loading if needed
+                    try {
+                      const aiConvId = String(conversationId).startsWith('VIRTUAL_CONV_')
+                        ? String(conversationId).replace('VIRTUAL_CONV_', '')
+                        : conversationId;
+                      if (aiConvId) {
+                        const replies = await ChatApi.getSmartReplies(aiConvId);
+                        setSmartReplies(replies);
+                      }
+                    } catch (error) {
+                      console.error("Failed to fetch smart replies:", error);
+                      setIsSmartReplyOpen(false);
+                    }
+                  } else {
+                    setIsSmartReplyOpen(true);
+                  }
+                }}
+                className="absolute -top-12 right-4 flex-row items-center gap-2 rounded-full border border-primary-100 bg-white px-4 py-2 shadow-lg"
+              >
+                <Sparkles size={16} color={THEME_COLORS.primary[500]} />
+                <Text className="text-[12px] font-bold text-primary-600">Gợi ý AI</Text>
+              </Pressable>
+            )}
+
+            {/* Smart Reply Bar */}
+            {isSmartReplyOpen && (
+              <View className="bg-white/95 border-t border-primary-100/30 px-3 py-3">
+                {smartReplies.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+                    {smartReplies.map((reply, idx) => (
+                      <Pressable
+                        key={idx}
+                        onPress={() => handleSelectSmartReply(reply)}
+                        className="mr-2 flex-row items-center gap-2 rounded-2xl border border-primary-100 bg-primary-50/50 px-4 py-2 active:bg-primary-100"
+                      >
+                        <View className="h-1.5 w-1.5 rounded-full bg-primary-400" />
+                        <Text className="text-[13px] font-medium text-primary-800">{reply}</Text>
+                      </Pressable>
+                    ))}
+                    <Pressable
+                      onPress={() => setIsSmartReplyOpen(false)}
+                      className="ml-2 rounded-full bg-slate-100 p-2"
+                    >
+                      <X size={14} color="#64748b" />
+                    </Pressable>
+                  </ScrollView>
+                ) : (
+                  <View className="flex-row items-center justify-between px-2">
+                    <Text className="text-[12px] italic text-slate-500">Đang tìm gợi ý phù hợp...</Text>
+                    <Pressable onPress={() => setIsSmartReplyOpen(false)}>
+                      <X size={16} color="#64748b" />
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            )}
+
+            <ChatComposer
+              value={messageText}
+              onChangeText={handleTextChange}
+              onInputFocus={handleComposerInputFocus}
+              onInputPressIn={handleComposerInputPressIn}
+              onSend={() => void onSendMessage()}
+              onToggleImagePanel={toggleImagePanel}
+              onToggleVoicePanel={toggleVoicePanel}
+              onToggleExtraPanel={toggleExtraPanel}
+              onPickFile={() => void pickFileAndSend()}
+              imagePanelActive={imagePanelVisible}
+              voicePanelActive={voicePanelVisible}
+              extraPanelActive={extraPanelVisible}
+              isGroup={isGroup}
+              replyToMessage={replyToMessage}
+              onCancelReply={() => setReplyToMessage(null)}
+              disabled={!conversationId || !userIdForChat || isSendingAttachment}
+              accentColor={CHAT_BROWN}
+              selectedMediaIds={selectedMediaIds}
+              onClearSelection={clearSelectedMedia}
+              onSendSelected={() => void sendSelectedPanelMedia()}
+              onSTT={handleTranscribeVoice}
+              isSTTLoading={isSTTLoading}
+            />
+          </View>
         ) : !isChatLocked && isDissolved ? (
           <View className="mx-3 mb-2 rounded-2xl border border-[#ead8c7] bg-[#fff9f4] px-4 py-3">
             <Text className="text-center text-[13px] font-medium text-slate-600">
@@ -2733,6 +2985,20 @@ export default function ChatDetailScreen() {
         selectedImage={selectedImage}
         messages={messages}
         onClose={() => setSelectedImage(null)}
+      />
+
+      <AISummaryModal
+        visible={showSummaryModal}
+        onClose={() => setShowSummaryModal(false)}
+        summary={summaryResult}
+        loading={isSummarizing}
+      />
+
+      <STTRecordingModal
+        visible={isRecordingSTT}
+        onStop={handleStopSTT}
+        onCancel={handleCancelSTT}
+        isTranscribing={isSTTLoading}
       />
 
       <ChatMessageActionsModal

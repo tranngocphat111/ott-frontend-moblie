@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { THEME_COLORS } from '@/constants/theme';
 
@@ -14,6 +15,7 @@ type ChatScreenHeaderProps = {
   onPhone?: () => void;
   onVideo?: () => void;
   onMenu?: () => void;
+  onSummarize?: () => void;
 };
 
 export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
@@ -26,6 +28,7 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
   onPhone,
   onVideo,
   onMenu,
+  onSummarize,
 }) => {
   return (
     <LinearGradient
@@ -62,6 +65,11 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
         {onVideo && (
           <Pressable onPress={onVideo} className="h-11 w-10 items-center justify-center">
             <Feather name="video" size={18} color="#fff" />
+          </Pressable>
+        )}
+        {onSummarize && (
+          <Pressable onPress={onSummarize} className="h-11 w-10 items-center justify-center">
+            <Sparkles size={18} color="#fff" />
           </Pressable>
         )}
         <Pressable onPress={onMenu} className="h-11 w-10 items-center justify-center">
