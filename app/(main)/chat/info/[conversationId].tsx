@@ -250,7 +250,14 @@ export default function ChatInfoScreen() {
     if (!otherMember?.user_id || !userIdForChat) return;
     try {
       const rel = await ChatApi.fetchRelationshipStatus(userIdForChat, otherMember.user_id);
-      setRelationship(rel);
+      
+      // Transform raw status to mapped status
+      if (rel && rel.status === 'BLOCKED') {
+        const mappedStatus = String(rel.requester_id) === String(userIdForChat) ? 'BLOCKED_BY_ME' : 'BLOCKED_BY_OTHER';
+        setRelationship({ ...rel, status: mappedStatus });
+      } else {
+        setRelationship(rel);
+      }
     } catch (error) {
       console.error("Failed to fetch relationship status:", error);
     }
@@ -286,6 +293,53 @@ export default function ChatInfoScreen() {
       },
     ]);
   }, [userIdForChat, otherMember?.user_id, title, router]);
+
+  const handleBlockUser = useCallback(() => {
+    if (!userIdForChat || !otherMember?.user_id) return;
+    Alert.alert("Chặn người dùng", `Bạn chắc chắn muốn chặn ${title}? Hai người sẽ không thể nhắn tin cho nhau.`, [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Chặn",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const success = await ChatApi.blockUser(userIdForChat, otherMember.user_id);
+            if (success) {
+              Alert.alert("Thành công", "Đã chặn người dùng.");
+              await fetchRelationship();
+            } else {
+              Alert.alert("Lỗi", "Không thể chặn người dùng");
+            }
+          } catch {
+            Alert.alert("Lỗi", "Không thể chặn người dùng");
+          }
+        },
+      },
+    ]);
+  }, [userIdForChat, otherMember?.user_id, title, fetchRelationship]);
+
+  const handleUnblockUser = useCallback(() => {
+    if (!userIdForChat || !otherMember?.user_id) return;
+    try {
+      Alert.alert("Bỏ chặn", `Bạn muốn bỏ chặn ${title}?`, [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Bỏ chặn",
+          onPress: async () => {
+            const success = await ChatApi.unblockUser(userIdForChat, otherMember.user_id);
+            if (success) {
+              Alert.alert("Thành công", "Đã bỏ chặn người dùng.");
+              await fetchRelationship();
+            } else {
+              Alert.alert("Lỗi", "Không thể bỏ chặn");
+            }
+          },
+        },
+      ]);
+    } catch {
+      Alert.alert("Lỗi", "Không thể bỏ chặn");
+    }
+  }, [userIdForChat, otherMember?.user_id, title, fetchRelationship]);
 
   const myMember = useMemo(
     () =>
@@ -1275,31 +1329,56 @@ export default function ChatInfoScreen() {
                         </View>
                       </Pressable>
 
-                      <Pressable
-                        onPress={() =>
-                          Alert.alert(
-                            "Quản lý chặn",
-                            "Chức năng quản lý chặn sẽ được tích hợp trong bản tới.",
-                          )
-                        }
-                        className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
-                      >
-                        <View className="flex-row items-center">
+                      {isGroup ? (
+                        <Pressable
+                          onPress={() => {
+                            if (!conversationId) return;
+                            router.push({
+                              pathname: "/chat/info/members/[conversationId]",
+                              params: { conversationId, viewBlocked: 'true' },
+                            });
+                          }}
+                          className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                        >
+                          <View className="flex-row items-center">
+                            <Feather
+                              name="slash"
+                              size={20}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                            <Text className="ml-4 text-[17px] text-slate-800">
+                              Danh sách chặn trong nhóm
+                            </Text>
+                          </View>
                           <Feather
-                            name="slash"
-                            size={20}
+                            name="chevron-right"
+                            size={18}
                             color={THEME_COLORS.neutral.slate400}
                           />
-                          <Text className="ml-4 text-[17px] text-slate-800">
-                            Quản lý chặn
-                          </Text>
-                        </View>
-                        <Feather
-                          name="chevron-right"
-                          size={18}
-                          color={THEME_COLORS.neutral.slate400}
-                        />
-                      </Pressable>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() => {
+                            if (relationship?.status === 'BLOCKED_BY_ME') {
+                              handleUnblockUser();
+                            } else {
+                              handleBlockUser();
+                            }
+                          }}
+                          className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                        >
+                          <View className="flex-row items-center">
+                            <Feather
+                              name="slash"
+                              size={20}
+                              color={relationship?.status === 'BLOCKED_BY_ME' ? THEME_COLORS.primary[600] : THEME_COLORS.neutral.slate400}
+                            />
+                            <Text className={`ml-4 text-[17px] ${relationship?.status === 'BLOCKED_BY_ME' ? 'text-primary-600' : 'text-slate-800'}`}>
+                              {relationship?.status === 'BLOCKED_BY_ME' ? 'Bỏ chặn người dùng' : 'Chặn người dùng'}
+                            </Text>
+                          </View>
+                        </Pressable>
+                      )}
                       
                       {!isGroup && relationship?.status === 'ACCEPTED' && (
                         <Pressable

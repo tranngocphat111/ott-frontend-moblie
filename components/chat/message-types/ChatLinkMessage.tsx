@@ -68,13 +68,17 @@ export const ChatLinkMessage: React.FC<Props> = ({ message, isMine, onLongPress 
 
   const isGroupInviteLink = useMemo(() => {
     if (!safeLink) return false;
-    return safeLink.includes('/join?token=');
+    return safeLink.includes('/join?token=') || safeLink.includes('/conversations/invite-link/');
   }, [safeLink]);
 
   const inviteToken = useMemo(() => {
     if (!isGroupInviteLink || !safeLink) return null;
-    const match = safeLink.match(/[?&]token=([^&]+)/);
-    return match ? match[1] : null;
+    // Try query param first
+    const queryMatch = safeLink.match(/[?&]token=([^&]+)/);
+    if (queryMatch) return queryMatch[1];
+    // Try path param
+    const pathMatch = safeLink.match(/\/conversations\/invite-link\/([^/?]+)/);
+    return pathMatch ? pathMatch[1] : null;
   }, [isGroupInviteLink, safeLink]);
 
   useEffect(() => {
@@ -113,7 +117,17 @@ export const ChatLinkMessage: React.FC<Props> = ({ message, isMine, onLongPress 
                   Alert.alert('Thành công', 'Bạn đã tham gia nhóm.');
                   router.push(`/(main)/chat/${result.conversation._id}`);
                 } catch (err: any) {
-                  Alert.alert('Lỗi', err.message || 'Không thể tham gia nhóm');
+                  const errorMessage = String(err?.message || err?.details?.error || err?.details?.message || "");
+                  
+                  if (errorMessage.toLowerCase().includes("chan") || errorMessage.toLowerCase().includes("block") || err?.code === 403) {
+                    Alert.alert(
+                      "Không thể tham gia",
+                      "Bạn đã bị chặn khỏi nhóm này hoặc không có quyền tham gia.",
+                      [{ text: "OK" }]
+                    );
+                  } else {
+                    Alert.alert("Thông báo", errorMessage || "Không thể tham gia nhóm lúc này.");
+                  }
                 }
               }
             }

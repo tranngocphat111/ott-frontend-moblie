@@ -88,7 +88,22 @@ export default function QrScanScreen() {
                 throw new Error('No conversation ID returned');
               }
             } catch (error) {
-              Alert.alert('Lỗi', 'Không thể tham gia nhóm. Có thể link đã hết hạn.');
+              const errorMessage = String(
+                (error as any)?.details?.message ||
+                (error as any)?.details?.error ||
+                (error as any)?.message ||
+                ''
+              );
+
+              if (errorMessage.toLowerCase().includes('chan') || errorMessage.toLowerCase().includes('block')) {
+                setTimeout(() => {
+                  Alert.alert('Không thể tham gia', 'Bạn đã bị chặn khỏi nhóm này và không thể tham gia lại.');
+                }, 500);
+              } else {
+                setTimeout(() => {
+                  Alert.alert('Lỗi', 'Không thể tham gia nhóm. Có thể link đã hết hạn hoặc bạn đã ở trong nhóm.');
+                }, 500);
+              }
               isProcessing.current = false;
               setScanned(false);
             }

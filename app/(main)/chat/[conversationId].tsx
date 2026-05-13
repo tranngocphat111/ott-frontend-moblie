@@ -576,9 +576,9 @@ const ChatTypingIndicator = ({
 export default function ChatDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { 
-    conversationId, 
-    previewUrl, 
+  const {
+    conversationId,
+    previewUrl,
     highlightedMessageId: searchHighlightedMessageId,
     title: paramTitle,
     avatar: paramAvatar
@@ -737,12 +737,39 @@ export default function ChatDetailScreen() {
     if (!otherParticipant) return;
 
     const rel = await ChatApi.fetchRelationshipStatus(String(userIdForChat), String(otherParticipant.user_id || otherParticipant._id));
-    setRelationship(rel);
+
+    // Transform raw status to mapped status
+    if (rel && rel.status === 'BLOCKED') {
+      const mappedStatus = String(rel.requester_id) === String(userIdForChat) ? 'BLOCKED_BY_ME' : 'BLOCKED_BY_OTHER';
+      setRelationship({ ...rel, status: mappedStatus });
+    } else {
+      setRelationship(rel);
+    }
   }, [conversationId, userIdForChat, conversation?.type, conversation?.participants]);
 
   useEffect(() => {
     fetchRelationship();
   }, [fetchRelationship]);
+
+  useEffect(() => {
+    if (!chatSocket || !userIdForChat) return;
+
+    const handleRelationshipUpdate = (data: any) => {
+      // Check if the update is relevant to the current conversation
+      const otherParticipant = conversation?.participants?.find(p => String(p.user_id || p._id) !== String(userIdForChat));
+      if (!otherParticipant) return;
+
+      const otherId = String(otherParticipant.user_id || otherParticipant._id);
+      if (String(data.requester_id) === otherId || String(data.receiver_id) === otherId) {
+        void fetchRelationship();
+      }
+    };
+
+    chatSocket.on('cap_nhat_quan_he', handleRelationshipUpdate);
+    return () => {
+      chatSocket.off('cap_nhat_quan_he', handleRelationshipUpdate);
+    };
+  }, [chatSocket, userIdForChat, conversation?.participants, fetchRelationship]);
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
   const initialMediaReadyRef = useRef<Set<string>>(new Set());
@@ -1912,11 +1939,22 @@ export default function ChatDetailScreen() {
       if (!action) continue;
 
       if (
-        action === "removed_from_group" &&
-        String(message?.system_meta?.removed_user_id || "") === currentUserId
+        (action === "removed_from_group" || action === "member_removed" || action === "member_blocked") &&
+        String(message?.system_meta?.removed_user_id || (message?.system_meta as any)?.user_id || "") === currentUserId
       ) {
         locked = true;
-        continue;
+        break; // Stop at the newest membership action
+      }
+
+      if (
+        (action === "member_added" || action === "member_join" || action === "system_add") &&
+        (
+          String((message?.system_meta as any)?.user_id || "") === currentUserId ||
+          message?.system_meta?.added_user_ids?.some(id => String(id) === currentUserId)
+        )
+      ) {
+        locked = false;
+        break; // Stop at the newest membership action
       }
 
       if (action === "group_dissolved") {
@@ -1934,8 +1972,13 @@ export default function ChatDetailScreen() {
       }
     }
 
+    if (relationship?.status === 'BLOCKED_BY_ME' || relationship?.status === 'BLOCKED_BY_OTHER') {
+      setIsChatLocked(true);
+      return;
+    }
+
     setIsChatLocked(locked);
-  }, [messages, userIdForChat]);
+  }, [messages, userIdForChat, relationship?.status]);
 
   useEffect(() => {
     if (!isChatLocked) return;
@@ -2136,19 +2179,47 @@ export default function ChatDetailScreen() {
   );
 
   const handleRemovedFromGroup = useCallback(
-    (payload: { conversationId?: string }) => {
-      if (String(payload?.conversationId || "") !== String(conversationId)) {
-        return;
-      }
+    (payload: { conversationId?: string; conversation_id?: string }) => {
+      const payloadConvId = String(payload?.conversationId || payload?.conversation_id || "");
+      console.log('--- Socket: bi_xoa_khoi_nhom ---', { payloadConvId, currentId: conversationId });
 
-      setIsChatLocked(true);
-      setMessageText("");
-      setReplyToMessage(null);
-      closeAllPanels();
-      chatSocket.leaveConversation(String(conversationId));
-      void loadConversation();
+      if (payloadConvId === String(conversationId)) {
+        setIsChatLocked(true);
+        setMessageText("");
+        setReplyToMessage(null);
+        closeAllPanels();
+        chatSocket.leaveConversation(String(conversationId));
+
+        Alert.alert(
+          "Thông báo",
+          "Bạn đã không còn là thành viên của nhóm này.",
+          [{ text: "OK", onPress: () => router.replace('/(main)/(tabs)/home') }]
+        );
+      }
     },
-    [closeAllPanels, conversationId, loadConversation],
+    [closeAllPanels, conversationId, router],
+  );
+
+  const handleBlockedFromGroup = useCallback(
+    (payload: { conversationId?: string; conversation_id?: string; userId?: string; user_id?: string }) => {
+      const payloadConvId = String(payload?.conversationId || payload?.conversation_id || "");
+      const payloadUserId = String(payload?.userId || payload?.user_id || "");
+      console.log('--- Socket: bi_chan_khoi_nhom ---', { payloadConvId, payloadUserId, currentId: conversationId, me: userIdForChat });
+
+      // Since this is emitted to user room, if we receive it, it's for us.
+      // We only redirect if we are currently looking at the affected group.
+      if (payloadConvId === String(conversationId)) {
+        setIsChatLocked(true);
+        chatSocket.leaveConversation(String(conversationId));
+
+        Alert.alert(
+          "Thông báo",
+          "Bạn đã bị chặn khỏi nhóm này.",
+          [{ text: "OK", onPress: () => router.replace('/(main)/(tabs)/home') }]
+        );
+      }
+    },
+    [conversationId, router],
   );
 
   const handleGroupDissolved = useCallback(
@@ -2178,7 +2249,11 @@ export default function ChatDetailScreen() {
       } else {
         setIsChatLocked(true);
         chatSocket.leaveConversation(String(conversationId));
-        void loadConversation();
+        Alert.alert(
+          "Thông báo",
+          "Nhóm này đã bị giải tán.",
+          [{ text: "OK", onPress: () => router.replace('/(main)/(tabs)/home') }]
+        );
       }
     },
     [conversationId, userIdForChat, router, loadConversation],
@@ -2237,6 +2312,7 @@ export default function ChatDetailScreen() {
     onTypingStart: handleTypingStart,
     onTypingStop: handleTypingStop,
     onRemovedFromGroup: handleRemovedFromGroup,
+    onBlockedFromGroup: handleBlockedFromGroup,
     onGroupDissolved: handleGroupDissolved,
     onConversationSynced: handleConversationSynced,
     onGroupUpdated: handleGroupUpdated,
@@ -2578,7 +2654,11 @@ export default function ChatDetailScreen() {
         ) : isChatLocked ? (
           <View className="mx-3 mb-2 rounded-2xl border border-[#ead8c7] bg-[#fff9f4] px-4 py-3">
             <Text className="text-center text-[13px] font-medium text-slate-600">
-              Bạn không thể gửi tin nhắn trong cuộc trò chuyện này.
+              {(() => {
+                if (relationship?.status === 'BLOCKED_BY_ME') return "Bạn đã chặn người dùng này.";
+                if (relationship?.status === 'BLOCKED_BY_OTHER') return "Người dùng này đã chặn bạn.";
+                return "Bạn không thể gửi tin nhắn trong cuộc trò chuyện này.";
+              })()}
             </Text>
           </View>
         ) : null}

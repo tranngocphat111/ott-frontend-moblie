@@ -342,7 +342,10 @@ export default function HomeScreen() {
     chatSocket.on('roi_nhom', refreshInbox);
     chatSocket.on('xoa_thanh_vien', refreshInbox);
     chatSocket.on('bi_xoa_khoi_nhom', refreshInbox);
+    chatSocket.on('bi_chan_khoi_nhom', refreshInbox);
+    chatSocket.on('thanh_vien_bi_chan', refreshInbox);
     chatSocket.on('giai_tan_nhom', refreshInbox);
+    chatSocket.on('cap_nhat_quan_he', refreshInbox);
 
     return () => {
       chatSocket.off('tin_nhan', refreshInbox);
@@ -352,7 +355,10 @@ export default function HomeScreen() {
       chatSocket.off('roi_nhom', refreshInbox);
       chatSocket.off('xoa_thanh_vien', refreshInbox);
       chatSocket.off('bi_xoa_khoi_nhom', refreshInbox);
+      chatSocket.off('bi_chan_khoi_nhom', refreshInbox);
+      chatSocket.off('thanh_vien_bi_chan', refreshInbox);
       chatSocket.off('giai_tan_nhom', refreshInbox);
+      chatSocket.off('cap_nhat_quan_he', refreshInbox);
     };
   }, [chatUserId]);
 
@@ -920,6 +926,76 @@ export default function HomeScreen() {
     [chatUserId, loadConversations],
   );
 
+  const handleToggleBlockUser = useCallback(
+    async (item: ChatConversationWithParticipant, relationship?: any) => {
+      if (!chatUserId) return;
+      const otherParticipant = item.conversation.participants?.find(
+        (p) => String(p.user_id) !== String(chatUserId),
+      );
+      if (!otherParticipant) return;
+
+      const otherId = String(otherParticipant.user_id);
+      const otherName =
+        otherParticipant.nickname ||
+        otherParticipant.name ||
+        otherParticipant.display_name ||
+        "Người dùng";
+
+      const rel = relationship;
+      const isBlockedByMe = (rel?.status === 'BLOCKED' || rel?.status === 'BLOCKED_BY_ME') && String(rel?.requester_id || rel?.requesterId) === String(chatUserId);
+
+      if (isBlockedByMe) {
+        Alert.alert(
+          "Bỏ chặn",
+          `Bạn có muốn bỏ chặn ${otherName}?`,
+          [
+            { text: "Hủy", style: "cancel" },
+            {
+              text: "Bỏ chặn",
+              onPress: async () => {
+                try {
+                  setActionConversationId(item.conversation._id);
+                  await ChatApi.unblockUser(chatUserId, otherId);
+                  Alert.alert("Thành công", `Đã bỏ chặn ${otherName}`);
+                  void loadConversations({ force: true });
+                } catch (error) {
+                  Alert.alert("Lỗi", "Không thể bỏ chặn người dùng");
+                } finally {
+                  setActionConversationId(null);
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert(
+          "Chặn người dùng",
+          `Bạn có chắc muốn chặn ${otherName}? Hai người sẽ không thể gửi tin nhắn cho nhau.`,
+          [
+            { text: "Hủy", style: "cancel" },
+            {
+              text: "Chặn",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  setActionConversationId(item.conversation._id);
+                  await ChatApi.blockUser(chatUserId, otherId);
+                  Alert.alert("Thành công", `Đã chặn ${otherName}`);
+                  void loadConversations({ force: true });
+                } catch (error) {
+                  Alert.alert("Lỗi", "Không thể chặn người dùng");
+                } finally {
+                  setActionConversationId(null);
+                }
+              },
+            },
+          ],
+        );
+      }
+    },
+    [chatUserId, loadConversations],
+  );
+
   const handleOpenConversationCategory = useCallback((item: ChatConversationWithParticipant) => {
     setCategoryTargetConversation(item);
     setConversationCategoryPickerVisible(true);
@@ -1130,6 +1206,7 @@ export default function HomeScreen() {
             onToggleMuteConversation={handleToggleMuteConversation}
             onOpenConversationCategory={handleOpenConversationCategory}
             onDeleteConversation={handleDeleteConversation}
+            onBlockUser={handleToggleBlockUser}
             actionConversationId={actionConversationId}
           />
         )}
