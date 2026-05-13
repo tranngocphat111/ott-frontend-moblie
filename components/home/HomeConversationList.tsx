@@ -24,6 +24,7 @@ type HomeConversationListProps = {
   onToggleMuteConversation: (item: ChatConversationWithParticipant) => void;
   onOpenConversationCategory: (item: ChatConversationWithParticipant) => void;
   onDeleteConversation: (item: ChatConversationWithParticipant) => void;
+  onBlockUser: (item: ChatConversationWithParticipant, relationship?: any) => void;
   actionConversationId?: string | null;
 };
 
@@ -39,6 +40,7 @@ export function HomeConversationList({
   onToggleMuteConversation,
   onOpenConversationCategory,
   onDeleteConversation,
+  onBlockUser,
   actionConversationId,
 }: HomeConversationListProps) {
   return (
@@ -55,6 +57,7 @@ export function HomeConversationList({
         onToggleMuteConversation={onToggleMuteConversation}
         onOpenConversationCategory={onOpenConversationCategory}
         onDeleteConversation={onDeleteConversation}
+        onBlockUser={onBlockUser}
         actionConversationId={actionConversationId}
       />
     </ConversationContextMenuProvider>
@@ -73,6 +76,7 @@ function HomeConversationListBody({
   onToggleMuteConversation,
   onOpenConversationCategory,
   onDeleteConversation,
+  onBlockUser,
   actionConversationId,
 }: HomeConversationListProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -332,6 +336,31 @@ function HomeConversationListBody({
               <Feather name="trash-2" size={18} color={THEME_COLORS.error.border} />
               <Text className="ml-3 text-[17px] text-red-500">Xóa</Text>
             </Pressable>
+
+            {activeItem?.conversation.type === 'private' && (
+              <Pressable
+                disabled={!activeItem || !!actionConversationId}
+                onPress={() => {
+                  if (!activeItem) return;
+                  closeMenu();
+                  onBlockUser(activeItem, activeAnchor?.relationship);
+                }}
+                className="flex-row items-center px-4 py-3"
+              >
+                <Feather name="slash" size={18} color={THEME_COLORS.error.border} />
+                <Text className="ml-3 text-[17px] text-red-500">
+                  {(() => {
+                    const rel = activeAnchor?.relationship;
+                    const isBlocked = rel?.status === 'BLOCKED';
+                    const isBlockedByMe = isBlocked && (
+                      String(rel?.requester_id || rel?.requesterId || "") === String(currentUserId) ||
+                      String(rel?.actorId || "") === String(currentUserId)
+                    );
+                    return isBlockedByMe ? 'Bỏ chặn' : 'Chặn';
+                  })()}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </Modal>

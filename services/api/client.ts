@@ -157,7 +157,7 @@ chatApiClient.interceptors.response.use(
       /toi da 3|tối đa 3|gioi han 3|giới hạn 3/i.test(errorPayload);
 
     if (!isPinLimitError) {
-      console.error('❌ CHAT API Error:', error.config?.url, 'Status:', error.response?.status);
+      console.log('❌ CHAT API Error:', error.config?.url, 'Status:', error.response?.status);
     }
 
     const isNetworkError = !error.response;
@@ -166,6 +166,7 @@ chatApiClient.interceptors.response.use(
       code: error.response?.data?.code || (isNetworkError ? 503 : 500),
       message:
         error.response?.data?.message ||
+        (error.response?.data as any)?.error ||
         (isNetworkError
           ? `Cannot connect to chat-service (${CHAT_API_CONFIG.BASE_URL})`
           : 'An error occurred'),

@@ -12,6 +12,7 @@ import {
 import { THEME_COLORS } from '@/constants/theme';
 import { Pin } from 'lucide-react-native';
 import type { ChatCategory } from '@/services/api/chat';
+import { ChatApi } from '@/services/api';
 
 interface ConversationItemProps {
   item: ChatConversationWithParticipant;
@@ -24,6 +25,7 @@ interface ConversationItemProps {
     y: number;
     width: number;
     height: number;
+    relationship?: any;
   }) => void;
   isContextActive?: boolean;
 }
@@ -44,6 +46,25 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const rowRef = React.useRef<View>(null);
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
   const liftAnim = React.useRef(new Animated.Value(0)).current;
+  const [relationship, setRelationship] = React.useState<any>(null);
+  
+  const loadRelationship = React.useCallback(async () => {
+    if (item.conversation.type === "private" && currentUserId) {
+      const otherId = item.conversation.participants?.find(p => String(p.user_id || (p as any)._id) !== String(currentUserId))?.user_id;
+      if (otherId) {
+        try {
+          const rel = await ChatApi.fetchRelationshipStatus(currentUserId, otherId);
+          setRelationship(rel);
+        } catch (err) {
+          console.error("Error loading relationship in Mobile ConversationItem:", err);
+        }
+      }
+    }
+  }, [item.conversation.type, item.conversation.participants, currentUserId]);
+
+  React.useEffect(() => {
+    loadRelationship();
+  }, [loadRelationship]);
   
   const { conversation, participant } = item;
   const title = getConversationTitle(conversation, currentUserId);
@@ -134,6 +155,7 @@ React.useEffect(() => {
         y,
         width,
         height,
+        relationship,
       });
     });
   };

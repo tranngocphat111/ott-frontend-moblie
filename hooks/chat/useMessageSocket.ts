@@ -14,6 +14,7 @@ interface UseMessageSocketProps {
   onTypingStart?: (payload: { conversationId?: string; userId?: string }) => void;
   onTypingStop?: (payload: { conversationId?: string; userId?: string }) => void;
   onRemovedFromGroup?: (payload: any) => void;
+  onBlockedFromGroup?: (payload: any) => void;
   onGroupDissolved?: (payload: any) => void;
   onConversationSynced?: (payload: any) => void;
   onGroupUpdated?: (payload: any) => void;
@@ -31,6 +32,7 @@ export function useMessageSocket({
   onTypingStart,
   onTypingStop,
   onRemovedFromGroup,
+  onBlockedFromGroup,
   onGroupDissolved,
   onConversationSynced,
   onGroupUpdated
@@ -59,6 +61,10 @@ export function useMessageSocket({
 
     if (onRemovedFromGroup) {
       chatSocket.on('bi_xoa_khoi_nhom', onRemovedFromGroup as any);
+    }
+    
+    if (onBlockedFromGroup) {
+      chatSocket.on('bi_chan_khoi_nhom', onBlockedFromGroup as any);
     }
 
     if (onGroupDissolved) {
@@ -94,6 +100,10 @@ export function useMessageSocket({
       if (onRemovedFromGroup) {
         chatSocket.off('bi_xoa_khoi_nhom', onRemovedFromGroup as any);
       }
+      
+      if (onBlockedFromGroup) {
+        chatSocket.off('bi_chan_khoi_nhom', onBlockedFromGroup as any);
+      }
 
       if (onGroupDissolved) {
         chatSocket.off('giai_tan_nhom', onGroupDissolved as any);
@@ -119,7 +129,9 @@ export function useMessageSocket({
     onTypingStart,
     onTypingStop,
     onRemovedFromGroup,
+    onBlockedFromGroup,
     onGroupDissolved,
     onConversationSynced,
+    onGroupUpdated
   ]);
 }

@@ -52,4 +52,22 @@ export const chatRelationshipApi = {
       return false;
     }
   },
+
+  async blockUser(userId: string, targetId: string): Promise<boolean> {
+    try {
+      await chatApiClient.post('/relationships/block', { userId, targetId });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async unblockUser(userId: string, targetId: string): Promise<boolean> {
+    try {
+      await chatApiClient.post('/relationships/unblock', { userId, targetId });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
 };

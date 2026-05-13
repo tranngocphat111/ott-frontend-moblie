@@ -207,7 +207,15 @@ export function useConversationMessages(conversationId: string | undefined, user
     } catch (error) {
       if (requestId !== activeRequestIdRef.current) return;
       console.error('Failed to load chat room:', error);
-      Alert.alert('Lỗi', 'Không thể tải cuộc trò chuyện');
+      
+      const status = (error as any)?.details?.status || (error as any)?.status;
+      const message = String((error as any)?.details?.message || (error as any)?.message || '');
+
+      if (status === 403 || message.toLowerCase().includes('chan') || message.toLowerCase().includes('block')) {
+        Alert.alert('Không thể truy cập', 'Bạn đã bị chặn hoặc không còn là thành viên của cuộc trò chuyện này.');
+      } else {
+        Alert.alert('Lỗi', 'Không thể tải cuộc trò chuyện');
+      }
     } finally {
       if (requestId === activeRequestIdRef.current) {
         setLoading(false);

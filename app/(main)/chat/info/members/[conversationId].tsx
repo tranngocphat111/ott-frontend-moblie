@@ -25,15 +25,11 @@ import { SenderAvatar } from "@/components/chat";
 import { AddMemberModal } from "@/components/chat/modals/AddMemberModal";
 import { CHAT_API_CONFIG } from "@/configuration/api";
 
-const getFullUrl = (url?: string) => {
-  return resolveMediaUrl(url);
-};
-
 const normalize = (value: unknown) => String(value || "").trim();
 
 export default function GroupMembersScreen() {
   const router = useRouter();
-  const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const { conversationId, viewBlocked } = useLocalSearchParams<{ conversationId: string; viewBlocked?: string }>();
   const { user, chatUserId } = useAuth();
 
   const userIdForChat = chatUserId || user?.id;
@@ -66,11 +62,31 @@ export default function GroupMembersScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [removeConfirmationVisible, setRemoveConfirmationVisible] = useState(false);
   const [isRemovingMember, setIsRemovingMember] = useState(false);
+  
+  const [activeTab, setActiveTab] = useState<'members' | 'blocked'>(
+    viewBlocked === 'true' ? 'blocked' : 'members'
+  );
+  const [blockedMembers, setBlockedMembers] = useState<any[]>([]);
+
+  const loadBlockedMembers = useCallback(async () => {
+    if (!conversationId || !userIdForChat) return;
+    try {
+      const data = await ChatApi.getBlockedMembers(conversationId, userIdForChat);
+      setBlockedMembers(data);
+    } catch (error) {
+      console.error("Failed to load blocked members:", error);
+    } finally {
+    }
+  }, [conversationId, userIdForChat]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadInfo();
-    }, [loadInfo]),
+      if (activeTab === 'members') {
+        void loadInfo();
+      } else {
+        void loadBlockedMembers();
+      }
+    }, [loadInfo, loadBlockedMembers, activeTab]),
   );
 
   const ownerId = normalize(conversation?.created_by);
@@ -101,11 +117,6 @@ export default function GroupMembersScreen() {
     });
     return map;
   }, [members]);
-
-  const memberIds = useMemo(
-    () => new Set(members.map((member) => normalize(member?.user_id))),
-    [members],
-  );
 
   const visibleMembers = useMemo(() => {
     const keyword = normalize(searchValue).toLowerCase();
@@ -148,7 +159,7 @@ export default function GroupMembersScreen() {
 
       return "";
     },
-    [memberNameById, ownerId],
+    [ownerId],
   );
 
   const handleOpenMemberActions = useCallback((member: any) => {
@@ -225,6 +236,47 @@ export default function GroupMembersScreen() {
     }
   }, [conversationId, loadInfo, selectedMember, userIdForChat]);
 
+  const handleBlockMember = useCallback(async () => {
+    const member = selectedMember;
+    const memberUserId = normalize(member?.user_id);
+    if (!conversationId || !userIdForChat || !memberUserId) return;
+
+    Alert.alert(
+      "Chặn khỏi nhóm",
+      "Thành viên bị chặn sẽ bị xóa khỏi nhóm và không thể tham gia lại cho đến khi được bỏ chặn. Tiếp tục?",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Chặn",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await ChatApi.blockMember(conversationId, memberUserId, userIdForChat);
+              setActionModalVisible(false);
+              await loadInfo();
+              Alert.alert("Thành công", "Đã chặn thành viên");
+            } catch (error: any) {
+              Alert.alert("Lỗi", error?.response?.data?.error || "Không thể chặn thành viên");
+            } finally {
+            }
+          },
+        },
+      ],
+    );
+  }, [conversationId, loadInfo, selectedMember, userIdForChat]);
+
+  const handleUnblockMember = useCallback(async (memberUserId: string) => {
+    if (!conversationId || !userIdForChat || !memberUserId) return;
+
+    try {
+      await ChatApi.unblockMember(conversationId, memberUserId, userIdForChat);
+      await loadBlockedMembers();
+      Alert.alert("Thành công", "Đã bỏ chặn thành viên");
+    } catch (error: any) {
+      Alert.alert("Lỗi", error?.response?.data?.error || "Không thể bỏ chặn");
+    }
+  }, [conversationId, loadBlockedMembers, userIdForChat]);
+
   const handleOpenRemoveConfirmation = useCallback(() => {
     setActionModalVisible(false);
     setRemoveConfirmationVisible(true);
@@ -290,6 +342,26 @@ export default function GroupMembersScreen() {
         </View>
       </LinearGradient>
 
+      {/* Tabs */}
+      <View className="flex-row bg-white border-b border-slate-200">
+        <Pressable
+          onPress={() => setActiveTab('members')}
+          className={`flex-1 items-center py-3 ${activeTab === 'members' ? 'border-b-2 border-primary-600' : ''}`}
+        >
+          <Text className={`text-[14px] font-semibold ${activeTab === 'members' ? 'text-primary-600' : 'text-slate-500'}`}>
+            Thành viên
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setActiveTab('blocked')}
+          className={`flex-1 items-center py-3 ${activeTab === 'blocked' ? 'border-b-2 border-primary-600' : ''}`}
+        >
+          <Text className={`text-[14px] font-semibold ${activeTab === 'blocked' ? 'text-primary-600' : 'text-slate-500'}`}>
+            Đã chặn
+          </Text>
+        </Pressable>
+      </View>
+
       {showSearch && (
         <View className="bg-white px-4 py-3 border-b border-slate-200">
           <View className="flex-row items-center rounded-2xl bg-slate-100 px-3">
@@ -310,25 +382,47 @@ export default function GroupMembersScreen() {
         </View>
       ) : (
         <FlatList
-          data={visibleMembers}
+          data={activeTab === 'members' ? visibleMembers : blockedMembers}
           keyExtractor={(item, index) => normalize(item?._id) || normalize(item?.user_id) || String(index)}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20 }}
           ListEmptyComponent={
-            <Text className="py-10 text-center text-[14px] text-slate-500">Không có thành viên phù hợp</Text>
+            <Text className="py-10 text-center text-[14px] text-slate-500">
+              {activeTab === 'members' ? "Không có thành viên phù hợp" : "Chưa có thành viên nào bị chặn"}
+            </Text>
           }
           renderItem={({ item }) => {
             const memberId = normalize(item?.user_id);
             const isMe = memberId === normalize(userIdForChat);
-            const memberIsOwner = memberId === ownerId;
             const displayName =
               normalize(item?.nickname) ||
               normalize(item?.user?.name) ||
               normalize(item?.name) ||
               memberId;
-            const subtitle = getMemberSubtitle(item);
+            const subtitle = activeTab === 'members' ? getMemberSubtitle(item) : "";
             const avatarRaw = normalize(item?.avatar) || normalize(item?.user?.avatar);
 
-            // Check if member is a friend
+            if (activeTab === 'blocked') {
+              return (
+                <View className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                  <SenderAvatar name={displayName} avatarUrl={avatarRaw} />
+                  <View className="ml-3 flex-1">
+                    <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1}>
+                      {displayName}
+                    </Text>
+                  </View>
+                  {(isAdmin || isOwner) && (
+                    <Pressable
+                      onPress={() => handleUnblockMember(memberId)}
+                      className="rounded-full bg-slate-100 px-3 py-1.5"
+                    >
+                      <Text className="text-[12px] font-bold text-slate-600">Bỏ chặn</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            }
+
+            // Normal members list rendering...
             const friendIds = new Set(allUsers.map(u => normalize(u.user_id)));
             const isStranger = !isMe && !friendIds.has(memberId);
 
@@ -356,7 +450,6 @@ export default function GroupMembersScreen() {
                 {isStranger ? (
                   <Pressable
                     onPress={() => {
-                      // Logic to add friend would go here
                       Alert.alert("Thông báo", "Tính năng kết bạn đang được cập nhật");
                     }}
                     className="mr-2 rounded-full bg-primary-50 px-3 py-1.5 border border-primary-100"
@@ -365,7 +458,6 @@ export default function GroupMembersScreen() {
                   </Pressable>
                 ) : null}
 
-                {/* Only show more button if I am admin or owner, AND this member is not me */}
                 {(isAdmin || isOwner) && !isMe ? (
                   <Pressable
                     onPress={() => handleOpenMemberActions(item)}
@@ -442,16 +534,27 @@ export default function GroupMembersScreen() {
                     </>
                   )}
 
-                  {/* Trưởng nhóm có thể xóa bất kỳ ai. Phó nhóm chỉ được xóa thành viên thường. */}
-                  {(isOwner || (isAdmin && !isTargetAdmin && !isTargetOwner)) && (
-                    <Pressable
-                      onPress={handleOpenRemoveConfirmation}
-                      className="mb-3 rounded-2xl bg-red-100 py-3"
-                    >
-                      <Text className="text-center text-[16px] font-medium text-red-600">
-                        Xóa khỏi nhóm
-                      </Text>
-                    </Pressable>
+                  {/* Trưởng nhóm có thể xóa bất kỳ ai trừ mình. Phó nhóm chỉ được xóa thành viên thường. */}
+                  {(isOwner || (isAdmin && !isTargetAdmin && !isTargetOwner)) && !normalize(selectedMember?.user_id).includes(normalize(userIdForChat)) && (
+                    <>
+                      <Pressable
+                        onPress={handleOpenRemoveConfirmation}
+                        className="mb-3 rounded-2xl bg-red-50 py-3"
+                      >
+                        <Text className="text-center text-[16px] font-medium text-red-600">
+                          Xóa khỏi nhóm
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={handleBlockMember}
+                        className="mb-3 rounded-2xl bg-red-100 py-3"
+                      >
+                        <Text className="text-center text-[16px] font-medium text-red-600">
+                          Chặn khỏi nhóm
+                        </Text>
+                      </Pressable>
+                    </>
                   )}
                 </>
               );

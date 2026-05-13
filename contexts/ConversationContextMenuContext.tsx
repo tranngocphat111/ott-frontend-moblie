@@ -6,6 +6,7 @@ export type ConversationContextAnchor = {
   y: number;
   width: number;
   height: number;
+  relationship?: any;
 };
 
 type ConversationContextMenuValue = {

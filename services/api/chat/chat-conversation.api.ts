@@ -77,4 +77,32 @@ export const chatConversationApi = {
       : `/conversations/invite-link/${token}`;
     return await chatApiClient.get(url);
   },
+
+  async blockMember(
+    conversationId: string,
+    userId: string,
+    adminId: string,
+  ): Promise<{ success: boolean }> {
+    return await chatApiClient.post(`/conversations/${conversationId}/block`, {
+      userId,
+      adminId,
+    });
+  },
+
+  async unblockMember(
+    conversationId: string,
+    userId: string,
+    adminId: string,
+  ): Promise<{ success: boolean }> {
+    return await chatApiClient.post(`/conversations/${conversationId}/unblock`, {
+      userId,
+      adminId,
+    });
+  },
+
+  async getBlockedMembers(conversationId: string, requesterId: string): Promise<any[]> {
+    return await chatApiClient.get(
+      `/conversations/${conversationId}/blocked-members?requesterId=${requesterId}`,
+    );
+  },
 };
