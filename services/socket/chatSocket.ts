@@ -24,6 +24,7 @@ type ChatSocketEventMap = {
 	cap_nhat_quan_he: (payload: any) => void;
 	cap_nhat_thong_tin_ca_nhan: (payload: any) => void;
 	buoc_dang_xuat: (payload: any) => void;
+	thong_bao_moi: (payload: any) => void;
 };
 
 class ChatSocketService {
@@ -126,6 +127,10 @@ class ChatSocketService {
 		} else {
 			socket.once('connect', action);
 		}
+	}
+
+	getSocket() {
+		return this.socket;
 	}
 
 	on<K extends keyof ChatSocketEventMap>(event: K, callback: ChatSocketEventMap[K]) {

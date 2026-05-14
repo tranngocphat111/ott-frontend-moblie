@@ -9,7 +9,6 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "owner": "chucnguyen02",
-
     "ios": {
       "bundleIdentifier": "com.chucnguyen02.ottapp",
       "supportsTablet": true,
@@ -25,7 +24,6 @@
         }
       }
     },
-
     "android": {
       "package": "com.chucnguyen02.ottapp",
       "adaptiveIcon": {
@@ -36,12 +34,10 @@
       "predictiveBackGestureEnabled": false,
       "usesCleartextTraffic": true
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/logo.jpg"
     },
-
     "plugins": [
       "expo-router",
       "expo-web-browser",
@@ -84,9 +80,10 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
