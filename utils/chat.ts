@@ -123,7 +123,8 @@ export const getOptimizedImageUrl = (
 };
 
 export const isSystemMessageType = (type?: string | null) =>
-  String(type || '').toLowerCase().startsWith('system');
+  String(type || '').toLowerCase().startsWith('system') ||
+  String(type || '').toLowerCase() === 'call_join';
 
 export const isNotificationType = (type?: string | null) => {
   const normalizedType = String(type || '').toLowerCase();

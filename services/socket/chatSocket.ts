@@ -326,6 +326,10 @@ class ChatSocketService {
 		}, 1500);
 	}
 
+	leaveAllCallsForLogout(userId: string) {
+		return this.emitWithAck<{ ok?: boolean }>('dang_xuat', { userId }, 1200);
+	}
+
 	endCall(
 		conversationId: string,
 		userId: string,

@@ -4,6 +4,7 @@ import type { PhotoListResponse, UserPhotoResponse } from '@/types/response/phot
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
+import { ensureImageLibraryPermission } from '@/utils/appPermissions';
 import {
     ActivityIndicator,
     Alert,
@@ -52,8 +53,8 @@ export const PhotoPickerModal: React.FC<Props> = ({
     }, [open]);
 
     const handlePickImage = async () => {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) {
+        const hasPermission = await ensureImageLibraryPermission();
+        if (!hasPermission) {
             Alert.alert('Quyền bị từ chối', 'Cần quyền truy cập thư viện ảnh');
             return;
         }

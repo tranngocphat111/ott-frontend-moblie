@@ -50,6 +50,31 @@ const stopTrack = (track?: { stop?: () => void; readyState?: string } | null) =>
 };
 
 const normalizeId = (value?: string | null) => String(value || '').trim();
+type MobileMediaTrack = ReturnType<MediaStream['getTracks']>[number];
+
+const isLiveTrack = (track?: MobileMediaTrack | null) =>
+  Boolean(track && track.readyState === 'live');
+
+const ensureTransceivers = (pc: RTCPeerConnection, mode: CallType) => {
+  try {
+    const peer = pc as any;
+    const transceivers = typeof peer.getTransceivers === 'function'
+      ? peer.getTransceivers()
+      : [];
+    const hasAudio = transceivers.some((item: any) => item.receiver?.track?.kind === 'audio');
+    const hasVideo = transceivers.some((item: any) => item.receiver?.track?.kind === 'video');
+
+    if (!hasAudio && typeof peer.addTransceiver === 'function') {
+      peer.addTransceiver('audio', { direction: 'sendrecv' });
+    }
+
+    if (mode === 'video' && !hasVideo && typeof peer.addTransceiver === 'function') {
+      peer.addTransceiver('video', { direction: 'sendrecv' });
+    }
+  } catch (error) {
+    console.warn('Không thể chuẩn bị transceiver cuộc gọi:', error);
+  }
+};
 
 export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) {
   const [callType, setCallType] = useState<CallType | null>(null);
@@ -203,36 +228,76 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     });
   }, []);
 
+  const commitLocalStream = useCallback((stream: MediaStream | null) => {
+    localStreamRef.current = stream;
+    setLocalStream(stream);
+  }, []);
+
+  const acquireAudioTrack = useCallback(async () => {
+    try {
+      const media = await mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+      media.getVideoTracks().forEach(stopTrack);
+      return media.getAudioTracks()[0] || null;
+    } catch (error) {
+      console.warn('Không thể bật micro, sẽ vào cuộc gọi ở trạng thái tắt mic:', error);
+      return null;
+    }
+  }, []);
+
+  const acquireVideoTrack = useCallback(async () => {
+    try {
+      const media = await mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: 'user',
+          width: 640,
+          height: 480,
+          frameRate: 24,
+        },
+      });
+      media.getAudioTracks().forEach(stopTrack);
+      return media.getVideoTracks()[0] || null;
+    } catch (error) {
+      console.warn('Không thể bật camera, sẽ vào cuộc gọi ở trạng thái tắt cam:', error);
+      return null;
+    }
+  }, []);
+
   const ensureLocalStream = useCallback(async (mode: CallType) => {
     const existing = localStreamRef.current;
     if (existing) {
-      const hasLiveVideo = existing
-        .getVideoTracks()
-        .some((track) => track.readyState === 'live');
+      const hasLiveAudio = existing.getAudioTracks().some(isLiveTrack);
+      const hasLiveVideo = existing.getVideoTracks().some(isLiveTrack);
 
-      if (mode === 'voice' || hasLiveVideo) return existing;
+      if (hasLiveAudio && (mode === 'voice' || hasLiveVideo)) {
+        existing.getAudioTracks().forEach((track) => {
+          track.enabled = true;
+        });
+        existing.getVideoTracks().forEach((track) => {
+          track.enabled = true;
+        });
+        setIsMuted(false);
+        setIsCameraOff(mode === 'voice' || !hasLiveVideo);
+        return existing;
+      }
       existing.getTracks().forEach(stopTrack);
     }
 
-    const stream = await mediaDevices.getUserMedia({
-      audio: true,
-      video:
-        mode === 'video'
-          ? {
-              facingMode: 'user',
-              width: 640,
-              height: 480,
-              frameRate: 24,
-            }
-          : false,
-    });
+    const audioTrack = await acquireAudioTrack();
+    const videoTrack = mode === 'video' ? await acquireVideoTrack() : null;
+    const tracks = [audioTrack, videoTrack].filter(
+      (track): track is MobileMediaTrack => Boolean(track),
+    );
+    const stream = new MediaStream(tracks);
 
-    localStreamRef.current = stream;
-    setLocalStream(stream);
-    setIsMuted(false);
-    setIsCameraOff(mode === 'voice');
+    commitLocalStream(stream);
+    setIsMuted(!audioTrack);
+    setIsCameraOff(mode === 'voice' || !videoTrack);
     return stream;
-  }, []);
+  }, [acquireAudioTrack, acquireVideoTrack, commitLocalStream]);
 
   const upsertRemoteStream = useCallback((targetUserId: string, stream: MediaStream) => {
     markRemoteConnected();
@@ -259,6 +324,8 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
           pc.addTrack(track, stream);
         });
       }
+
+      ensureTransceivers(pc, mode);
 
       const peer = pc as any;
 
@@ -305,6 +372,53 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     [cleanupPeer, markRemoteConnected, upsertRemoteStream],
   );
 
+  const replaceOutgoingTrack = useCallback(
+    (kind: 'audio' | 'video', nextTrack: MobileMediaTrack | null) => {
+      peerConnectionsRef.current.forEach((pc) => {
+        const peer = pc as any;
+        const sender =
+          (typeof peer.getTransceivers === 'function'
+            ? peer
+                .getTransceivers()
+                .find(
+                  (item: any) =>
+                    item.sender?.track?.kind === kind ||
+                    item.receiver?.track?.kind === kind,
+                )?.sender
+            : null) ||
+          (typeof peer.getSenders === 'function'
+            ? peer.getSenders().find((item: any) => item.track?.kind === kind)
+            : null);
+
+        if (sender && typeof sender.replaceTrack === 'function') {
+          sender.replaceTrack(nextTrack).catch((error: unknown) => {
+            console.error(`Không thể cập nhật ${kind} track:`, error);
+          });
+          return;
+        }
+
+        if (nextTrack && localStreamRef.current) {
+          try {
+            pc.addTrack(nextTrack, localStreamRef.current);
+          } catch (error) {
+            console.error(`Không thể thêm ${kind} track:`, error);
+          }
+        }
+      });
+    },
+    [],
+  );
+
+  const emitLocalCameraState = useCallback((cameraOff: boolean) => {
+    if (!activeConversationRef.current || !userIdRef.current) return;
+    chatSocket.emitCameraState(
+      activeConversationRef.current,
+      userIdRef.current,
+      cameraOff,
+      activeCallIdRef.current,
+    );
+  }, []);
+
   const flushPendingIceCandidates = useCallback(async (targetUserId: string, pc: RTCPeerConnection) => {
     const pending = pendingIceCandidatesRef.current.get(targetUserId);
     if (!pending?.length) return;
@@ -348,12 +462,13 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       if (!conversationId || !userId) return;
 
       try {
+        const effectiveMode: CallType = isGroupCall ? 'video' : mode;
         setIsConnecting(true);
         setBusyUserIds([]);
-        await ensureLocalStream(mode);
+        await ensureLocalStream(effectiveMode);
 
         activeConversationRef.current = conversationId;
-        setCallType(mode);
+        setCallType(effectiveMode);
         setIsGroup(!!isGroupCall);
         isGroupRef.current = !!isGroupCall;
         setIsInCall(true);
@@ -361,7 +476,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         const response = await chatSocket.startCall(
           conversationId,
           userId,
-          mode,
+          effectiveMode,
           invitedUserIds,
         );
 
@@ -378,6 +493,11 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setActiveCallId(response.callId || null);
         setParticipants(response.participants || [userId]);
         setIsGroup(!!response.isGroup || !!isGroupCall);
+        if (effectiveMode === 'video') {
+          emitLocalCameraState(
+            !localStreamRef.current?.getVideoTracks().some(isLiveTrack),
+          );
+        }
       } catch (error) {
         closeCallLocally();
         throw error;
@@ -385,7 +505,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setIsConnecting(false);
       }
     },
-    [closeCallLocally, conversationId, ensureLocalStream, setActiveCallId, userId],
+    [closeCallLocally, conversationId, emitLocalCameraState, ensureLocalStream, setActiveCallId, userId],
   );
 
   const joinExistingCall = useCallback(
@@ -393,11 +513,12 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       if (!conversationId || !userId) return;
 
       try {
+        const effectiveMode: CallType = isGroupCall ? 'video' : mode;
         setIsConnecting(true);
-        await ensureLocalStream(mode);
+        await ensureLocalStream(effectiveMode);
 
         activeConversationRef.current = conversationId;
-        setCallType(mode);
+        setCallType(effectiveMode);
         setIsGroup(!!isGroupCall);
         isGroupRef.current = !!isGroupCall;
         setIsInCall(true);
@@ -406,7 +527,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         const response = await chatSocket.joinCall(
           conversationId,
           userId,
-          mode,
+          effectiveMode,
           callId || activeCallIdRef.current,
         );
 
@@ -417,6 +538,11 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setActiveCallId(response.callId || callId || null);
         setParticipants(response.participants || [userId]);
         setIsGroup(!!response.isGroup || !!isGroupCall);
+        if (effectiveMode === 'video') {
+          emitLocalCameraState(
+            !localStreamRef.current?.getVideoTracks().some(isLiveTrack),
+          );
+        }
       } catch (error) {
         closeCallLocally();
         throw error;
@@ -424,7 +550,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setIsConnecting(false);
       }
     },
-    [conversationId, ensureLocalStream, setActiveCallId, userId],
+    [conversationId, emitLocalCameraState, ensureLocalStream, setActiveCallId, userId],
   );
 
   const endCall = useCallback(async (notifyRemote = true) => {
@@ -451,33 +577,91 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     const stream = localStreamRef.current;
     if (!stream) return;
 
-    stream.getAudioTracks().forEach((track) => {
-      track.enabled = !track.enabled;
-    });
+    if (!isMuted) {
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      setIsMuted(true);
+      return;
+    }
 
-    setIsMuted((current) => !current);
-  }, []);
+    void (async () => {
+      const liveAudioTracks = stream.getAudioTracks().filter(isLiveTrack);
+      if (liveAudioTracks.length > 0) {
+        liveAudioTracks.forEach((track) => {
+          track.enabled = true;
+        });
+        setIsMuted(false);
+        return;
+      }
+
+      const nextTrack = await acquireAudioTrack();
+      if (!nextTrack) {
+        setIsMuted(true);
+        return;
+      }
+
+      stream.getAudioTracks().forEach((track) => {
+        stream.removeTrack(track);
+        stopTrack(track);
+      });
+      stream.addTrack(nextTrack);
+      replaceOutgoingTrack('audio', nextTrack);
+      commitLocalStream(new MediaStream(stream.getTracks()));
+      setIsMuted(false);
+    })();
+  }, [acquireAudioTrack, commitLocalStream, isMuted, replaceOutgoingTrack]);
 
   const toggleCamera = useCallback(() => {
     if (callTypeRef.current !== 'video') return;
     const stream = localStreamRef.current;
     if (!stream) return;
 
-    const nextIsCameraOff = !isCameraOff;
-    stream.getVideoTracks().forEach((track) => {
-      track.enabled = !nextIsCameraOff;
-    });
-
-    setIsCameraOff(nextIsCameraOff);
-    if (activeConversationRef.current && userIdRef.current) {
-      chatSocket.emitCameraState(
-        activeConversationRef.current,
-        userIdRef.current,
-        nextIsCameraOff,
-        activeCallIdRef.current,
-      );
+    if (!isCameraOff) {
+      stream.getVideoTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      setIsCameraOff(true);
+      emitLocalCameraState(true);
+      return;
     }
-  }, [isCameraOff]);
+
+    void (async () => {
+      const liveVideoTracks = stream.getVideoTracks().filter(isLiveTrack);
+      if (liveVideoTracks.length > 0) {
+        liveVideoTracks.forEach((track) => {
+          track.enabled = true;
+        });
+        setIsCameraOff(false);
+        emitLocalCameraState(false);
+        return;
+      }
+
+      const nextTrack = await acquireVideoTrack();
+      if (!nextTrack) {
+        setIsCameraOff(true);
+        emitLocalCameraState(true);
+        return;
+      }
+
+      stream.getVideoTracks().forEach((track) => {
+        stream.removeTrack(track);
+        stopTrack(track);
+      });
+      stream.addTrack(nextTrack);
+      replaceOutgoingTrack('video', nextTrack);
+      commitLocalStream(new MediaStream(stream.getTracks()));
+      setIsCameraOff(false);
+      emitLocalCameraState(false);
+    })();
+  }, [
+    acquireVideoTrack,
+    callTypeRef,
+    commitLocalStream,
+    emitLocalCameraState,
+    isCameraOff,
+    replaceOutgoingTrack,
+  ]);
 
   useEffect(() => {
     const handleCallJoined = async (payload: {

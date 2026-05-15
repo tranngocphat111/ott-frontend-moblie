@@ -306,7 +306,12 @@ export default function CallScreen() {
                   {isCameraOff ? (
                     <View className="flex-1 items-center justify-center">
                       <AvatarCircle name={myDisplayName} avatarUrl={myAvatarUrl} size={76} textSize="text-2xl" />
-                      <Text className="mt-2 text-xs font-semibold text-white/75">Bạn</Text>
+                      <View className="absolute right-2 top-2 h-8 w-8 items-center justify-center rounded-full bg-black/60">
+                        <Feather name="video-off" size={15} color="#fff" />
+                      </View>
+                      <View className="absolute bottom-0 left-0 right-0 bg-black/55 px-3 py-2">
+                        <Text className="text-xs font-bold text-white" numberOfLines={1}>Bạn</Text>
+                      </View>
                     </View>
                   ) : (
                     <RTCView
@@ -322,6 +327,7 @@ export default function CallScreen() {
             {remoteStreams.map((item, index) => {
               const streamUrl = item.stream.toURL();
               const isRemoteCameraOff = remoteCameraStates[item.userId] === true;
+              const remoteLabel = `Thành viên ${index + 1}`;
               return (
                 <View
                   key={item.userId}
@@ -338,10 +344,15 @@ export default function CallScreen() {
                       />
                     ) : (
                       <View className="flex-1 items-center justify-center">
-                        <AvatarCircle name={`${index + 1}`} size={76} textSize="text-2xl" />
-                        <Text className="mt-2 text-xs font-semibold text-white/75">
-                          Camera đang tắt
-                        </Text>
+                        <AvatarCircle name={remoteLabel} size={76} textSize="text-2xl" />
+                        <View className="absolute right-2 top-2 h-8 w-8 items-center justify-center rounded-full bg-black/60">
+                          <Feather name="video-off" size={15} color="#fff" />
+                        </View>
+                        <View className="absolute bottom-0 left-0 right-0 bg-black/55 px-3 py-2">
+                          <Text className="text-xs font-bold text-white" numberOfLines={1}>
+                            {remoteLabel}
+                          </Text>
+                        </View>
                       </View>
                     )}
                   </View>

@@ -41,6 +41,7 @@ import {
   getOptimizedImageUrl,
   resolveMediaUrl,
 } from "@/utils/chat";
+import { ensureImageLibraryPermission } from "@/utils/appPermissions";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
 import { CreateGroupModal } from "@/components/chat/modals/CreateGroupModal";
@@ -550,8 +551,8 @@ export default function ChatInfoScreen() {
     }
 
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert("Thông báo", "Bạn cần cấp quyền truy cập thư viện ảnh.");
         return;
       }
