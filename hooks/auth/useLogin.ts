@@ -35,13 +35,14 @@ export function useLogin() {
 
   // ── Login ───────────────────────────────────────────────
   const login = async (identifier: string, password: string): Promise<LoginResult | undefined> => {
-    if (!validate(identifier, password)) return;
+    const normalizedIdentifier = identifier.trim();
+    if (!validate(normalizedIdentifier, password)) return;
 
     setIsLoading(true);
     setErrors({});
 
     try {
-      const response = await authApi.localLogin({ identifier, password });
+      const response = await authApi.localLogin({ identifier: normalizedIdentifier, password });
 
       if (response.code === 1000 && response.result) {
         const { token, refreshToken, requires2FA, tempToken } = response.result;
@@ -52,16 +53,20 @@ export function useLogin() {
         }
 
      
-        await setTokens(token, refreshToken);
-        router.replace('/(main)/(tabs)/home');
-        return { authenticated: true };
+        if (token && refreshToken) {
+          await setTokens(token, refreshToken);
+          router.replace('/(main)/(tabs)/home');
+          return { authenticated: true };
+        }
       }
 
       // Lỗi từ server
       const msg = getErrorMessage(response.code, response.message);
       setErrors({ general: msg });
     } catch (error: any) {
-      setErrors({ general: error?.message || 'Đã xảy ra lỗi khi đăng nhập' });
+      setErrors({
+        general: getErrorMessage(error?.code, error?.message || 'Đã xảy ra lỗi khi đăng nhập'),
+      });
     } finally {
       setIsLoading(false);
     }
@@ -82,15 +87,17 @@ export function useLogin() {
 
       if (response.code === 1000 && response.result) {
         const { token, refreshToken } = response.result;
-        await setTokens(token, refreshToken);
-        router.replace('/(main)/(tabs)/home');
-        return { authenticated: true };
+        if (token && refreshToken) {
+          await setTokens(token, refreshToken);
+          router.replace('/(main)/(tabs)/home');
+          return { authenticated: true };
+        }
       }
 
       const msg = getErrorMessage(response.code, response.message);
       setErrors({ otp: msg });
     } catch (error: any) {
-      setErrors({ otp: error?.message || 'Xác thực thất bại' });
+      setErrors({ otp: getErrorMessage(error?.code, error?.message || 'Xác thực thất bại') });
     } finally {
       setIsLoading(false);
     }

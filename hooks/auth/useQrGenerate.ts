@@ -7,19 +7,36 @@ import type { QrCodeResponse, QrStatusResponse } from '@/types';
 import { API_CONFIG } from '@/configuration/api';
 
 const QR_EXPIRY_SECONDS = 120; // 2 minutes
+type QrUiStatus = 'pending' | 'scanned' | 'confirmed' | 'expired' | 'cancelled';
+
+const normalizeQrStatus = (status?: string): QrUiStatus => {
+  switch (String(status || '').toUpperCase()) {
+    case 'SCANNED':
+      return 'scanned';
+    case 'CONFIRMED':
+      return 'confirmed';
+    case 'EXPIRED':
+      return 'expired';
+    case 'CANCELLED':
+      return 'cancelled';
+    case 'PENDING':
+    default:
+      return 'pending';
+  }
+};
 
 export const useQrGenerate = () => {
   const router = useRouter();
   const { setTokens } = useAuth();
   
   const [qrCode, setQrCode] = useState<QrCodeResponse | null>(null);
-  const [status, setStatus] = useState<'pending' | 'scanned' | 'confirmed' | 'expired' | 'cancelled'>('pending');
+  const [status, setStatus] = useState<QrUiStatus>('pending');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [countdown, setCountdown] = useState(QR_EXPIRY_SECONDS);
   
   const wsRef = useRef<WebSocket | null>(null);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const closeWebSocket = () => {
     if (wsRef.current) {
@@ -39,7 +56,7 @@ export const useQrGenerate = () => {
       
       if (response.code === 1000 && response.result) {
         setQrCode(response.result);
-        setStatus(response.result.status);
+        setStatus(normalizeQrStatus(response.result.status));
         setCountdown(response.result.expirySeconds || QR_EXPIRY_SECONDS);
         
         // Start countdown
@@ -120,9 +137,10 @@ export const useQrGenerate = () => {
     ws.onmessage = async (event) => {
       try {
         const statusData = JSON.parse(event.data) as QrStatusResponse;
-        setStatus(statusData.status);
+        const nextStatus = normalizeQrStatus(statusData.status);
+        setStatus(nextStatus);
 
-        if (statusData.status === 'confirmed') {
+        if (nextStatus === 'confirmed') {
           closeWebSocket();
           stopCountdown();
           
@@ -130,7 +148,7 @@ export const useQrGenerate = () => {
             await setTokens(statusData.sessionToken, statusData.refreshToken);
             router.replace('../(main)/(tabs)/home');
           }
-        } else if (statusData.status === 'expired' || statusData.status === 'cancelled') {
+        } else if (nextStatus === 'expired' || nextStatus === 'cancelled') {
           closeWebSocket();
           stopCountdown();
         }

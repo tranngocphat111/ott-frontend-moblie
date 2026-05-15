@@ -181,7 +181,7 @@ export const ChatMessagesList: React.FC<Props> = ({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   // Group messages
-  const displayData = React.useMemo(() => {
+  const displayData = React.useMemo<any[]>(() => {
     const items: any[] = [];
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
@@ -211,16 +211,16 @@ export const ChatMessagesList: React.FC<Props> = ({
     <View className="relative flex-1">
       <FlashList
         ref={listRef}
-        inverted={true}
+        {...({ inverted: true } as any)}
         data={displayData}
-        keyExtractor={(item) => item.key}
+        keyExtractor={(item: any) => item.key}
         onScroll={onScroll}
         removeClippedSubviews
         drawDistance={560}
         scrollEventThrottle={16}
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
-        renderItem={({ item, index }) => {
+        renderItem={({ item, index }: { item: any; index: number }) => {
           const newerItem = displayData[index - 1];
           const olderItem = displayData[index + 1];
 

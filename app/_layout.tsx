@@ -1,4 +1,5 @@
-import { SplashScreen, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import * as WebBrowser from 'expo-web-browser';
@@ -9,23 +10,14 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import '@/global.css';
 
-import { AuthProvider, useAuth } from '@/contexts/Authcontext';
+import { AuthProvider } from '@/contexts/Authcontext';
 import { ThemeProvider } from '@/contexts/Themecontext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { THEME_COLORS } from '@/constants/theme';
 
 WebBrowser.maybeCompleteAuthSession();
-void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function RootLayoutNav() {
-  const { isLoading } = useAuth();
-
-  useEffect(() => {
-    if (!isLoading) {
-      void SplashScreen.hideAsync().catch(() => undefined);
-    }
-  }, [isLoading]);
-
   return (
     <Stack
       screenOptions={{
@@ -55,6 +47,7 @@ class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: any) {
     console.error('Error:', error, errorInfo);
+    void SplashScreen.hideAsync().catch(() => undefined);
   }
 
   render() {
@@ -78,11 +71,23 @@ class ErrorBoundary extends React.Component<
 export default function RootLayout() {
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(THEME_COLORS.surface.DEFAULT);
+    const hideSplash = () => {
+      void SplashScreen.hideAsync().catch(() => undefined);
+    };
+
+    hideSplash();
+    const fallbackTimer = setTimeout(hideSplash, 500);
+    return () => clearTimeout(fallbackTimer);
   }, []);
 
   return (
     <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView
+        style={{ flex: 1 }}
+        onLayout={() => {
+          void SplashScreen.hideAsync().catch(() => undefined);
+        }}
+      >
         <SafeAreaProvider>
           <ThemeProvider>
             <AuthProvider>

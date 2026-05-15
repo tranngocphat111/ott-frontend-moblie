@@ -86,9 +86,14 @@ export function useOtpLogin() {
       if (response.code === 1000 && response.result) {
 
         // ✅ SỬA QUAN TRỌNG Ở ĐÂY
+        if (!response.result.token || !response.result.refreshToken) {
+          setErrors({ general: 'Thiếu token đăng nhập' });
+          return false;
+        }
+
         await setTokens(
-          response.result.token,          // 🔥 ĐÚNG FIELD
-          response.result.refreshToken    // 🔥 ĐÚNG FIELD
+          response.result.token,
+          response.result.refreshToken
         );
 
         router.replace('/(main)/(tabs)/home');

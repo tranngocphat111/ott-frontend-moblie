@@ -16,7 +16,7 @@ const OTP_EXPIRY_SECONDS = 120;
 
 export const useLinkEmail = () => {
   const router = useRouter();
-  const { updateUser } = useAuth();
+  const { updateProfile } = useAuth();
   
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<LinkEmailErrors>({});
@@ -107,7 +107,7 @@ export const useLinkEmail = () => {
       const response = await linkingApi.linkEmail(email, otp);
 
       if (response.code === 1000 && response.result) {
-        await updateUser(response.result);
+        updateProfile(response.result);
         Alert.alert(
           'Thành công',
           'Đã liên kết email thành công',

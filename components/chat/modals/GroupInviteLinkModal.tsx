@@ -67,8 +67,8 @@ export const GroupInviteLinkModal: React.FC<Props> = ({
     if (!inviteLink) return;
     try {
       await Share.share({
-        title: `Tham gia nhóm "${conversationName}"`,
-        message: `Bạn được mời tham gia nhóm "${conversationName}" trên ứng dụng chat.\nLink tham gia: ${inviteLink}`,
+        title: `Tham gia nhóm ${conversationName}`,
+        message: `Bạn được mời tham gia nhóm ${conversationName} trên ứng dụng chat.\nLink tham gia: ${inviteLink}`,
         url: inviteLink,
       });
     } catch (error) {
@@ -110,7 +110,7 @@ export const GroupInviteLinkModal: React.FC<Props> = ({
             <View>
               <Text style={styles.description}>
                 Chia sẻ link này để mời mọi người tham gia nhóm{'\n'}
-                <Text style={styles.boldText}>"{conversationName}"</Text>
+                <Text style={styles.boldText}>&quot;{conversationName}&quot;</Text>
               </Text>
 
               <View style={styles.linkCard}>
@@ -149,7 +149,7 @@ export const GroupInviteLinkModal: React.FC<Props> = ({
             <View style={styles.qrContainer}>
               <Text style={styles.description}>
                 Quét mã QR để tham gia nhóm{'\n'}
-                <Text style={styles.boldText}>"{conversationName}"</Text>
+                <Text style={styles.boldText}>&quot;{conversationName}&quot;</Text>
               </Text>
 
               <View style={styles.qrWrapper}>

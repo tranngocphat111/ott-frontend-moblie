@@ -48,6 +48,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = !!user;
   const chatUserId = user?.id || null;
 
+  const clearLocalSession = async () => {
+    await SecureStore.deleteItemAsync('accessToken');
+    await SecureStore.deleteItemAsync('refreshToken');
+    await SecureStore.deleteItemAsync('mockChatUserId');
+    setUser(null);
+  };
+
+  const loadCurrentUser = async () => {
+    console.log('AuthContext: Fetching user profile...');
+    const response = await profileApi.getCurrentProfile();
+    if (response.result) {
+      console.log('AuthContext: User profile fetched:', response.result);
+      setUser(response.result);
+      return response.result;
+    }
+
+    throw new Error('No user data in response');
+  };
+
   // Hợp nhất logic logout: Xóa token và gọi API logout
   const logout = async () => {
     console.log('AuthContext: logout called');
@@ -60,28 +79,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('AuthContext: Logout API error:', error);
     } finally {
-      await SecureStore.deleteItemAsync('accessToken');
-      await SecureStore.deleteItemAsync('refreshToken');
-      await SecureStore.deleteItemAsync('mockChatUserId'); // Clean up any legacy mock data
+      await clearLocalSession();
 
-      setUser(null);
-
-      router.replace('/login');
+      router.replace('/(auth)/login');
       console.log('AuthContext: Logout completed, tokens cleared');
     }
   };
 
   const fetchUser = async () => {
     try {
-      console.log('AuthContext: Fetching user profile...');
-      const response = await profileApi.getCurrentProfile();
-      if (response.result) {
-        console.log('AuthContext: User profile fetched:', response.result);
-        setUser(response.result);
-        return response.result;
-      } else {
-        throw new Error('No user data in response');
-      }
+      return await loadCurrentUser();
     } catch (error) {
       console.error('AuthContext: Failed to fetch user:', error);
       await logout();
@@ -92,12 +99,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const checkAuth = async () => {
     try {
       const token = await SecureStore.getItemAsync('accessToken');
-      if (token) {
-        console.log('AuthContext: Found token in SecureStore, fetching user...');
-        await fetchUser();
-      }
+      if (!token) return;
+
+      console.log('AuthContext: Found token in SecureStore, fetching user...');
+      void loadCurrentUser().catch(async (error) => {
+        console.error('AuthContext: checkAuth error:', error);
+        await clearLocalSession();
+      });
     } catch (error) {
       console.error('AuthContext: checkAuth error:', error);
+      await clearLocalSession();
     } finally {
       setIsLoading(false);
     }

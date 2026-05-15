@@ -74,7 +74,7 @@ const LoadingScreen: React.FC<Props> = ({ message = 'Đang tải...' }) => {
         {/* Logo circle */}
         <View style={styles.logoBg}>
           <Image
-            source={require('@/assets/images/logo_tach_nen.jpg')} // ← đổi path
+            source={require('@/assets/images/logo_tach_nen.png')}
             style={styles.logo}
             resizeMode="contain"
           />

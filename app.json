@@ -4,16 +4,23 @@
     "slug": "Riff",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo_tach_nen.jpg",
+    "icon": "./assets/logo_tach_nen.png",
     "scheme": "riff",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "owner": "chucnguyen02",
-
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/85627970-866c-453c-a0c2-981b3703f388"
+    },
+    "owner": "piin-nhs",
     "ios": {
-      "bundleIdentifier": "com.chucnguyen02.ottapp",
+      "bundleIdentifier": "com.piin-nhs.riff",
       "supportsTablet": true,
       "infoPlist": {
+        "NSCameraUsageDescription": "Cho phép truy cập camera để gọi video.",
+        "NSMicrophoneUsageDescription": "Cho phép truy cập micro để gọi thoại và video.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSExceptionDomains": {
@@ -25,23 +32,30 @@
         }
       }
     },
-
     "android": {
-      "package": "com.chucnguyen02.ottapp",
+      "package": "com.piinnhs.Riff",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/logo_tach_nen.jpg"
+        "foregroundImage": "./assets/logo_tach_nen.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true
+      "predictiveBackGestureEnabled": false
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/logo.jpg"
     },
-
     "plugins": [
       "expo-router",
       "expo-web-browser",
@@ -76,7 +90,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/logo_tach_nen.jpg",
+          "image": "./assets/logo_tach_nen.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -84,12 +98,19 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ],
-
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "85627970-866c-453c-a0c2-981b3703f388"
+      }
     }
   }
 }
