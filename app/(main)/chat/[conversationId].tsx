@@ -746,8 +746,10 @@ export default function ChatDetailScreen() {
   const sttRecordingRef = useRef<Audio.Recording | null>(null);
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [translatingMessageId, setTranslatingMessageId] = useState<string | null>(null);
+  const lastSmartReplyMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    lastSmartReplyMessageIdRef.current = null;
     setSmartReplies([]);
     setIsSmartReplyOpen(false);
     setTranslatedMessages({});
@@ -797,12 +799,22 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     if (!conversationId || !userIdForChat || loading) return;
 
-    const lastMessage = messages[messages.length - 1];
+    const latestConversationMessage = conversation?.last_message;
+    const latestMessage = latestConversationMessage || messages[0];
+    const latestMessageId = String((latestMessage as any)?.msg_id || (latestMessage as any)?._id || '').trim();
+    const latestMessageType = String((latestMessage as any)?.type || '');
+    const smartReplySourceKey = latestMessageId ? `${conversationId}:${latestMessageId}` : '';
+
     if (
-      lastMessage &&
-      String(lastMessage.sender_id) !== String(userIdForChat) &&
-      !['image', 'video', 'audio', 'file'].includes(lastMessage.type)
+      latestMessage &&
+      latestMessageId &&
+      smartReplySourceKey !== lastSmartReplyMessageIdRef.current &&
+      String((latestMessage as any).sender_id) !== String(userIdForChat) &&
+      ['text', 'link'].includes(latestMessageType)
     ) {
+      lastSmartReplyMessageIdRef.current = smartReplySourceKey;
+      setSmartReplies([]);
+
       const fetchSuggestions = async () => {
         setIsSmartReplyLoading(true);
         try {
@@ -810,7 +822,7 @@ export default function ChatDetailScreen() {
             ? String(conversationId).replace('VIRTUAL_CONV_', '')
             : conversationId;
 
-          const suggestions = await ChatApi.getSmartReplies(aiConvId);
+          const suggestions = await ChatApi.getSmartReplies(aiConvId, userIdForChat);
           setSmartReplies((suggestions || []).slice(0, 3));
         } catch (error) {
           console.error("Error fetching smart replies:", error);
@@ -822,8 +834,22 @@ export default function ChatDetailScreen() {
     } else {
       setSmartReplies([]);
       setIsSmartReplyOpen(false);
+      if (smartReplySourceKey) {
+        lastSmartReplyMessageIdRef.current = smartReplySourceKey;
+      }
     }
-  }, [messages.length, messages[messages.length - 1]?._id, conversationId, userIdForChat, loading]);
+  }, [
+    conversation?.last_message?.msg_id,
+    conversation?.last_message?.sender_id,
+    conversation?.last_message?.type,
+    conversationId,
+    messages[0]?._id,
+    messages[0]?.msg_id,
+    messages[0]?.sender_id,
+    messages[0]?.type,
+    userIdForChat,
+    loading,
+  ]);
 
   const isHoldRecordingRef = useRef(false);
   const initialScrollConversationRef = useRef<string | null>(null);
@@ -2540,7 +2566,7 @@ export default function ChatDetailScreen() {
       const aiConvId = String(conversationId).startsWith('VIRTUAL_CONV_')
         ? String(conversationId).replace('VIRTUAL_CONV_', '')
         : conversationId;
-      const result = await ChatApi.summarizeConversation(aiConvId);
+      const result = await ChatApi.summarizeConversation(aiConvId, userIdForChat);
       setSummaryResult(result.summary);
     } catch (error) {
       console.error("Failed to summarize chat:", error);
@@ -2861,7 +2887,7 @@ export default function ChatDetailScreen() {
                         ? String(conversationId).replace('VIRTUAL_CONV_', '')
                         : conversationId;
                       if (aiConvId) {
-                        const replies = await ChatApi.getSmartReplies(aiConvId);
+                        const replies = await ChatApi.getSmartReplies(aiConvId, userIdForChat);
                         setSmartReplies(replies);
                       }
                     } catch (error) {
