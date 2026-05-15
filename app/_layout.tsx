@@ -11,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import '@/global.css';
 
 import { AuthProvider } from '@/contexts/Authcontext';
+import { PresenceProvider } from '@/contexts/PresenceContext';
 import { ThemeProvider } from '@/contexts/Themecontext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { THEME_COLORS } from '@/constants/theme';
@@ -91,10 +92,12 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <ThemeProvider>
             <AuthProvider>
-              <ToastProvider>
-                <RootLayoutNav />
-                <StatusBar style="auto" />
-              </ToastProvider>
+              <PresenceProvider>
+                <ToastProvider>
+                  <RootLayoutNav />
+                  <StatusBar style="auto" />
+                </ToastProvider>
+              </PresenceProvider>
             </AuthProvider>
           </ThemeProvider>
         </SafeAreaProvider>

@@ -55,7 +55,7 @@ export const useGoogleLogin = () => {
         const { authenticated, requires2FA, requiresPhoneSetup, tempToken, token: appToken, refreshToken } = res.result;
 
         if (requires2FA && tempToken) {
-          router.push({ pathname: '/(auth)/verify-2fa', params: { tempToken } });
+          router.push({ pathname: '/(auth)/verify-2fa', params: { tempToken } } as any);
         } else if (requiresPhoneSetup && tempToken) {
           router.push({ pathname: '/(auth)/setup-phone', params: { tempToken } });
         } else if (authenticated && appToken && refreshToken) {

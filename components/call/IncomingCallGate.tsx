@@ -3,6 +3,8 @@ import { Alert } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/Authcontext';
 import { chatSocket, type CallType } from '@/services/socket/chatSocket';
+import { ChatApi } from '@/services/api';
+import { getConversationAvatar, getConversationTitle } from '@/utils/chat';
 
 type IncomingCallPayload = {
   conversationId: string;
@@ -10,6 +12,11 @@ type IncomingCallPayload = {
   callerId: string;
   callType: CallType;
   isGroup?: boolean;
+};
+
+type IncomingCallDisplay = {
+  name: string;
+  avatar: string;
 };
 
 export const IncomingCallGate: React.FC = () => {
@@ -25,7 +32,24 @@ export const IncomingCallGate: React.FC = () => {
     chatSocket.connect();
     chatSocket.joinUserRoom(userId);
 
-    const acceptCall = (payload: IncomingCallPayload) => {
+    const loadIncomingCallDisplay = async (
+      payload: IncomingCallPayload,
+    ): Promise<IncomingCallDisplay> => {
+      try {
+        const conversation = await ChatApi.getConversationById(payload.conversationId);
+        return {
+          name: getConversationTitle(conversation, userId),
+          avatar: getConversationAvatar(conversation, userId),
+        };
+      } catch {
+        return {
+          name: payload.isGroup ? 'Cuộc gọi nhóm' : 'Cuộc gọi',
+          avatar: '',
+        };
+      }
+    };
+
+    const acceptCall = (payload: IncomingCallPayload, display: IncomingCallDisplay) => {
       activeCallKeyRef.current = null;
       router.push({
         pathname: '/(main)/call',
@@ -35,7 +59,8 @@ export const IncomingCallGate: React.FC = () => {
           type: payload.callType,
           action: 'join',
           isGroup: payload.isGroup ? 'true' : 'false',
-          name: payload.isGroup ? 'Cuộc gọi nhóm' : 'Cuộc gọi',
+          name: display.name,
+          avatar: display.avatar,
         },
       } as any);
     };
@@ -50,13 +75,16 @@ export const IncomingCallGate: React.FC = () => {
       );
     };
 
-    const onIncomingCall = (payload: IncomingCallPayload) => {
+    const onIncomingCall = async (payload: IncomingCallPayload) => {
       if (!payload?.conversationId || String(payload.callerId) === String(userId)) return;
       if (pathname?.includes('/call')) return;
 
       const key = payload.callId || payload.conversationId;
       if (activeCallKeyRef.current === key) return;
       activeCallKeyRef.current = key;
+
+      const display = await loadIncomingCallDisplay(payload);
+      if (activeCallKeyRef.current !== key) return;
 
       Alert.alert(
         payload.isGroup
@@ -66,7 +94,7 @@ export const IncomingCallGate: React.FC = () => {
           : payload.callType === 'video'
             ? 'Cuộc gọi video'
             : 'Cuộc gọi thoại',
-        'Có người đang gọi cho bạn.',
+        `${display.name} đang gọi cho bạn.`,
         [
           {
             text: 'Từ chối',
@@ -75,7 +103,7 @@ export const IncomingCallGate: React.FC = () => {
           },
           {
             text: 'Chấp nhận',
-            onPress: () => acceptCall(payload),
+            onPress: () => acceptCall(payload, display),
           },
         ],
         {

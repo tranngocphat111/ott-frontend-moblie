@@ -31,6 +31,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "@/context/Authcontext";
+import { usePresence } from "@/contexts/PresenceContext";
 import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi, chatSocket } from "@/services/api";
 import type {
@@ -128,6 +129,19 @@ const CHAT_BROWN_SOFT = '#f5e8dc';
 const CHAT_PANEL_HEIGHT = 260;
 const MAX_PINNED_MESSAGES = 3;
 const MAX_GROUP_CALL_INVITEES = 7;
+
+const formatLastSeenLabel = (value?: Date | null) => {
+  if (!value) return "Không hoạt động";
+  const diffMs = Date.now() - value.getTime();
+  if (diffMs < 60 * 1000) return "Vừa mới hoạt động";
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 60) return `Hoạt động ${minutes} phút trước`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Hoạt động ${hours} giờ trước`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `Hoạt động ${days} ngày trước`;
+  return "Không hoạt động";
+};
 
 type ChatPanelMediaAsset = {
   id: string;
@@ -594,6 +608,7 @@ export default function ChatDetailScreen() {
       avatar?: string;
     }>();
   const { user, chatUserId } = useAuth();
+  const { isUserOnline, getLastSeen, watchUsers } = usePresence();
 
   const userIdForChat = chatUserId || user?.id;
   const {
@@ -850,6 +865,32 @@ export default function ChatDetailScreen() {
   const title = conversation ? getConversationTitle(conversation, userIdForChat) : (paramTitle || "Tin nhắn");
   const avatar = conversation ? getConversationAvatar(conversation, userIdForChat) : (paramAvatar || "");
   const isGroup = conversation?.type === "group";
+  const otherUserId = conversation?.type === "private"
+    ? String(
+        conversation.participants?.find(
+          (participant) => String(participant.user_id || participant._id || "") !== String(userIdForChat || ""),
+        )?.user_id || "",
+      )
+    : "";
+  const groupMemberIds = conversation?.type === "group"
+    ? (conversation.participants || [])
+        .map((participant) => String(participant.user_id || participant._id || ""))
+        .filter((id) => id && id !== String(userIdForChat || ""))
+    : [];
+  const isOtherOnline = otherUserId ? isUserOnline(otherUserId) : false;
+  const activeCallConversation = conversation as any;
+  const hasActiveCall = !!activeCallConversation?.is_calling;
+
+  useEffect(() => {
+    if (otherUserId) {
+      watchUsers([otherUserId]);
+      return;
+    }
+
+    if (groupMemberIds.length > 0) {
+      watchUsers(groupMemberIds);
+    }
+  }, [groupMemberIds.join(","), otherUserId, watchUsers]);
 
   const typingUserIdList = Object.keys(typingUserIds).filter(
     (id) => id && String(id) !== String(userIdForChat || ""),
@@ -892,7 +933,14 @@ export default function ChatDetailScreen() {
   const hasTypingUsers = typingUserIdList.length > 0;
   const hadTypingUsersRef = useRef(false);
 
-  const headerSubtitle = "Hoạt động gần đây";
+  const onlineGroupCount = groupMemberIds.filter((id) => isUserOnline(id)).length;
+  const headerSubtitle = conversation?.is_self_conversation
+    ? "Cloud của bạn"
+    : conversation?.type === "private"
+      ? isOtherOnline
+        ? "Đang hoạt động"
+        : formatLastSeenLabel(getLastSeen(otherUserId))
+      : `${conversation?.participants?.length || 0} thành viên${onlineGroupCount > 0 ? `, ${onlineGroupCount} đang hoạt động` : ""}`;
 
   const stopTyping = useCallback(() => {
     if (typingStopTimerRef.current) {
@@ -1028,6 +1076,25 @@ export default function ChatDetailScreen() {
     }
 
     const isGroupCall = conversation?.type === 'group';
+    const callMode = isGroupCall ? 'video' : type;
+    const callConversation = conversation as any;
+
+    if (isGroupCall && callConversation?.is_calling && callConversation?.active_call_id) {
+      router.push({
+        pathname: '/(main)/call',
+        params: {
+          conversationId: targetConversationId,
+          type: callConversation.active_call_type || callMode,
+          action: 'join',
+          callId: callConversation.active_call_id,
+          name: title || 'Cuộc gọi',
+          avatar: avatar || '',
+          isGroup: 'true',
+        },
+      } as any);
+      return;
+    }
+
     const inviteeIds = isGroupCall
       ? await getGroupInviteeIds(targetConversationId)
       : [];
@@ -1041,9 +1108,10 @@ export default function ChatDetailScreen() {
       pathname: '/(main)/call',
       params: {
         conversationId: targetConversationId,
-        type,
+        type: callMode,
         action: 'start',
         name: title || 'Cuộc gọi',
+        avatar: avatar || '',
         isGroup: isGroupCall ? 'true' : 'false',
         invitedUserIds: inviteeIds.join(','),
       },
@@ -1051,6 +1119,7 @@ export default function ChatDetailScreen() {
   }, [
     conversation?.is_self_conversation,
     conversation?.type,
+    conversation,
     conversationId,
     ensureConversation,
     getGroupInviteeIds,
@@ -1058,6 +1127,7 @@ export default function ChatDetailScreen() {
     isMyDocuments,
     router,
     title,
+    avatar,
     userIdForChat,
   ]);
 
@@ -1325,7 +1395,7 @@ export default function ChatDetailScreen() {
     }
 
     const pendingMediaIds = messages
-      .slice(-16)
+      .slice(0, 16)
       .filter((message) => !message.is_deleted && !message.is_revoked)
       .filter((message) => message.type === 'image' || message.type === 'video')
       .map((message) => getMessageKey(message))
@@ -1373,29 +1443,21 @@ export default function ChatDetailScreen() {
       return;
     }
 
+    if (initialScrollConversationRef.current === conversationId) {
+      return;
+    }
+
     if (!initialScrollReady || !initialMediaReady) {
       return;
     }
 
+    initialScrollConversationRef.current = conversationId;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         scrollToBottom();
       });
     });
   }, [conversationId, initialMediaReady, initialScrollReady, loading, messages.length, scrollToBottom]);
-
-  useEffect(() => {
-    if (!conversationId || loading || messages.length === 0) {
-      return;
-    }
-
-    if (initialScrollConversationRef.current === conversationId) {
-      return;
-    }
-
-    initialScrollConversationRef.current = conversationId;
-    setPendingScrollToBottom();
-  }, [conversationId, loading, messages.length, setPendingScrollToBottom]);
 
   useEffect(() => {
     return () => {
@@ -2668,6 +2730,7 @@ export default function ChatDetailScreen() {
         <ChatScreenHeader
           title={title}
           subtitle={headerSubtitle}
+          isOnline={conversation?.type === "private" && isOtherOnline}
           accentStart={CHAT_BROWN_DARK}
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
@@ -2698,7 +2761,29 @@ export default function ChatDetailScreen() {
           />
         )}
 
-
+        {hasActiveCall && !isMyDocuments && !conversation?.is_self_conversation && (
+          <View className="border-b border-[#d8b79a] bg-[#fff7ed] px-4 py-2.5">
+            <Pressable
+              onPress={() => void openMobileCall(activeCallConversation?.active_call_type || 'video')}
+              className="flex-row items-center rounded-2xl border border-[#e2b98f] bg-white px-3 py-2.5"
+            >
+              <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-[#16a34a]">
+                <Feather name={activeCallConversation?.active_call_type === 'voice' ? 'phone' : 'video'} size={18} color="#fff" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[14px] font-bold text-[#3b2718]">
+                  Cuộc gọi đang diễn ra
+                </Text>
+                <Text className="mt-0.5 text-[12px] text-[#8b6642]">
+                  Chạm để tham gia cùng cuộc trò chuyện này
+                </Text>
+              </View>
+              <View className="rounded-full bg-[#16a34a] px-3 py-1.5">
+                <Text className="text-[12px] font-bold text-white">Tham gia</Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
 
         {isMyDocuments && (
           <View className="border-b border-[#ead8c7] bg-[#fff9f4] px-3 py-2">

@@ -59,7 +59,7 @@ export default function LandingScreen() {
 
             <TouchableOpacity
               className="bg-transparent rounded-2xl py-3 items-center border border-white/40"
-              onPress={() => router.push('/(auth)/demo-users')}
+              onPress={() => router.push('/(auth)/demo-users' as any)}
               activeOpacity={0.7}
             >
               <Text className="text-white/70 text-xs font-medium">💬 Chế độ Demo (Test nhanh)</Text>

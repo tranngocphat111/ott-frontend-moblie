@@ -16,6 +16,7 @@ type ChatScreenHeaderProps = {
   onVideo?: () => void;
   onMenu?: () => void;
   onSummarize?: () => void;
+  isOnline?: boolean;
 };
 
 export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
@@ -29,6 +30,7 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
   onVideo,
   onMenu,
   onSummarize,
+  isOnline = false,
 }) => {
   return (
     <LinearGradient
@@ -51,9 +53,12 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
             <Text className="text-[16px] font-bold text-white" numberOfLines={1}>
               {title}
             </Text>
-            <Text className="text-[12px] text-white/85" numberOfLines={1}>
-              {subtitle}
-            </Text>
+            <View className="mt-0.5 flex-row items-center">
+              {isOnline && <View className="mr-1.5 h-2 w-2 rounded-full bg-emerald-300" />}
+              <Text className="text-[12px] text-white/85" numberOfLines={1}>
+                {subtitle}
+              </Text>
+            </View>
           </View>
         </View>
 

@@ -102,7 +102,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME_COLORS.surface.default,
+    backgroundColor: THEME_COLORS.surface.DEFAULT,
   },
   center: {
     flex: 1,
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.neutral.slate200,
+    borderBottomColor: '#e2e8f0',
     alignItems: 'center',
   },
   unreadItem: {
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   contentText: {
     fontSize: 15,
-    color: THEME_COLORS.neutral.slate800,
+    color: '#1e293b',
     marginBottom: 4,
   },
   unreadText: {
