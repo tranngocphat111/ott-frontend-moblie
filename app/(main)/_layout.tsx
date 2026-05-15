@@ -1,8 +1,14 @@
 import { Stack } from 'expo-router';
 import { THEME_COLORS } from '@/constants/theme';
 import { IncomingCallGate } from '@/components/call/IncomingCallGate';
+import { useEffect } from 'react';
+import { warmUpAppPermissionsOnce } from '@/utils/appPermissions';
 
 export default function MainLayout() {
+  useEffect(() => {
+    void warmUpAppPermissionsOnce();
+  }, []);
+
   return (
     <>
       <IncomingCallGate />

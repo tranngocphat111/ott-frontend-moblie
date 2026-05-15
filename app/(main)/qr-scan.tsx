@@ -1,6 +1,7 @@
 import { ChatApi } from '@/services/api';
 import { useQrLogin } from '@/hooks/auth/useQrLogin';
 import { useAuth } from '@/contexts/Authcontext';
+import { ensureCameraPermission } from '@/utils/appPermissions';
 import { Feather } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -23,6 +24,19 @@ export default function QrScanScreen() {
 
   const isProcessing = useRef(false);
   const [scanned, setScanned] = useState(false);
+
+  const handleRequestCameraPermission = async () => {
+    const hasPermission = await ensureCameraPermission();
+    if (hasPermission) {
+      await requestPermission();
+      return;
+    }
+
+    Alert.alert(
+      'Quyền camera',
+      'Ứng dụng đã hỏi quyền camera trước đó. Vui lòng bật quyền trong cài đặt thiết bị nếu muốn quét QR.',
+    );
+  };
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (isProcessing.current) return;
@@ -173,7 +187,7 @@ export default function QrScanScreen() {
             Vui lòng cấp quyền truy cập camera để quét mã QR
           </Text>
           <TouchableOpacity
-            onPress={requestPermission}
+            onPress={handleRequestCameraPermission}
             className="bg-brand-600 rounded-xl py-4 px-8"
           >
             <Text className="text-white font-semibold">Cấp quyền</Text>

@@ -67,6 +67,12 @@ import {
   resolveMediaUrl,
 } from "@/utils/chat";
 import {
+  ensureCameraPermission,
+  ensureImageLibraryPermission,
+  ensureMediaLibraryPermission,
+  ensureMicrophonePermission,
+} from "@/utils/appPermissions";
+import {
   useChatPanels,
   useConversationMessages,
   useMessageSocket,
@@ -1370,8 +1376,7 @@ export default function ChatDetailScreen() {
 
     if (message.type === 'image' || message.type === 'video') {
       try {
-        const permission = await MediaLibrary.requestPermissionsAsync();
-        if (permission.granted) {
+        if (await ensureMediaLibraryPermission()) {
           await MediaLibrary.createAssetAsync(downloaded.uri);
           Alert.alert('Lưu file', 'Đã lưu tệp vào thư viện thiết bị.');
           return;
@@ -1497,8 +1502,8 @@ export default function ChatDetailScreen() {
   const loadRecentMedia = useCallback(async (silent = false) => {
     setMediaLoading(true);
     try {
-      const permission = await MediaLibrary.requestPermissionsAsync();
-      if (!permission.granted) {
+      const hasMediaPermission = await ensureMediaLibraryPermission();
+      if (!hasMediaPermission) {
         if (!silent) {
           Alert.alert("Quyền truy cập", "Bạn cần cấp quyền thư viện để hiển thị ảnh/video gần đây.");
         }
@@ -1801,8 +1806,8 @@ export default function ChatDetailScreen() {
     setIsSendingAttachment(true);
     dismissKeyboard();
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
+    const hasLibraryPermission = await ensureImageLibraryPermission();
+    if (!hasLibraryPermission) {
       setIsSendingAttachment(false);
       Alert.alert("Quyền truy cập", "Bạn cần cấp quyền thư viện ảnh để gửi ảnh.");
       return;
@@ -1852,8 +1857,8 @@ export default function ChatDetailScreen() {
     setIsSendingAttachment(true);
     dismissKeyboard();
 
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
+    const hasCameraPermission = await ensureCameraPermission();
+    if (!hasCameraPermission) {
       setIsSendingAttachment(false);
       Alert.alert("Quyền truy cập", "Bạn cần cấp quyền camera để chụp ảnh.");
       return;
@@ -1951,8 +1956,8 @@ export default function ChatDetailScreen() {
     if (isRecordingVoice) return;
     dismissKeyboard();
 
-    const permission = await Audio.requestPermissionsAsync();
-    if (!permission.granted) {
+    const hasMicrophonePermission = await ensureMicrophonePermission();
+    if (!hasMicrophonePermission) {
       Alert.alert("Quyền truy cập", "Bạn cần cấp quyền micro để ghi âm.");
       return;
     }
@@ -2687,8 +2692,8 @@ export default function ChatDetailScreen() {
   const handleTranscribeVoice = useCallback(async () => {
     if (isSTTLoading || isRecordingSTT) return;
 
-    const permission = await Audio.requestPermissionsAsync();
-    if (!permission.granted) {
+    const hasMicrophonePermission = await ensureMicrophonePermission();
+    if (!hasMicrophonePermission) {
       Alert.alert("Quyền truy cập", "Bạn cần cấp quyền micro để sử dụng tính năng này.");
       return;
     }

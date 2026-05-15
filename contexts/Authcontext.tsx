@@ -70,6 +70,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Hợp nhất logic logout: Xóa token và gọi API logout
   const logout = async () => {
     console.log('AuthContext: logout called');
+    const logoutUserId = user?.id || null;
+    const socketCleanupPromise = import('../services/socket/chatSocket')
+      .then(async ({ chatSocket }) => {
+        if (logoutUserId) {
+          await chatSocket.leaveAllCallsForLogout(logoutUserId);
+        }
+        chatSocket.disconnect();
+      })
+      .catch((error) => {
+        console.error('AuthContext: call cleanup on logout failed:', error);
+      });
+
     try {
       const token = await SecureStore.getItemAsync('accessToken');
       if (token) {
@@ -79,6 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('AuthContext: Logout API error:', error);
     } finally {
+      await socketCleanupPromise;
       await clearLocalSession();
 
       router.replace('/(auth)/login');
