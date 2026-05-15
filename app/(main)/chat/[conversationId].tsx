@@ -626,6 +626,7 @@ export default function ChatDetailScreen() {
     isDissolved,
     setMessages,
     setPinnedMessages,
+    setConversation,
     loadConversation,
     normalizeMessages,
     normalizePinnedMessages,
@@ -1085,14 +1086,14 @@ export default function ChatDetailScreen() {
     const callMode = isGroupCall ? 'video' : type;
     const callConversation = conversation as any;
 
-    if (isGroupCall && callConversation?.is_calling && callConversation?.active_call_id) {
+    if (isGroupCall && callConversation?.is_calling) {
       router.push({
         pathname: '/(main)/call',
         params: {
           conversationId: targetConversationId,
           type: callConversation.active_call_type || callMode,
           action: 'join',
-          callId: callConversation.active_call_id,
+          callId: callConversation.active_call_id || '',
           name: title || 'Cuộc gọi',
           avatar: avatar || '',
           isGroup: 'true',
@@ -2463,6 +2464,25 @@ export default function ChatDetailScreen() {
     [conversationId, loadConversation],
   );
 
+  const handleGroupCallUpdated = useCallback(
+    (payload: any) => {
+      const payloadConvId = String(payload?.conversationId || "");
+      if (payloadConvId !== String(conversationId || "")) return;
+
+      setConversation((current: any) => {
+        if (!current) return current;
+        return {
+          ...current,
+          is_calling: !!payload?.isCalling,
+          active_call_id: payload?.isCalling ? String(payload?.callId || "") : "",
+          active_call_type: payload?.isCalling ? (payload?.callType || "video") : undefined,
+          active_call_participant_count: Number(payload?.participantCount || 0),
+        };
+      });
+    },
+    [conversationId, setConversation],
+  );
+
   // Setup socket listeners
   useMessageSocket({
     conversationId,
@@ -2480,6 +2500,7 @@ export default function ChatDetailScreen() {
     onGroupDissolved: handleGroupDissolved,
     onConversationSynced: handleConversationSynced,
     onGroupUpdated: handleGroupUpdated,
+    onGroupCallUpdated: handleGroupCallUpdated,
   });
 
   useEffect(() => {

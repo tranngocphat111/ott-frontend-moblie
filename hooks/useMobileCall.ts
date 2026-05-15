@@ -5,7 +5,7 @@ import {
   RTCIceCandidate,
   RTCPeerConnection,
   RTCSessionDescription,
-} from 'react-native-webrtc';
+} from '@livekit/react-native-webrtc';
 import { chatSocket, type CallType } from '@/services/socket/chatSocket';
 
 type RemoteStreamItem = {
@@ -89,6 +89,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
   const [busyUserIds, setBusyUserIds] = useState<string[]>([]);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [isGroup, setIsGroup] = useState(false);
+  const [livekitToken, setLivekitToken] = useState<string | null>(null);
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -96,6 +97,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
   const pendingIceCandidatesRef = useRef<Map<string, any[]>>(new Map());
   const activeConversationRef = useRef<string | null>(null);
   const activeCallIdRef = useRef<string | null>(null);
+  const livekitTokenRef = useRef<string | null>(null);
   const userIdRef = useRef(userId);
   const callTypeRef = useRef<CallType | null>(callType);
   const isGroupRef = useRef(false);
@@ -119,6 +121,12 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     const normalized = normalizeId(nextCallId);
     activeCallIdRef.current = normalized || null;
     setCurrentCallId(normalized || null);
+  }, []);
+
+  const setActiveLiveKitToken = useCallback((nextToken?: string | null) => {
+    const normalized = normalizeId(nextToken);
+    livekitTokenRef.current = normalized || null;
+    setLivekitToken(normalized || null);
   }, []);
 
   const isPayloadForActiveCall = useCallback(
@@ -154,8 +162,10 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     setBusyUserIds([]);
     setIsGroup(false);
     setCurrentCallId(null);
+    setLivekitToken(null);
     activeConversationRef.current = null;
     activeCallIdRef.current = null;
+    livekitTokenRef.current = null;
     remoteStreamRef.current.clear();
     pendingIceCandidatesRef.current.clear();
     hasRemoteConnectedRef.current = false;
@@ -463,22 +473,35 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
 
       try {
         const effectiveMode: CallType = isGroupCall ? 'video' : mode;
+        const isGroupSession = !!isGroupCall;
         setIsConnecting(true);
         setBusyUserIds([]);
-        await ensureLocalStream(effectiveMode);
+        if (!isGroupSession) {
+          await ensureLocalStream(effectiveMode);
+        }
 
         activeConversationRef.current = conversationId;
         setCallType(effectiveMode);
-        setIsGroup(!!isGroupCall);
-        isGroupRef.current = !!isGroupCall;
+        setIsGroup(isGroupSession);
+        isGroupRef.current = isGroupSession;
         setIsInCall(true);
 
-        const response = await chatSocket.startCall(
+        let response = await chatSocket.startCall(
           conversationId,
           userId,
           effectiveMode,
           invitedUserIds,
         );
+
+        if (!response?.ok && response?.reason === 'already_active' && isGroupSession) {
+          setActiveCallId(response.callId || null);
+          response = await chatSocket.joinCall(
+            conversationId,
+            userId,
+            effectiveMode,
+            response.callId || null,
+          );
+        }
 
         if (!response?.ok && response?.reason === 'busy' && response.targetUserId) {
           setBusyUserIds([response.targetUserId]);
@@ -492,7 +515,21 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
 
         setActiveCallId(response.callId || null);
         setParticipants(response.participants || [userId]);
-        setIsGroup(!!response.isGroup || !!isGroupCall);
+        const nextIsGroup = !!response.isGroup || isGroupSession;
+        setIsGroup(nextIsGroup);
+        isGroupRef.current = nextIsGroup;
+        setActiveLiveKitToken(response.livekitToken || null);
+
+        if (nextIsGroup && response.livekitToken) {
+          setIsMuted(false);
+          setIsCameraOff(false);
+          return;
+        }
+
+        if (nextIsGroup && !localStreamRef.current) {
+          await ensureLocalStream(effectiveMode);
+        }
+
         if (effectiveMode === 'video') {
           emitLocalCameraState(
             !localStreamRef.current?.getVideoTracks().some(isLiveTrack),
@@ -505,7 +542,15 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setIsConnecting(false);
       }
     },
-    [closeCallLocally, conversationId, emitLocalCameraState, ensureLocalStream, setActiveCallId, userId],
+    [
+      closeCallLocally,
+      conversationId,
+      emitLocalCameraState,
+      ensureLocalStream,
+      setActiveCallId,
+      setActiveLiveKitToken,
+      userId,
+    ],
   );
 
   const joinExistingCall = useCallback(
@@ -514,13 +559,16 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
 
       try {
         const effectiveMode: CallType = isGroupCall ? 'video' : mode;
+        const isGroupSession = !!isGroupCall;
         setIsConnecting(true);
-        await ensureLocalStream(effectiveMode);
+        if (!isGroupSession) {
+          await ensureLocalStream(effectiveMode);
+        }
 
         activeConversationRef.current = conversationId;
         setCallType(effectiveMode);
-        setIsGroup(!!isGroupCall);
-        isGroupRef.current = !!isGroupCall;
+        setIsGroup(isGroupSession);
+        isGroupRef.current = isGroupSession;
         setIsInCall(true);
         setActiveCallId(callId || null);
 
@@ -537,7 +585,21 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
 
         setActiveCallId(response.callId || callId || null);
         setParticipants(response.participants || [userId]);
-        setIsGroup(!!response.isGroup || !!isGroupCall);
+        const nextIsGroup = !!response.isGroup || isGroupSession;
+        setIsGroup(nextIsGroup);
+        isGroupRef.current = nextIsGroup;
+        setActiveLiveKitToken(response.livekitToken || null);
+
+        if (nextIsGroup && response.livekitToken) {
+          setIsMuted(false);
+          setIsCameraOff(false);
+          return;
+        }
+
+        if (nextIsGroup && !localStreamRef.current) {
+          await ensureLocalStream(effectiveMode);
+        }
+
         if (effectiveMode === 'video') {
           emitLocalCameraState(
             !localStreamRef.current?.getVideoTracks().some(isLiveTrack),
@@ -550,7 +612,14 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setIsConnecting(false);
       }
     },
-    [conversationId, emitLocalCameraState, ensureLocalStream, setActiveCallId, userId],
+    [
+      conversationId,
+      emitLocalCameraState,
+      ensureLocalStream,
+      setActiveCallId,
+      setActiveLiveKitToken,
+      userId,
+    ],
   );
 
   const endCall = useCallback(async (notifyRemote = true) => {
@@ -671,18 +740,23 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       participants: string[];
       callType: CallType;
       isGroup?: boolean;
+      livekitToken?: string | null;
     }) => {
       if (!userIdRef.current || !isPayloadForActiveCall(payload)) return;
 
       setParticipants(payload.participants || []);
       setCallType(payload.callType);
       setIsGroup(!!payload.isGroup);
+      if (payload.livekitToken && String(payload.userId) === String(userIdRef.current)) {
+        setActiveLiveKitToken(payload.livekitToken);
+      }
 
       if (payload.participants?.some((id) => String(id) !== String(userIdRef.current))) {
         markRemoteConnected();
       }
 
       if (String(payload.userId) === String(userIdRef.current)) return;
+      if (payload.isGroup && (payload.livekitToken || livekitTokenRef.current)) return;
       if (!localStreamRef.current) return;
       if (peerConnectionsRef.current.has(payload.userId)) return;
 
@@ -701,6 +775,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       callType: CallType;
     }) => {
       if (!userIdRef.current || !isPayloadForActiveCall(payload)) return;
+      if (isGroupRef.current && livekitTokenRef.current) return;
 
       try {
         const pc = getOrCreatePeer(payload.fromUserId, payload.callType);
@@ -804,11 +879,13 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       callType: CallType;
       participants?: string[];
       isGroup?: boolean;
+      livekitToken?: string | null;
     }) => {
       if (!isPayloadForActiveCall(payload)) return;
       setCallType(payload.callType);
       if (payload.callId) setActiveCallId(payload.callId);
       if (payload.participants) setParticipants(payload.participants);
+      if (payload.livekitToken) setActiveLiveKitToken(payload.livekitToken);
       if (payload.isGroup) {
         isGroupRef.current = true;
         setIsGroup(true);
@@ -860,6 +937,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     isPayloadForActiveCall,
     markRemoteConnected,
     setActiveCallId,
+    setActiveLiveKitToken,
   ]);
 
   useEffect(() => {
@@ -894,6 +972,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       busyUserIds,
       currentCallId,
       isGroup,
+      livekitToken,
       startCall,
       joinExistingCall,
       endCall,
@@ -912,6 +991,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       isInCall,
       isMuted,
       joinExistingCall,
+      livekitToken,
       localStream,
       participants,
       remoteStreams,
