@@ -13,6 +13,7 @@ import { THEME_COLORS } from '@/constants/theme';
 import { Pin } from 'lucide-react-native';
 import type { ChatCategory } from '@/services/api/chat';
 import { ChatApi } from '@/services/api';
+import { usePresence } from '@/contexts/PresenceContext';
 
 interface ConversationItemProps {
   item: ChatConversationWithParticipant;
@@ -47,6 +48,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
   const liftAnim = React.useRef(new Animated.Value(0)).current;
   const [relationship, setRelationship] = React.useState<any>(null);
+  const { isUserOnline, watchUsers } = usePresence();
   
   const loadRelationship = React.useCallback(async () => {
     if (item.conversation.type === "private" && currentUserId) {
@@ -71,9 +73,20 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const avatar = getConversationAvatar(conversation, currentUserId);
   const unreadCount = participant.unread_count || 0;
   const isPinned = !!participant.settings?.is_pinned;
-  const isOnline = conversation.participants?.some(
-    (member) => member.status === 'online' && String(member.user_id || '') !== String(currentUserId || ''),
-  );
+  const otherUserIds = (conversation.participants || [])
+    .map((member) => String(member.user_id || (member as any)._id || ''))
+    .filter((id) => id && String(id) !== String(currentUserId || ''));
+  const isOnline = conversation.type === 'private'
+    ? isUserOnline(otherUserIds[0])
+    : otherUserIds.some((id) => isUserOnline(id));
+  const activeCallConversation = conversation as any;
+  const hasActiveCall = !!activeCallConversation?.is_calling;
+
+  React.useEffect(() => {
+    if (otherUserIds.length > 0) {
+      watchUsers(otherUserIds);
+    }
+  }, [otherUserIds.join(','), watchUsers]);
   const previewText = conversation.last_message
     ? getMessageBodyText({
         _id: conversation.last_message.msg_id,
@@ -225,6 +238,15 @@ React.useEffect(() => {
                 />
                 <Text className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                   {category.name}
+                </Text>
+              </View>
+            )}
+
+            {hasActiveCall && (
+              <View className="mb-1 flex-row items-center self-start rounded-full bg-emerald-50 px-2 py-1">
+                <View className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500" />
+                <Text className="text-[11px] font-bold text-emerald-700">
+                  Đang có cuộc gọi - mở để tham gia
                 </Text>
               </View>
             )}

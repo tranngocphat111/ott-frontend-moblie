@@ -38,6 +38,9 @@ type ChatSocketEventMap = {
 	cap_nhat_quan_he: (payload: any) => void;
 	cap_nhat_thong_tin_ca_nhan: (payload: any) => void;
 	buoc_dang_xuat: (payload: any) => void;
+	thong_bao_moi: (payload: any) => void;
+	ket_qua_trang_thai_hoat_dong: (payload: { userId: string; isOnline: boolean; lastSeenAt?: string | null }[]) => void;
+	trang_thai_hoat_dong: (payload: { userId: string; isOnline: boolean; lastSeenAt?: string | null }) => void;
 	san_sang_de_goi: (payload: { conversationId: string }) => void;
 	nguoi_dung_ban_goi: (payload: { conversationId: string; targetUserId: string; reason?: string }) => void;
 	bat_dau_goi_thanh_cong: (payload: {
@@ -110,6 +113,7 @@ type ChatSocketEventMap = {
 
 class ChatSocketService {
 	private socket: Socket | null = null;
+	private userRoomId: string | null = null;
 
 	private getSocketBaseUrl() {
 		// Extract origin (protocol://host:port) to hit the gateway's socket.io proxy
@@ -223,6 +227,7 @@ class ChatSocketService {
 
 	joinUserRoom(userId: string) {
 		const socket = this.ensureSocket();
+		this.userRoomId = userId;
 		const joinAction = () => socket.emit('tham_gia_user_room', userId);
 
 		if (socket.connected) {
@@ -270,6 +275,19 @@ class ChatSocketService {
 		} else {
 			socket.once('connect', action);
 		}
+	}
+
+	refreshPresence(userId?: string) {
+		const activeUserId = userId || this.userRoomId;
+		if (!activeUserId) return;
+		this.userRoomId = activeUserId;
+		this.emitWhenConnected('presence_heartbeat', { userId: activeUserId });
+	}
+
+	queryPresence(userIds: string[]) {
+		const uniqueUserIds = Array.from(new Set(userIds.map((id) => String(id || '').trim()).filter(Boolean)));
+		if (!uniqueUserIds.length) return;
+		this.emitWhenConnected('hoi_trang_thai_hoat_dong', { userIds: uniqueUserIds });
 	}
 
 	startCall(

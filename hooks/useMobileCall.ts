@@ -60,6 +60,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
   const [participants, setParticipants] = useState<string[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [remoteCameraStates, setRemoteCameraStates] = useState<Record<string, boolean>>({});
   const [busyUserIds, setBusyUserIds] = useState<string[]>([]);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [isGroup, setIsGroup] = useState(false);
@@ -124,6 +125,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     setParticipants([]);
     setIsMuted(false);
     setIsCameraOff(false);
+    setRemoteCameraStates({});
     setBusyUserIds([]);
     setIsGroup(false);
     setCurrentCallId(null);
@@ -156,6 +158,12 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     peerConnectionsRef.current.delete(targetUserId);
     remoteStreamRef.current.delete(targetUserId);
     pendingIceCandidatesRef.current.delete(targetUserId);
+    setRemoteCameraStates((current) => {
+      if (!(targetUserId in current)) return current;
+      const copy = { ...current };
+      delete copy[targetUserId];
+      return copy;
+    });
     setRemoteStreams((current) => current.filter((item) => item.userId !== targetUserId));
   }, []);
 
@@ -370,6 +378,9 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setActiveCallId(response.callId || null);
         setParticipants(response.participants || [userId]);
         setIsGroup(!!response.isGroup || !!isGroupCall);
+      } catch (error) {
+        closeCallLocally();
+        throw error;
       } finally {
         setIsConnecting(false);
       }
@@ -406,6 +417,9 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         setActiveCallId(response.callId || callId || null);
         setParticipants(response.participants || [userId]);
         setIsGroup(!!response.isGroup || !!isGroupCall);
+      } catch (error) {
+        closeCallLocally();
+        throw error;
       } finally {
         setIsConnecting(false);
       }
@@ -589,22 +603,69 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       );
     };
 
+    const handleCallDeclined = (payload: {
+      conversationId: string;
+      callId?: string;
+      userId: string;
+    }) => {
+      if (!isPayloadForActiveCall(payload)) return;
+      if (!isGroupRef.current) {
+        void endCall(false);
+      }
+    };
+
+    const handleStartCallSuccess = (payload: {
+      conversationId: string;
+      callId?: string;
+      callType: CallType;
+      participants?: string[];
+      isGroup?: boolean;
+    }) => {
+      if (!isPayloadForActiveCall(payload)) return;
+      setCallType(payload.callType);
+      if (payload.callId) setActiveCallId(payload.callId);
+      if (payload.participants) setParticipants(payload.participants);
+      if (payload.isGroup) {
+        isGroupRef.current = true;
+        setIsGroup(true);
+      }
+    };
+
+    const handleCameraStateChanged = (payload: {
+      conversationId: string;
+      callId?: string;
+      userId: string;
+      isCameraOff: boolean;
+    }) => {
+      if (!isPayloadForActiveCall(payload)) return;
+      setRemoteCameraStates((current) => ({
+        ...current,
+        [payload.userId]: payload.isCameraOff,
+      }));
+    };
+
+    chatSocket.on('bat_dau_goi_thanh_cong', handleStartCallSuccess as any);
     chatSocket.on('nguoi_dung_tham_gia_goi', handleCallJoined as any);
     chatSocket.on('nhan_offer', handleOffer as any);
     chatSocket.on('nhan_answer', handleAnswer as any);
     chatSocket.on('nhan_ice_candidate', handleIceCandidate as any);
     chatSocket.on('nguoi_dung_roi_goi', handleCallLeft as any);
     chatSocket.on('ket_thuc_phong_goi', handleCallEnded as any);
+    chatSocket.on('nguoi_dung_tu_choi_goi', handleCallDeclined as any);
     chatSocket.on('nguoi_dung_ban_goi', handleCallBusy as any);
+    chatSocket.on('thay_doi_trang_thai_camera', handleCameraStateChanged as any);
 
     return () => {
+      chatSocket.off('bat_dau_goi_thanh_cong', handleStartCallSuccess as any);
       chatSocket.off('nguoi_dung_tham_gia_goi', handleCallJoined as any);
       chatSocket.off('nhan_offer', handleOffer as any);
       chatSocket.off('nhan_answer', handleAnswer as any);
       chatSocket.off('nhan_ice_candidate', handleIceCandidate as any);
       chatSocket.off('nguoi_dung_roi_goi', handleCallLeft as any);
       chatSocket.off('ket_thuc_phong_goi', handleCallEnded as any);
+      chatSocket.off('nguoi_dung_tu_choi_goi', handleCallDeclined as any);
       chatSocket.off('nguoi_dung_ban_goi', handleCallBusy as any);
+      chatSocket.off('thay_doi_trang_thai_camera', handleCameraStateChanged as any);
     };
   }, [
     cleanupPeer,
@@ -614,6 +675,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     getOrCreatePeer,
     isPayloadForActiveCall,
     markRemoteConnected,
+    setActiveCallId,
   ]);
 
   useEffect(() => {
@@ -644,6 +706,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       participants,
       isMuted,
       isCameraOff,
+      remoteCameraStates,
       busyUserIds,
       currentCallId,
       isGroup,
@@ -659,6 +722,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       currentCallId,
       endCall,
       isCameraOff,
+      remoteCameraStates,
       isConnecting,
       isGroup,
       isInCall,

@@ -163,7 +163,7 @@ export const useRegister = () => {
 
         if (loginResponse.result?.token && loginResponse.result?.refreshToken) {
           await setTokens(loginResponse.result.token, loginResponse.result.refreshToken);
-          router.replace('/(tabs)/home');
+          router.replace('/(main)/(tabs)/home');
           return true;
         }
       } catch {

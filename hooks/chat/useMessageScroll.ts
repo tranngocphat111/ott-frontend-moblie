@@ -158,17 +158,18 @@ export function useMessageScroll({
 
   const onScroll = useCallback((event: any) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
-    const distanceToTop =
+    const distanceToOldest =
       event.nativeEvent.contentSize.height -
       (event.nativeEvent.layoutMeasurement.height + currentOffset);
 
+    // FlashList is inverted: offset 0 is the newest message at the bottom.
     if (currentOffset > 120) {
       setScrollToBottomVisible(true);
     } else {
       setScrollToBottomVisible(false);
     }
 
-    if (distanceToTop < 120) {
+    if (distanceToOldest < 120) {
       void loadOlderMessages();
     }
 
