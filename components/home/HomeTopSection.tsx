@@ -11,6 +11,7 @@ type HomeTopSectionProps = {
   onCreateConversation: () => void;
   onAddFriend: () => void;
   onOpenQrScanner: () => void;
+  onOpenNotifications: () => void;
   onOpenFilter: () => void;
   onClearFilter: () => void;
   filterMode: 'all' | 'unread' | 'category';
@@ -31,6 +32,7 @@ export function HomeTopSection({
   onCreateConversation,
   onAddFriend,
   onOpenQrScanner,
+  onOpenNotifications,
   onOpenFilter,
   onClearFilter,
   filterMode,
@@ -68,6 +70,9 @@ export function HomeTopSection({
     <View className="flex-row items-center gap-2">
       <Pressable onPress={onOpenQrScanner} className="h-9 w-9 items-center justify-center">
         <Feather name="maximize" size={18} color={THEME_COLORS.neutral.white} />
+      </Pressable>
+      <Pressable onPress={onOpenNotifications} className="h-9 w-9 items-center justify-center">
+        <Feather name="bell" size={20} color={THEME_COLORS.neutral.white} />
       </Pressable>
       <Pressable onPress={handleToggleMenu} className="h-9 w-9 items-center justify-center">
         <Feather name="plus" size={22} color={THEME_COLORS.neutral.white} />
