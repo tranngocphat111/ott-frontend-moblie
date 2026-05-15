@@ -10,7 +10,7 @@ export function useTwoFactor() {
   const [status, setStatus] = useState<TwoFactorAuthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetchStatus();

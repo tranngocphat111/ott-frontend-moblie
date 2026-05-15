@@ -9,33 +9,15 @@
     "baseUrl": ".",
     "ignoreDeprecations": "5.0",
     "paths": {
-      "@/*": [
-        "./*"
-      ],
-      "@/components/*": [
-        "./components/*"
-      ],
-      "@/constants/*": [
-        "./constants/*"
-      ],
-      "@/hooks/*": [
-        "./hooks/*"
-      ],
-      "@/utils/*": [
-        "./utils/*"
-      ],
-      "@/services/*": [
-        "./services/*"
-      ],
-      "@/types/*": [
-        "./types/*"
-      ],
-      "@/context/*": [
-        "contexts/*"
-      ],
-      "@/assets/*": [
-        "./assets/*"
-      ]
+      "@/*": ["./*"],
+      "@/components/*": ["./components/*"],
+      "@/constants/*": ["./constants/*"],
+      "@/hooks/*": ["./hooks/*"],
+      "@/utils/*": ["./utils/*"],
+      "@/services/*": ["./services/*"],
+      "@/types/*": ["./types/*"],
+      "@/context/*": ["./contexts/*"],
+      "@/assets/*": ["./assets/*"]
     }
   },
   "include": [
@@ -46,6 +28,10 @@
     "nativewind-env.d.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "src",
+    "vite.config.ts",
+    "tsconfig.app.json",
+    "tsconfig.node.json"
   ]
 }

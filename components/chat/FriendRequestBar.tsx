@@ -57,7 +57,7 @@ export const FriendRequestBar: React.FC<FriendRequestBarProps> = ({
 
   const handleSendRequest = async () => {
     if (conversation?.type !== 'private' || !currentUserId) return;
-    const otherParticipantId = conversation.participants?.find(p => String((p as any).user_id) !== String(currentUserId))?.user_id;
+    const otherParticipantId = conversation.participants?.find((p: any) => String(p.user_id) !== String(currentUserId))?.user_id;
     if (!otherParticipantId) return;
 
     setLoading(true);

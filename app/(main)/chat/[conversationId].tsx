@@ -6,7 +6,6 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -31,7 +30,6 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from "@/context/Authcontext";
 import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi, chatSocket } from "@/services/api";
@@ -129,7 +127,7 @@ const CHAT_BROWN = '#d2a177';
 const CHAT_BROWN_SOFT = '#f5e8dc';
 const CHAT_PANEL_HEIGHT = 260;
 const MAX_PINNED_MESSAGES = 3;
-const WEB_CALL_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL || 'http://localhost:5173';
+const MAX_GROUP_CALL_INVITEES = 7;
 
 type ChatPanelMediaAsset = {
   id: string;
@@ -997,29 +995,71 @@ export default function ChatDetailScreen() {
     }
   }, [conversationId, hasTypingUsers, loading, scrollToBottom, showScrollToBottom]);
 
-  const openWebCall = useCallback(async (type: 'voice' | 'video') => {
-    if (!conversationId) return;
+  const getGroupInviteeIds = useCallback(async (targetConversationId: string) => {
+    const fromConversation = (conversation?.participants || [])
+      .map((participant: any) => String(participant.user_id || participant._id || ''))
+      .filter((id) => id && String(id) !== String(userIdForChat))
+      .slice(0, MAX_GROUP_CALL_INVITEES);
 
-    const callName = encodeURIComponent(title || 'Cuoc goi');
-    const base = String(WEB_CALL_BASE_URL || '').replace(/\/$/, '');
-    const callUrl = `${base}/call?conversationId=${encodeURIComponent(String(conversationId))}&type=${type}&action=start&name=${callName}`;
+    if (fromConversation.length > 0) {
+      return fromConversation;
+    }
 
     try {
-      const canOpen = await Linking.canOpenURL(callUrl);
-      if (!canOpen) {
-        Alert.alert('Lỗi', 'Không thể mở trang gọi của web.');
-        return;
-      }
-
-      await WebBrowser.openBrowserAsync(callUrl, {
-        showTitle: true,
-        enableDefaultShareMenuItem: false,
-      });
+      const members = await ChatApi.getConversationMembers(targetConversationId);
+      return (members || [])
+        .map((member: any) => String(member.user_id || member._id || ''))
+        .filter((id) => id && String(id) !== String(userIdForChat))
+        .slice(0, MAX_GROUP_CALL_INVITEES);
     } catch (error) {
-      console.error('Failed to open web call:', error);
-      Alert.alert('Lỗi', 'Không thể mở cuộc gọi web. Vui lòng kiểm tra EXPO_PUBLIC_WEB_URL.');
+      console.warn('Không thể tải thành viên để gọi nhóm:', error);
+      return [];
     }
-  }, [conversationId, title]);
+  }, [conversation?.participants, userIdForChat]);
+
+  const openMobileCall = useCallback(async (type: 'voice' | 'video') => {
+    if (!conversationId || !userIdForChat) return;
+    if (isChatLocked || isMyDocuments || conversation?.is_self_conversation) return;
+
+    const targetConversationId = await ensureConversation();
+    if (!targetConversationId) {
+      Alert.alert('Không thể gọi', 'Không tìm thấy cuộc trò chuyện để bắt đầu gọi.');
+      return;
+    }
+
+    const isGroupCall = conversation?.type === 'group';
+    const inviteeIds = isGroupCall
+      ? await getGroupInviteeIds(targetConversationId)
+      : [];
+
+    if (isGroupCall && inviteeIds.length === 0) {
+      Alert.alert('Không thể gọi nhóm', 'Không tìm thấy thành viên nào để mời vào cuộc gọi.');
+      return;
+    }
+
+    router.push({
+      pathname: '/(main)/call',
+      params: {
+        conversationId: targetConversationId,
+        type,
+        action: 'start',
+        name: title || 'Cuộc gọi',
+        isGroup: isGroupCall ? 'true' : 'false',
+        invitedUserIds: inviteeIds.join(','),
+      },
+    } as any);
+  }, [
+    conversation?.is_self_conversation,
+    conversation?.type,
+    conversationId,
+    ensureConversation,
+    getGroupInviteeIds,
+    isChatLocked,
+    isMyDocuments,
+    router,
+    title,
+    userIdForChat,
+  ]);
 
   const handleCallMessagePress = useCallback((message: ChatMessage) => {
     const firstContent = Array.isArray(message.content) ? message.content[0] : message.content;
@@ -1030,8 +1070,8 @@ export default function ChatDetailScreen() {
         : '';
 
     const isVideoCall = /video/i.test(String(raw || ''));
-    void openWebCall(isVideoCall ? 'video' : 'voice');
-  }, [openWebCall]);
+    void openMobileCall(isVideoCall ? 'video' : 'voice');
+  }, [openMobileCall]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -2638,8 +2678,8 @@ export default function ChatDetailScreen() {
               router.replace("/(main)/(tabs)/home");
             }
           }}
-          onPhone={isMyDocuments ? undefined : () => void openWebCall('voice')}
-          onVideo={isMyDocuments ? undefined : () => void openWebCall('video')}
+          onPhone={isMyDocuments ? undefined : () => void openMobileCall('voice')}
+          onVideo={isMyDocuments ? undefined : () => void openMobileCall('video')}
           onSummarize={handleSummarizeChat}
           onMenu={() =>
             router.push({

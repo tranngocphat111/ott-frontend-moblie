@@ -146,7 +146,7 @@ export default function QrLoginScreen() {
                 <View className="flex-row items-start">
                   <Text className="text-blue-800 mr-2">2.</Text>
                   <Text className="flex-1 text-blue-800">
-                    Nhấn vào "Quét mã QR" tại màn hình đăng nhập
+                    Nhấn vào &quot;Quét mã QR&quot; tại màn hình đăng nhập
                   </Text>
                 </View>
                 <View className="flex-row items-start">

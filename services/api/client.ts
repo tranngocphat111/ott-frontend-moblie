@@ -8,6 +8,31 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { ApiError, ApiResponse, DeviceType } from '../../types';
 
+const getApiErrorMessage = (
+  error: AxiosError<ApiResponse | Record<string, unknown>>,
+  fallbackBaseUrl: string
+) => {
+  const data = error.response?.data as (ApiResponse & { error?: string; path?: string }) | undefined;
+
+  if (data?.message) return data.message;
+  if (data?.error) return data.error;
+
+  if (!error.response) {
+    return `Cannot connect to API (${fallbackBaseUrl})`;
+  }
+
+  const url = error.config?.url ?? 'unknown endpoint';
+  return `Request failed (${error.response.status}) at ${url}`;
+};
+
+const getApiErrorCode = (
+  error: AxiosError<ApiResponse | Record<string, unknown>>,
+  fallbackCode: number
+) => {
+  const code = (error.response?.data as ApiResponse | undefined)?.code;
+  return typeof code === 'number' ? code : fallbackCode;
+};
+
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
@@ -59,14 +84,23 @@ const addRefreshSubscriber = (cb: (token: string) => void) => {
 apiClient.interceptors.response.use(
   (response) => response.data,
 
-  async (error: AxiosError<ApiResponse>) => {
+  async (error: AxiosError<ApiResponse | Record<string, unknown>>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     const apiError: ApiError = {
-      code: error.response?.data?.code ?? error.response?.status ?? 500,
-      message: error.response?.data?.message ?? 'An error occurred',
+      code: getApiErrorCode(error, error.response?.status ?? 500),
+      message: getApiErrorMessage(error, API_CONFIG.BASE_URL),
       details: error.response?.data,
     };
+
+    console.log('API Error:', {
+      method: originalRequest?.method,
+      url: originalRequest?.url,
+      status: error.response?.status,
+      baseURL: originalRequest?.baseURL,
+      data: error.response?.data,
+      message: error.message,
+    });
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       const refreshToken = await SecureStore.getItemAsync('refreshToken');
@@ -149,7 +183,7 @@ chatApiClient.interceptors.response.use(
     console.log('✅ CHAT API Success:', response.config.url, response.status);
     return response.data;
   },
-  async (error: AxiosError<ApiResponse>) => {
+  async (error: AxiosError<ApiResponse | Record<string, unknown>>) => {
     const errorPayload = String(error.response?.data?.message || error.response?.data?.message || '');
     const isPinLimitError =
       error.config?.url?.includes('/pin') &&
@@ -163,10 +197,9 @@ chatApiClient.interceptors.response.use(
     const isNetworkError = !error.response;
 
     const apiError: ApiError = {
-      code: error.response?.data?.code || (isNetworkError ? 503 : 500),
+      code: getApiErrorCode(error, isNetworkError ? 503 : 500),
       message:
-        error.response?.data?.message ||
-        (error.response?.data as any)?.error ||
+        getApiErrorMessage(error, CHAT_API_CONFIG.BASE_URL) ||
         (isNetworkError
           ? `Cannot connect to chat-service (${CHAT_API_CONFIG.BASE_URL})`
           : 'An error occurred'),

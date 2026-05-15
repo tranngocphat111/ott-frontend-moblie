@@ -16,7 +16,7 @@ const OTP_EXPIRY_SECONDS = 120;
 
 export const useLinkPhone = () => {
   const router = useRouter();
-  const { updateUser } = useAuth();
+  const { updateProfile } = useAuth();
   
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<LinkPhoneErrors>({});
@@ -107,7 +107,7 @@ export const useLinkPhone = () => {
       const response = await linkingApi.linkPhone(phone, otp);
 
       if (response.code === 1000 && response.result) {
-        await updateUser(response.result);
+        updateProfile(response.result);
         Alert.alert(
           'Thành công',
           'Đã liên kết số điện thoại thành công',

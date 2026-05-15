@@ -23,7 +23,7 @@ export default function LandingScreen() {
           <View className="pt-8 items-center">
             <View className="w-24 h-24 rounded-3xl bg-white/20 border border-white/30 items-center justify-center overflow-hidden">
               <Image
-                source={require('../../assets/logo_tach_nen.jpg')}
+                source={require('../../assets/logo_tach_nen.png')}
                 className="w-20 h-20"
                 resizeMode="contain"
               />
