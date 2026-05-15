@@ -218,17 +218,37 @@ export const chatMessageApi = {
     });
   },
 
-  async getSmartReplies(conversationId: string): Promise<string[]> {
-    const response = await chatApiClient.get<string[] | { result: string[] }>('/ai/smart-replies', {
-      params: { conversationId },
+  async getSmartReplies(conversationId: string, userId?: string): Promise<string[]> {
+    const response = await chatApiClient.get<
+      string[] | { result?: string[]; replies?: string[]; suggestions?: Array<string | { text: string }> }
+    >('/ai/smart-replies', {
+      params: { conversationId, userId, detailed: true },
     });
-    return (response as any).result || response;
+    const payload = (response as any).result || response;
+    const replies = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.replies)
+        ? payload.replies
+        : Array.isArray(payload?.suggestions)
+          ? payload.suggestions
+          : [];
+
+    return replies
+      .map((reply: string | { text: string }) => typeof reply === 'string' ? reply : reply?.text)
+      .filter((reply: unknown): reply is string => typeof reply === 'string' && reply.trim().length > 0)
+      .map((reply: string) => reply.trim())
+      .slice(0, 5);
   },
 
-  async summarizeConversation(conversationId: string): Promise<{ summary: string }> {
-    return await chatApiClient.get('/ai/summarize', {
-      params: { conversationId },
+  async summarizeConversation(conversationId: string, userId?: string): Promise<{ summary: string }> {
+    const response = await chatApiClient.get('/ai/summarize', {
+      params: { conversationId, userId },
     });
+    const payload = (response as any).result || response;
+    return {
+      ...(payload as any),
+      summary: (payload as any)?.summary || 'Không thể tóm tắt hội thoại lúc này.',
+    };
   },
 
   async translateText(text: string, targetLang: string = 'vi'): Promise<{ translatedText: string }> {
