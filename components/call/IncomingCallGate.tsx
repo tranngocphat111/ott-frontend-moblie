@@ -5,9 +5,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/Authcontext';
+import { mobileGroupCallSession } from '@/services/call/mobileGroupCallSession';
 import { chatSocket, type CallType } from '@/services/socket/chatSocket';
 import { ChatApi } from '@/services/api';
-import { getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
+import { getAvatarFallbackLabel, getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
 
 type IncomingCallPayload = {
   conversationId: string;
@@ -15,6 +16,19 @@ type IncomingCallPayload = {
   callerId: string;
   callType: CallType;
   isGroup?: boolean;
+  name?: string;
+  avatar?: string;
+  conversationName?: string;
+  conversationAvatar?: string;
+  groupName?: string;
+  groupAvatar?: string;
+  callerName?: string;
+  callerAvatar?: string;
+  caller?: {
+    name?: string;
+    display_name?: string;
+    avatar?: string;
+  };
 };
 
 type IncomingCallDisplay = {
@@ -25,11 +39,6 @@ type IncomingCallDisplay = {
 type IncomingCallState = {
   payload: IncomingCallPayload;
   display: IncomingCallDisplay;
-};
-
-const getInitial = (value?: string | null) => {
-  const normalized = String(value || '').trim();
-  return normalized ? normalized.slice(0, 1).toUpperCase() : '?';
 };
 
 const IncomingAvatar = ({ name, avatar }: IncomingCallDisplay) => {
@@ -47,7 +56,7 @@ const IncomingAvatar = ({ name, avatar }: IncomingCallDisplay) => {
           onError={() => setBroken(true)}
         />
       ) : (
-        <Text className="text-4xl font-bold text-white">{getInitial(name)}</Text>
+        <Text className="text-3xl font-bold text-white">{getAvatarFallbackLabel(name)}</Text>
       )}
     </View>
   );
@@ -65,6 +74,18 @@ export const IncomingCallGate: React.FC = () => {
     const { payload, display } = state;
     activeCallKeyRef.current = null;
     setIncomingCall(null);
+
+    if (payload.isGroup) {
+      void mobileGroupCallSession.joinGroupCall({
+        conversationId: payload.conversationId,
+        callId: payload.callId || '',
+        userId,
+        title: display.name || 'Cuộc gọi nhóm',
+        avatar: display.avatar || '',
+      });
+      return;
+    }
+
     router.push({
       pathname: '/(main)/call',
       params: {
@@ -72,12 +93,12 @@ export const IncomingCallGate: React.FC = () => {
         callId: payload.callId || '',
         type: payload.callType,
         action: 'join',
-        isGroup: payload.isGroup ? 'true' : 'false',
+        isGroup: 'false',
         name: display.name,
         avatar: display.avatar,
       },
     } as any);
-  }, [router]);
+  }, [router, userId]);
 
   const declineIncomingCall = useCallback((payload: IncomingCallPayload) => {
     activeCallKeyRef.current = null;
@@ -99,18 +120,71 @@ export const IncomingCallGate: React.FC = () => {
     const loadIncomingCallDisplay = async (
       payload: IncomingCallPayload,
     ): Promise<IncomingCallDisplay> => {
+      const payloadConversationName = String(
+        payload.conversationName ||
+          payload.groupName ||
+          payload.name ||
+          '',
+      ).trim();
+      const payloadCallerName = String(
+        payload.callerName ||
+          payload.caller?.display_name ||
+          payload.caller?.name ||
+          '',
+      ).trim();
+      const payloadName = payload.isGroup
+        ? payloadConversationName
+        : payloadConversationName || payloadCallerName;
+      const payloadConversationAvatar = String(
+        payload.conversationAvatar ||
+          payload.groupAvatar ||
+          payload.avatar ||
+          '',
+      ).trim();
+      const payloadCallerAvatar = String(
+          payload.callerAvatar ||
+          payload.caller?.avatar ||
+          '',
+      ).trim();
+      const payloadAvatar = payload.isGroup
+        ? payloadConversationAvatar
+        : payloadConversationAvatar || payloadCallerAvatar;
+
+      const displayFromConversation = (conversation: any): IncomingCallDisplay | null => {
+        if (!conversation) return null;
+        const name = getConversationTitle(conversation, userId);
+        const avatar = getConversationAvatar(conversation, userId);
+        return {
+          name: name || payloadName || (payload.isGroup ? 'Cuộc gọi nhóm' : 'Cuộc gọi'),
+          avatar: avatar || payloadAvatar,
+        };
+      };
+
       try {
         const conversation = await ChatApi.getConversationById(payload.conversationId);
-        return {
-          name: getConversationTitle(conversation, userId),
-          avatar: getConversationAvatar(conversation, userId),
-        };
+        const display = displayFromConversation(conversation);
+        if (display) return display;
       } catch {
-        return {
-          name: payload.isGroup ? 'Cuộc gọi nhóm' : 'Cuộc gọi',
-          avatar: '',
-        };
+        // Older review backends may not expose GET /conversations/:id yet.
       }
+
+      try {
+        const conversations = await ChatApi.getUserConversations(userId);
+        const matched = conversations.find(
+          (item: any) =>
+            String(item?.conversation?._id || item?._id || '') ===
+            String(payload.conversationId),
+        );
+        const display = displayFromConversation(matched?.conversation || matched);
+        if (display) return display;
+      } catch {
+        // Keep the payload fallback below.
+      }
+
+      return {
+        name: payloadName || (payload.isGroup ? 'Cuộc gọi nhóm' : 'Cuộc gọi'),
+        avatar: payloadAvatar,
+      };
     };
 
     const onIncomingCall = async (payload: IncomingCallPayload) => {
@@ -202,7 +276,11 @@ export const IncomingCallGate: React.FC = () => {
                   onPress={() => incomingCall && acceptIncomingCall(incomingCall)}
                   className="h-16 w-16 items-center justify-center rounded-full bg-[#16a34a]"
                 >
-                  <Feather name="video" size={26} color="#fff" />
+                  <Feather
+                    name={incomingCall?.payload.callType === 'voice' ? 'phone' : 'video'}
+                    size={26}
+                    color="#fff"
+                  />
                 </Pressable>
                 <Text className="mt-2 text-xs font-bold text-white/80">Chấp nhận</Text>
               </View>

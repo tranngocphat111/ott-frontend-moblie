@@ -355,7 +355,25 @@ export const getConversationTitle = (
   );
 };
 
+export const getAvatarFallbackLabel = (value?: string | null) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '?';
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  return (
+    tokens
+      .slice(0, 2)
+      .map((token) => Array.from(token)[0] || '')
+      .join('')
+      .toUpperCase() || '?'
+  );
+};
+
 const normalizeId = (value?: string | null) => String(value || '').trim();
+const hasUsableMediaValue = (value?: string | null) => {
+  const normalized = String(value || '').trim();
+  return !!normalized && normalized !== 'null' && normalized !== 'undefined';
+};
 
 const findParticipantByUserId = (
   conversation?: ChatConversation | null,
@@ -386,13 +404,19 @@ export const getConversationAvatar = (
     return 'SPECIAL_AVATAR_SELF';
   }
 
-  if (conversation.avatar) return resolveMediaUrl(conversation.avatar);
+  if (hasUsableMediaValue(conversation.avatar)) {
+    return resolveMediaUrl(conversation.avatar);
+  }
+
+  if (conversation.type === 'group') return '';
 
   const otherParticipant = conversation.participants?.find(
     (participant) => normalizeId(participant.user_id) !== normalizeId(currentUserId || ''),
   );
 
-  return resolveMediaUrl(otherParticipant?.avatar || '');
+  return hasUsableMediaValue(otherParticipant?.avatar)
+    ? resolveMediaUrl(otherParticipant?.avatar || '')
+    : '';
 };
 
 export const getMessageSenderName = (

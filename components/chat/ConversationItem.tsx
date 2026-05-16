@@ -4,6 +4,7 @@ import { Easing } from 'react-native';
 import type { ChatConversationWithParticipant } from '@/types';
 import {
   formatConversationTime,
+  getAvatarFallbackLabel,
   getConversationAvatar,
   getConversationTitle,
   getMessageBodyText,
@@ -30,11 +31,6 @@ interface ConversationItemProps {
   }) => void;
   isContextActive?: boolean;
 }
-
-const getInitials = (value: string) => {
-  const tokens = value.trim().split(/\s+/).filter(Boolean);
-  return tokens.slice(0, 2).map((token) => token[0]).join('').toUpperCase() || '?';
-};
 
 export const ConversationItem: React.FC<ConversationItemProps> = ({
   item,
@@ -76,9 +72,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const otherUserIds = (conversation.participants || [])
     .map((member) => String(member.user_id || (member as any)._id || ''))
     .filter((id) => id && String(id) !== String(currentUserId || ''));
-  const isOnline = conversation.type === 'private'
-    ? isUserOnline(otherUserIds[0])
-    : otherUserIds.some((id) => isUserOnline(id));
+  const isOnline = conversation.type === 'private' && isUserOnline(otherUserIds[0]);
   const activeCallConversation = conversation as any;
   const hasActiveCall = !!activeCallConversation?.is_calling;
 
@@ -205,7 +199,7 @@ React.useEffect(() => {
             ) : (
               <View className="h-14 w-14 items-center justify-center rounded-full bg-slate-200">
                 <Text className="text-base font-bold text-slate-600">
-                  {getInitials(title)}
+                  {getAvatarFallbackLabel(title)}
                 </Text>
               </View>
             )}

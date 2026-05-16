@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
-} from '@livekit/react-native-webrtc';
 import { chatSocket, type CallType } from '@/services/socket/chatSocket';
+
+declare const require: any;
 
 type RemoteStreamItem = {
   userId: string;
-  stream: MediaStream;
+  stream: any;
 };
 
 type UseMobileCallOptions = {
@@ -50,12 +45,43 @@ const stopTrack = (track?: { stop?: () => void; readyState?: string } | null) =>
 };
 
 const normalizeId = (value?: string | null) => String(value || '').trim();
-type MobileMediaTrack = ReturnType<MediaStream['getTracks']>[number];
+type MobileMediaTrack = any;
+
+type WebRtcModule = {
+  mediaDevices: any;
+  MediaStream: any;
+  RTCIceCandidate: any;
+  RTCPeerConnection: any;
+  RTCSessionDescription: any;
+};
+
+let cachedWebRtcModule: WebRtcModule | null | false = null;
+
+const getWebRtcModule = (): WebRtcModule | null => {
+  if (cachedWebRtcModule === false) return null;
+  if (cachedWebRtcModule) return cachedWebRtcModule;
+
+  try {
+    // Keep this lazy. Importing the native module at route-load time can crash review builds.
+    cachedWebRtcModule = require('@livekit/react-native-webrtc') as WebRtcModule;
+    return cachedWebRtcModule;
+  } catch (error) {
+    console.warn('Không thể tải WebRTC native module:', error);
+    cachedWebRtcModule = false;
+    return null;
+  }
+};
+
+const createMediaStream = (tracks: MobileMediaTrack[] = []) => {
+  const rtc = getWebRtcModule();
+  if (!rtc?.MediaStream) return null;
+  return new rtc.MediaStream(tracks);
+};
 
 const isLiveTrack = (track?: MobileMediaTrack | null) =>
   Boolean(track && track.readyState === 'live');
 
-const ensureTransceivers = (pc: RTCPeerConnection, mode: CallType) => {
+const ensureTransceivers = (pc: any, mode: CallType) => {
   try {
     const peer = pc as any;
     const transceivers = typeof peer.getTransceivers === 'function'
@@ -80,7 +106,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
   const [callType, setCallType] = useState<CallType | null>(null);
   const [isInCall, setIsInCall] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [localStream, setLocalStream] = useState<any | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreamItem[]>([]);
   const [participants, setParticipants] = useState<string[]>([]);
   const [isMuted, setIsMuted] = useState(false);
@@ -91,9 +117,9 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
   const [isGroup, setIsGroup] = useState(false);
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
 
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const remoteStreamRef = useRef<Map<string, MediaStream>>(new Map());
+  const localStreamRef = useRef<any | null>(null);
+  const peerConnectionsRef = useRef<Map<string, any>>(new Map());
+  const remoteStreamRef = useRef<Map<string, any>>(new Map());
   const pendingIceCandidatesRef = useRef<Map<string, any[]>>(new Map());
   const activeConversationRef = useRef<string | null>(null);
   const activeCallIdRef = useRef<string | null>(null);
@@ -212,6 +238,14 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     resetCallState();
   }, [cleanupAllPeers, resetCallState, stopLocalStream]);
 
+  const prepareCallSocket = useCallback(() => {
+    if (!conversationId || !userId) return;
+
+    chatSocket.connect();
+    chatSocket.joinUserRoom(userId);
+    chatSocket.joinConversation(conversationId);
+  }, [conversationId, userId]);
+
   const markRemoteConnected = useCallback(() => {
     hasRemoteConnectedRef.current = true;
     if (!callConnectedAtRef.current) {
@@ -238,14 +272,17 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     });
   }, []);
 
-  const commitLocalStream = useCallback((stream: MediaStream | null) => {
+  const commitLocalStream = useCallback((stream: any | null) => {
     localStreamRef.current = stream;
     setLocalStream(stream);
   }, []);
 
   const acquireAudioTrack = useCallback(async () => {
+    const rtc = getWebRtcModule();
+    if (!rtc?.mediaDevices?.getUserMedia) return null;
+
     try {
-      const media = await mediaDevices.getUserMedia({
+      const media = await rtc.mediaDevices.getUserMedia({
         audio: true,
         video: false,
       });
@@ -258,8 +295,11 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
   }, []);
 
   const acquireVideoTrack = useCallback(async () => {
+    const rtc = getWebRtcModule();
+    if (!rtc?.mediaDevices?.getUserMedia) return null;
+
     try {
-      const media = await mediaDevices.getUserMedia({
+      const media = await rtc.mediaDevices.getUserMedia({
         audio: false,
         video: {
           facingMode: 'user',
@@ -301,7 +341,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     const tracks = [audioTrack, videoTrack].filter(
       (track): track is MobileMediaTrack => Boolean(track),
     );
-    const stream = new MediaStream(tracks);
+    const stream = createMediaStream(tracks);
 
     commitLocalStream(stream);
     setIsMuted(!audioTrack);
@@ -309,7 +349,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     return stream;
   }, [acquireAudioTrack, acquireVideoTrack, commitLocalStream]);
 
-  const upsertRemoteStream = useCallback((targetUserId: string, stream: MediaStream) => {
+  const upsertRemoteStream = useCallback((targetUserId: string, stream: any) => {
     markRemoteConnected();
     remoteStreamRef.current.set(targetUserId, stream);
     setRemoteStreams((current) => {
@@ -326,7 +366,10 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       const existing = peerConnectionsRef.current.get(targetUserId);
       if (existing) return existing;
 
-      const pc = new RTCPeerConnection(rtcConfig as any);
+      const rtc = getWebRtcModule();
+      if (!rtc?.RTCPeerConnection) return null;
+
+      const pc = new rtc.RTCPeerConnection(rtcConfig as any);
       const stream = localStreamRef.current;
 
       if (stream) {
@@ -358,7 +401,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         }
       };
 
-      peer.onaddstream = (event: { stream?: MediaStream }) => {
+      peer.onaddstream = (event: { stream?: any }) => {
         if (event.stream) {
           upsertRemoteStream(targetUserId, event.stream);
         }
@@ -429,13 +472,16 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     );
   }, []);
 
-  const flushPendingIceCandidates = useCallback(async (targetUserId: string, pc: RTCPeerConnection) => {
+  const flushPendingIceCandidates = useCallback(async (targetUserId: string, pc: any) => {
     const pending = pendingIceCandidatesRef.current.get(targetUserId);
     if (!pending?.length) return;
 
+    const rtc = getWebRtcModule();
+    if (!rtc?.RTCIceCandidate) return;
+
     for (const candidate of pending) {
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await pc.addIceCandidate(new rtc.RTCIceCandidate(candidate));
       } catch (error) {
         console.warn('Không thể thêm ICE candidate chờ:', error);
       }
@@ -449,6 +495,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       if (!activeConversationRef.current || !userIdRef.current) return;
 
       const pc = getOrCreatePeer(targetUserId, mode);
+      if (!pc) return;
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: mode === 'video',
@@ -476,6 +523,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         const isGroupSession = !!isGroupCall;
         setIsConnecting(true);
         setBusyUserIds([]);
+        prepareCallSocket();
         if (!isGroupSession) {
           await ensureLocalStream(effectiveMode);
         }
@@ -547,6 +595,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       conversationId,
       emitLocalCameraState,
       ensureLocalStream,
+      prepareCallSocket,
       setActiveCallId,
       setActiveLiveKitToken,
       userId,
@@ -561,6 +610,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         const effectiveMode: CallType = isGroupCall ? 'video' : mode;
         const isGroupSession = !!isGroupCall;
         setIsConnecting(true);
+        prepareCallSocket();
         if (!isGroupSession) {
           await ensureLocalStream(effectiveMode);
         }
@@ -616,6 +666,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       conversationId,
       emitLocalCameraState,
       ensureLocalStream,
+      prepareCallSocket,
       setActiveCallId,
       setActiveLiveKitToken,
       userId,
@@ -676,7 +727,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       });
       stream.addTrack(nextTrack);
       replaceOutgoingTrack('audio', nextTrack);
-      commitLocalStream(new MediaStream(stream.getTracks()));
+      commitLocalStream(createMediaStream(stream.getTracks()) || stream);
       setIsMuted(false);
     })();
   }, [acquireAudioTrack, commitLocalStream, isMuted, replaceOutgoingTrack]);
@@ -719,7 +770,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       });
       stream.addTrack(nextTrack);
       replaceOutgoingTrack('video', nextTrack);
-      commitLocalStream(new MediaStream(stream.getTracks()));
+      commitLocalStream(createMediaStream(stream.getTracks()) || stream);
       setIsCameraOff(false);
       emitLocalCameraState(false);
     })();
@@ -778,8 +829,11 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       if (isGroupRef.current && livekitTokenRef.current) return;
 
       try {
+        const rtc = getWebRtcModule();
+        if (!rtc?.RTCSessionDescription) return;
         const pc = getOrCreatePeer(payload.fromUserId, payload.callType);
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+        if (!pc) return;
+        await pc.setRemoteDescription(new rtc.RTCSessionDescription(payload.offer));
         await flushPendingIceCandidates(payload.fromUserId, pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -805,9 +859,11 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       if (!isPayloadForActiveCall(payload)) return;
 
       try {
+        const rtc = getWebRtcModule();
+        if (!rtc?.RTCSessionDescription) return;
         const pc = peerConnectionsRef.current.get(payload.fromUserId);
         if (!pc) return;
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+        await pc.setRemoteDescription(new rtc.RTCSessionDescription(payload.answer));
         await flushPendingIceCandidates(payload.fromUserId, pc);
       } catch (error) {
         console.error('Xử lý answer thất bại:', error);
@@ -823,6 +879,8 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       if (!isPayloadForActiveCall(payload)) return;
 
       try {
+        const rtc = getWebRtcModule();
+        if (!rtc?.RTCIceCandidate) return;
         const pc = peerConnectionsRef.current.get(payload.fromUserId);
         if (!pc || !pc.remoteDescription) {
           const pending = pendingIceCandidatesRef.current.get(payload.fromUserId) || [];
@@ -831,7 +889,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
           return;
         }
 
-        await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        await pc.addIceCandidate(new rtc.RTCIceCandidate(payload.candidate));
       } catch (error) {
         console.error('Xử lý ICE candidate thất bại:', error);
       }

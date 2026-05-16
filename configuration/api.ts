@@ -16,6 +16,7 @@ export const CHAT_API_CONFIG = {
 
 export const LIVEKIT_CONFIG = {
   URL: process.env.EXPO_PUBLIC_LIVEKIT_URL || '',
+  ENABLE_NATIVE: process.env.EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT === 'true',
 };
 
 export const NOTIFICATION_API_CONFIG = {

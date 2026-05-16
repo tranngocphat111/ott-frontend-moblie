@@ -8,8 +8,8 @@ export const chatConversationApi = {
   },
 
   async getConversationById(conversationId: string): Promise<ChatConversation> {
-    const response = await chatApiClient.get<ChatConversation>(`/conversations/${conversationId}`);
-    return response.data;
+    const response = await chatApiClient.get<ChatConversation | { data?: ChatConversation }>(`/conversations/${conversationId}`);
+    return ((response as any)?.data || response) as ChatConversation;
   },
 
   async createConversation(payload: {

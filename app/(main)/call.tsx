@@ -11,7 +11,6 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { RTCView } from '@livekit/react-native-webrtc';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
@@ -21,10 +20,11 @@ import { useAuth } from '@/contexts/Authcontext';
 import { THEME_COLORS } from '@/constants/theme';
 import { useMobileCall } from '@/hooks/useMobileCall';
 import { chatSocket, type CallType } from '@/services/socket/chatSocket';
-import { resolveMediaUrl } from '@/utils/chat';
+import { getAvatarFallbackLabel, resolveMediaUrl } from '@/utils/chat';
 import { ChatApi } from '@/services/api';
 import { LIVEKIT_CONFIG } from '@/configuration/api';
-import { LiveKitGroupCallView } from '@/components/call/LiveKitGroupCallView';
+
+declare const require: any;
 
 const normalizeCallType = (value?: string | string[]): CallType =>
   value === 'voice' ? 'voice' : 'video';
@@ -40,14 +40,45 @@ const formatDuration = (seconds: number) => {
 
 const percent = (value: number): DimensionValue => `${value}%` as DimensionValue;
 
+type SafeRTCViewProps = {
+  streamURL?: string;
+  objectFit?: 'contain' | 'cover';
+  mirror?: boolean;
+  style?: ViewStyle;
+};
+
+let cachedRTCView: React.ComponentType<any> | null | false = null;
+
+const getRTCViewComponent = () => {
+  if (cachedRTCView === false) return null;
+  if (cachedRTCView) return cachedRTCView;
+
+  try {
+    cachedRTCView = require('@livekit/react-native-webrtc').RTCView;
+    return cachedRTCView;
+  } catch (error) {
+    console.warn('Không thể tải RTCView native:', error);
+    cachedRTCView = false;
+    return null;
+  }
+};
+
+const SafeRTCView: React.FC<SafeRTCViewProps> = (props) => {
+  const RTCViewComponent = useMemo(() => getRTCViewComponent(), []);
+  if (!RTCViewComponent || !props.streamURL) {
+    return <View style={props.style} />;
+  }
+
+  return <RTCViewComponent {...props} />;
+};
+
 const isUsableAvatar = (value?: string | null) => {
   const normalized = String(value || '').trim();
   return !!normalized && normalized !== 'null' && normalized !== 'undefined';
 };
 
 const getInitial = (value?: string | null) => {
-  const normalized = String(value || '').trim();
-  return normalized ? normalized.slice(0, 1).toUpperCase() : 'U';
+  return getAvatarFallbackLabel(value || 'U');
 };
 
 type AvatarCircleProps = {
@@ -160,6 +191,104 @@ const CallControlButton: React.FC<CallControlButtonProps> = ({
     <Text className="mt-1.5 text-[11px] font-semibold text-white/80">{label}</Text>
   </View>
 );
+
+type SafeLiveKitGroupCallViewProps = {
+  token: string;
+  serverUrl: string;
+  title: string;
+  avatarUrl?: string;
+  elapsedLabel: string;
+  participantCount: number;
+  participantDisplayById: Record<string, { name: string; avatar?: string }>;
+  onLeave: () => void;
+  onOpenInvite?: () => void;
+};
+
+const LiveKitFallbackCallView: React.FC<SafeLiveKitGroupCallViewProps> = ({
+  title,
+  avatarUrl,
+  elapsedLabel,
+  participantCount,
+  onLeave,
+  onOpenInvite,
+}) => (
+  <View className="flex-1 bg-[#160f0a]">
+    <StatusBar style="light" translucent backgroundColor="transparent" />
+    <LinearGradient
+      colors={['#3b2718', '#1d130c', '#100b07']}
+      style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+    />
+
+    <View className="absolute left-5 right-5 top-12 z-10 flex-row items-center justify-between">
+      <View className="min-w-0 flex-1 flex-row items-center">
+        <AvatarCircle name={title} avatarUrl={avatarUrl} size={42} textSize="text-base" />
+        <View className="ml-3 min-w-0 flex-1">
+          <View className="flex-row items-center">
+            <Text className="max-w-[70%] text-xl font-bold text-white" numberOfLines={1}>
+              {title}
+            </Text>
+            <View className="ml-3 rounded-lg border border-[#d0a97e]/20 bg-black/45 px-2.5 py-1">
+              <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
+            </View>
+          </View>
+          <Text className="mt-1 text-xs font-semibold uppercase text-white/72">
+            {participantCount} người tham gia
+          </Text>
+        </View>
+      </View>
+    </View>
+
+    <View className="flex-1 items-center justify-center px-8">
+      <AvatarCircle name={title} avatarUrl={avatarUrl} size={148} textSize="text-5xl" />
+      <Text className="mt-5 text-center text-2xl font-bold text-white">{title}</Text>
+      <View className="mt-4 flex-row items-center rounded-2xl border border-[#d0a97e]/20 bg-black/35 px-4 py-3">
+        <ActivityIndicator color={THEME_COLORS.primary[300]} size="small" />
+        <Text className="ml-3 flex-1 text-center text-sm font-semibold text-white/80">
+          Đang giữ kết nối cuộc gọi...
+        </Text>
+      </View>
+    </View>
+
+    <SafeAreaView className="absolute bottom-0 left-0 right-0">
+      <View className="mb-5 items-center px-6">
+        <View className="flex-row items-start gap-5 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
+          {onOpenInvite && (
+            <CallControlButton icon="user-plus" label="Thêm" onPress={onOpenInvite} />
+          )}
+          <CallControlButton icon="phone-off" label="Kết thúc" danger onPress={onLeave} />
+        </View>
+      </View>
+    </SafeAreaView>
+  </View>
+);
+
+const SafeLiveKitGroupCallView: React.FC<SafeLiveKitGroupCallViewProps> = (props) => {
+  const [LiveKitView, setLiveKitView] = useState<React.ComponentType<any> | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    try {
+      const livekitNative = require('@livekit/react-native');
+      livekitNative?.registerGlobals?.();
+      const module = require('../../components/call/LiveKitGroupCallView');
+      if (mounted && module?.LiveKitGroupCallView) {
+        setLiveKitView(() => module.LiveKitGroupCallView);
+      }
+    } catch (error) {
+      console.warn('Không thể tải giao diện LiveKit native:', error);
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!LiveKitView) {
+    return <LiveKitFallbackCallView {...props} />;
+  }
+
+  return <LiveKitView {...props} />;
+};
 
 export default function CallScreen() {
   const router = useRouter();
@@ -304,8 +433,10 @@ export default function CallScreen() {
     ]);
   }, [busyUserIds.length, endCall, router]);
 
+  const shouldRunTimer = isInCall && (hasRemoteAnswered || isGroup);
+
   useEffect(() => {
-    if (isInCall && hasRemoteAnswered) {
+    if (shouldRunTimer) {
       if (!connectedAtRef.current) {
         connectedAtRef.current = Date.now();
       }
@@ -314,7 +445,7 @@ export default function CallScreen() {
 
     connectedAtRef.current = null;
     setElapsedSeconds(0);
-  }, [hasRemoteAnswered, isInCall]);
+  }, [shouldRunTimer]);
 
   useEffect(() => {
     if (!connectedAtRef.current) return;
@@ -325,7 +456,7 @@ export default function CallScreen() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [hasRemoteAnswered]);
+  }, [shouldRunTimer]);
 
   const primaryRemoteItem = remoteStreams[0];
   const primaryRemote = primaryRemoteItem?.stream;
@@ -551,7 +682,7 @@ export default function CallScreen() {
   if (shouldUseLiveKitGroup) {
     return (
       <>
-        <LiveKitGroupCallView
+        <SafeLiveKitGroupCallView
           token={livekitToken}
           serverUrl={livekitServerUrl}
           title={displayName}
@@ -588,7 +719,7 @@ export default function CallScreen() {
                       </View>
                     </View>
                   ) : (
-                    <RTCView
+                    <SafeRTCView
                       streamURL={localStreamUrl}
                       objectFit="cover"
                       mirror
@@ -610,7 +741,7 @@ export default function CallScreen() {
                 >
                   <View className="flex-1 overflow-hidden rounded-2xl border border-[#d0a97e]/20 bg-[#2b1d13]">
                     {streamUrl && !isRemoteCameraOff ? (
-                      <RTCView
+                      <SafeRTCView
                         streamURL={streamUrl}
                         objectFit="cover"
                         mirror={false}
@@ -635,7 +766,7 @@ export default function CallScreen() {
             })}
           </View>
         ) : shouldShowPrimaryRemoteVideo ? (
-          <RTCView
+          <SafeRTCView
             streamURL={remoteStreamUrl}
             objectFit="cover"
             mirror={false}
@@ -731,7 +862,7 @@ export default function CallScreen() {
                   <AvatarCircle name={myDisplayName} avatarUrl={myAvatarUrl} size={48} textSize="text-lg" />
                 </View>
               ) : (
-                <RTCView
+                <SafeRTCView
                   streamURL={localStreamUrl}
                   objectFit="cover"
                   mirror

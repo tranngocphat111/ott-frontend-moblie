@@ -34,6 +34,7 @@ import { useAuth } from "@/context/Authcontext";
 import { usePresence } from "@/contexts/PresenceContext";
 import { THEME_COLORS } from "@/constants/theme";
 import { ChatApi, chatSocket } from "@/services/api";
+import { mobileGroupCallSession } from "@/services/call/mobileGroupCallSession";
 import type {
   ChatConversation,
   ChatConversationWithParticipant,
@@ -940,14 +941,13 @@ export default function ChatDetailScreen() {
   const hasTypingUsers = typingUserIdList.length > 0;
   const hadTypingUsersRef = useRef(false);
 
-  const onlineGroupCount = groupMemberIds.filter((id) => isUserOnline(id)).length;
   const headerSubtitle = conversation?.is_self_conversation
     ? "Cloud của bạn"
     : conversation?.type === "private"
       ? isOtherOnline
         ? "Đang hoạt động"
         : formatLastSeenLabel(getLastSeen(otherUserId))
-      : `${conversation?.participants?.length || 0} thành viên${onlineGroupCount > 0 ? `, ${onlineGroupCount} đang hoạt động` : ""}`;
+      : `${conversation?.participants?.length || 0} thành viên`;
 
   const stopTyping = useCallback(() => {
     if (typingStopTimerRef.current) {
@@ -1086,28 +1086,32 @@ export default function ChatDetailScreen() {
     const callMode = isGroupCall ? 'video' : type;
     const callConversation = conversation as any;
 
-    if (isGroupCall && callConversation?.is_calling) {
-      router.push({
-        pathname: '/(main)/call',
-        params: {
+    if (isGroupCall) {
+      if (callConversation?.is_calling) {
+        void mobileGroupCallSession.joinGroupCall({
           conversationId: targetConversationId,
-          type: callConversation.active_call_type || callMode,
-          action: 'join',
+          userId: String(userIdForChat),
           callId: callConversation.active_call_id || '',
-          name: title || 'Cuộc gọi',
+          title: title || 'Cuộc gọi nhóm',
           avatar: avatar || '',
-          isGroup: 'true',
-        },
-      } as any);
-      return;
-    }
+        });
+        return;
+      }
 
-    const inviteeIds = isGroupCall
-      ? await getGroupInviteeIds(targetConversationId)
-      : [];
+      const inviteeIds = await getGroupInviteeIds(targetConversationId);
 
-    if (isGroupCall && inviteeIds.length === 0) {
-      Alert.alert('Không thể gọi nhóm', 'Không tìm thấy thành viên nào để mời vào cuộc gọi.');
+      if (inviteeIds.length === 0) {
+        Alert.alert('Không thể gọi nhóm', 'Không tìm thấy thành viên nào để mời vào cuộc gọi.');
+        return;
+      }
+
+      void mobileGroupCallSession.startGroupCall({
+        conversationId: targetConversationId,
+        userId: String(userIdForChat),
+        title: title || 'Cuộc gọi nhóm',
+        avatar: avatar || '',
+        invitedUserIds: inviteeIds,
+      });
       return;
     }
 
@@ -1119,8 +1123,8 @@ export default function ChatDetailScreen() {
         action: 'start',
         name: title || 'Cuộc gọi',
         avatar: avatar || '',
-        isGroup: isGroupCall ? 'true' : 'false',
-        invitedUserIds: inviteeIds.join(','),
+        isGroup: 'false',
+        invitedUserIds: '',
       },
     } as any);
   }, [

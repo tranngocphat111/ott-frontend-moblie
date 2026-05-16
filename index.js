@@ -1,6 +1,3 @@
-import 'react-native-url-polyfill/auto';
-import { registerGlobals } from '@livekit/react-native';
+require('react-native-url-polyfill/auto');
 
-registerGlobals();
-
-import 'expo-router/entry';
+require('expo-router/entry');
