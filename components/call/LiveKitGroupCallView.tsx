@@ -18,8 +18,9 @@ import {
 } from '@livekit/react-native';
 import { Track } from 'livekit-client';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME_COLORS } from '@/constants/theme';
-import { getAvatarFallbackLabel } from '@/utils/chat';
+import { getAvatarFallbackLabel, resolveMediaUrl } from '@/utils/chat';
 
 type ParticipantDisplay = {
   name: string;
@@ -42,6 +43,24 @@ const getInitial = (value?: string | null) => {
   return getAvatarFallbackLabel(value);
 };
 
+const getTrackKey = (trackRef: TrackReferenceOrPlaceholder) =>
+  `${trackRef.participant.identity}:${trackRef.source}`;
+
+const getParticipantMetadata = (participant: any): ParticipantDisplay | null => {
+  const rawMetadata = String(participant?.metadata || '').trim();
+  if (!rawMetadata) return null;
+
+  try {
+    const parsed = JSON.parse(rawMetadata);
+    const name = String(parsed?.name || '').trim();
+    const avatar = String(parsed?.avatar || '').trim();
+    if (!name && !avatar) return null;
+    return { name, avatar };
+  } catch {
+    return null;
+  }
+};
+
 const ParticipantAvatar = ({
   display,
   fallback,
@@ -52,7 +71,7 @@ const ParticipantAvatar = ({
   size?: number;
 }) => {
   const [broken, setBroken] = useState(false);
-  const avatar = String(display?.avatar || '').trim();
+  const avatar = resolveMediaUrl(String(display?.avatar || '').trim());
   const showAvatar = !!avatar && !broken;
 
   return (
@@ -256,55 +275,63 @@ const LiveKitConnectingFallback = ({
   onOpenInvite,
 }: Omit<LiveKitGroupCallViewProps, 'token' | 'serverUrl' | 'participantDisplayById'> & {
   notice?: string | null;
-}) => (
-  <View className="absolute inset-0 bg-[#160f0a]">
-    <LinearGradient
-      colors={['#3b2718', '#1d130c', '#100b07']}
-      style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
-    />
+}) => {
+  const insets = useSafeAreaInsets();
+  const controlsBottomPadding = Math.max(insets.bottom + 12, 20);
 
-    <View className="absolute left-5 right-5 top-12 flex-row items-center justify-between">
-      <View className="min-w-0 flex-1 flex-row items-center">
-        <ParticipantAvatar
-          display={{ name: title, avatar: avatarUrl }}
-          fallback={title}
-          size={42}
-        />
-        <View className="ml-3 min-w-0 flex-1">
-          <View className="flex-row items-center">
-            <Text className="max-w-[70%] text-xl font-bold text-white" numberOfLines={1}>
-              {title}
-            </Text>
-            <View className="ml-3 rounded-lg border border-[#d0a97e]/20 bg-black/45 px-2.5 py-1">
-              <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
+  return (
+    <View className="absolute inset-0 bg-[#160f0a]">
+      <LinearGradient
+        colors={['#3b2718', '#1d130c', '#100b07']}
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+      />
+
+      <View className="absolute left-5 right-5 top-12 flex-row items-center justify-between">
+        <View className="min-w-0 flex-1 flex-row items-center">
+          <ParticipantAvatar
+            display={{ name: title, avatar: avatarUrl }}
+            fallback={title}
+            size={42}
+          />
+          <View className="ml-3 min-w-0 flex-1">
+            <View className="flex-row items-center">
+              <Text className="max-w-[70%] text-xl font-bold text-white" numberOfLines={1}>
+                {title}
+              </Text>
+              <View className="ml-3 rounded-lg border border-[#d0a97e]/20 bg-black/45 px-2.5 py-1">
+                <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
+              </View>
             </View>
+            <Text
+              className="mt-1 text-xs font-semibold uppercase"
+              style={{ color: 'rgba(255,255,255,0.72)' }}
+            >
+              {participantCount} người tham gia
+            </Text>
           </View>
-          <Text
-            className="mt-1 text-xs font-semibold uppercase"
-            style={{ color: 'rgba(255,255,255,0.72)' }}
-          >
-            {participantCount} người tham gia
+        </View>
+      </View>
+
+      <View className="flex-1 items-center justify-center px-8">
+        <ParticipantAvatar display={{ name: title, avatar: avatarUrl }} fallback={title} size={148} />
+        <Text className="mt-5 text-center text-2xl font-bold text-white">{title}</Text>
+        <View className="mt-4 flex-row items-center rounded-2xl border border-[#d0a97e]/20 bg-black/35 px-4 py-3">
+          {!notice && <ActivityIndicator color={THEME_COLORS.primary[300]} size="small" />}
+          <Text className={`${notice ? '' : 'ml-3'} flex-1 text-center text-sm font-semibold text-white/80`}>
+            {notice || 'Đang kết nối phòng gọi...'}
           </Text>
         </View>
       </View>
-    </View>
 
-    <View className="flex-1 items-center justify-center px-8">
-      <ParticipantAvatar display={{ name: title, avatar: avatarUrl }} fallback={title} size={148} />
-      <Text className="mt-5 text-center text-2xl font-bold text-white">{title}</Text>
-      <View className="mt-4 flex-row items-center rounded-2xl border border-[#d0a97e]/20 bg-black/35 px-4 py-3">
-        {!notice && <ActivityIndicator color={THEME_COLORS.primary[300]} size="small" />}
-        <Text className={`${notice ? '' : 'ml-3'} flex-1 text-center text-sm font-semibold text-white/80`}>
-          {notice || 'Đang kết nối phòng gọi...'}
-        </Text>
+      <View
+        className="absolute bottom-0 left-0 right-0 items-center px-5"
+        style={{ paddingBottom: controlsBottomPadding }}
+      >
+        <FallbackControls onLeave={onLeave} onOpenInvite={onOpenInvite} />
       </View>
     </View>
-
-    <View className="absolute bottom-5 left-0 right-0 items-center px-5">
-      <FallbackControls onLeave={onLeave} onOpenInvite={onOpenInvite} />
-    </View>
-  </View>
-);
+  );
+};
 
 class LiveKitRenderBoundary extends React.Component<
   {
@@ -349,10 +376,12 @@ const LiveKitRoomContent = ({
   onLeave,
   onOpenInvite,
 }: Omit<LiveKitGroupCallViewProps, 'token' | 'serverUrl'>) => {
+  const insets = useSafeAreaInsets();
   const { localParticipant } = useLocalParticipant();
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
     onlySubscribed: false,
   });
+  const controlsBottomPadding = Math.max(insets.bottom + 12, 20);
 
   useEffect(() => {
     const enableInitialMedia = async () => {
@@ -392,19 +421,34 @@ const LiveKitRoomContent = ({
   }, [sortedTracks.length]);
 
   const renderTile = (item: TrackReferenceOrPlaceholder, index: number) => {
+    return renderCallTile(item, index, {
+      compact: false,
+      style: tileStyle,
+    });
+  };
+
+  const renderCallTile = (
+    item: TrackReferenceOrPlaceholder,
+    index: number,
+    options: { compact?: boolean; style: any },
+  ) => {
+    const compact = Boolean(options.compact);
     const identity = String(item.participant.identity || '');
-    const display = participantDisplayById[identity];
+    const metadata = getParticipantMetadata(item.participant);
+    const display =
+      participantDisplayById[identity] ||
+      (metadata?.name || metadata?.avatar ? metadata : undefined);
     const label = item.participant.isLocal
       ? 'Bạn'
-      : display?.name || `Thành viên ${index + 1}`;
+      : display?.name || String(item.participant.name || '').trim() || `Thành viên ${index + 1}`;
     const trackRef = isTrackReference(item) ? item : undefined;
     const hasVideo = !!trackRef && !trackRef.publication?.isMuted;
 
     return (
       <View
         key={`${item.participant.identity}:${item.source}`}
-        className="p-1.5"
-        style={tileStyle}
+        className={compact ? '' : 'p-1.5'}
+        style={options.style}
       >
         <View className="flex-1 overflow-hidden rounded-2xl border border-[#d0a97e]/25 bg-[#2b1d13]">
           {hasVideo ? (
@@ -419,15 +463,17 @@ const LiveKitRoomContent = ({
               colors={['#4a3323', '#2b1d13']}
               style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
             >
-              <ParticipantAvatar display={display} fallback={label} size={76} />
-              <View className="absolute right-2 top-2 h-8 w-8 items-center justify-center rounded-full bg-black/55">
-                <Feather name="video-off" size={15} color="#fff" />
-              </View>
+              <ParticipantAvatar display={display} fallback={label} size={compact ? 48 : 76} />
+              {!compact && (
+                <View className="absolute right-2 top-2 h-8 w-8 items-center justify-center rounded-full bg-black/55">
+                  <Feather name="video-off" size={15} color="#fff" />
+                </View>
+              )}
             </LinearGradient>
           )}
 
-          <View className="absolute bottom-0 left-0 right-0 bg-black/48 px-3 py-2">
-            <Text className="text-xs font-bold text-white" numberOfLines={1}>
+          <View className={`absolute bottom-0 left-0 right-0 bg-black/48 ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
+            <Text className={`${compact ? 'text-[11px]' : 'text-xs'} font-bold text-white`} numberOfLines={1}>
               {label}
             </Text>
           </View>
@@ -435,6 +481,14 @@ const LiveKitRoomContent = ({
       </View>
     );
   };
+  const isTwoPersonLayout = sortedTracks.length === 2;
+  const twoPersonPrimaryTrack = isTwoPersonLayout
+    ? sortedTracks.find((trackRef) => !trackRef.participant.isLocal) || sortedTracks[0]
+    : null;
+  const twoPersonSecondaryTrack =
+    isTwoPersonLayout && twoPersonPrimaryTrack
+      ? sortedTracks.find((trackRef) => getTrackKey(trackRef) !== getTrackKey(twoPersonPrimaryTrack)) || null
+      : null;
 
   return (
     <View className="flex-1 bg-[#160f0a]">
@@ -469,8 +523,30 @@ const LiveKitRoomContent = ({
         </View>
       </View>
 
-      {sortedTracks.length > 0 ? (
-        <View className="flex-1 flex-row flex-wrap px-1.5 pb-36 pt-28">
+      {isTwoPersonLayout && twoPersonPrimaryTrack ? (
+        <View
+          className="flex-1 px-1.5 pt-28"
+          style={{ paddingBottom: controlsBottomPadding + 124 }}
+        >
+          <View className="flex-1">
+            {renderCallTile(twoPersonPrimaryTrack, 0, {
+              style: { width: '100%', height: '100%' },
+            })}
+          </View>
+          {twoPersonSecondaryTrack && (
+            <View className="absolute right-5 top-36 z-20 h-40 w-28">
+              {renderCallTile(twoPersonSecondaryTrack, 1, {
+                compact: true,
+                style: { width: '100%', height: '100%' },
+              })}
+            </View>
+          )}
+        </View>
+      ) : sortedTracks.length > 0 ? (
+        <View
+          className="flex-1 flex-row flex-wrap px-1.5 pt-28"
+          style={{ paddingBottom: controlsBottomPadding + 124 }}
+        >
           {sortedTracks.map(renderTile)}
         </View>
       ) : (
@@ -483,7 +559,10 @@ const LiveKitRoomContent = ({
         </View>
       )}
 
-      <View className="absolute bottom-5 left-0 right-0 items-center px-5">
+      <View
+        className="absolute bottom-0 left-0 right-0 items-center px-5"
+        style={{ paddingBottom: controlsBottomPadding }}
+      >
         <LiveKitControls
           onLeave={onLeave}
           onOpenInvite={onOpenInvite}

@@ -1,11 +1,13 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts } from '@/constants/theme';
 
 interface Props {
   message?: string;
 }
+
+const riffLogo = require('../../assets/logo_tach_nen.png');
 
 const LoadingScreen: React.FC<Props> = ({ message = 'Đang tải Riff...' }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -15,6 +17,7 @@ const LoadingScreen: React.FC<Props> = ({ message = 'Đang tải Riff...' }) => 
   const dot1 = useRef(new Animated.Value(0.35)).current;
   const dot2 = useRef(new Animated.Value(0.35)).current;
   const dot3 = useRef(new Animated.Value(0.35)).current;
+  const [logoBroken, setLogoBroken] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -118,11 +121,16 @@ const LoadingScreen: React.FC<Props> = ({ message = 'Đang tải Riff...' }) => 
             <View style={styles.ringAccent} />
           </Animated.View>
           <Animated.View style={[styles.logoCard, { transform: [{ scale: logoScale }] }]}>
-            <Image
-              source={require('@/assets/images/logo_tach_nen.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            {logoBroken ? (
+              <Text style={styles.logoFallback}>R</Text>
+            ) : (
+              <Image
+                source={riffLogo}
+                style={styles.logo}
+                resizeMode="contain"
+                onError={() => setLogoBroken(true)}
+              />
+            )}
           </Animated.View>
         </View>
 
@@ -216,9 +224,15 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 6,
   },
+  logoFallback: {
+    fontFamily: fonts.display,
+    fontSize: 34,
+    fontWeight: '900',
+    color: colors.primary[600],
+  },
   logo: {
-    width: 58,
-    height: 58,
+    width: 68,
+    height: 68,
   },
   brand: {
     fontFamily: fonts.display,

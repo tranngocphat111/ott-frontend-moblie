@@ -28,6 +28,7 @@ interface ChatComposerProps {
   isGroup?: boolean;
   onSTT?: () => void;
   isSTTLoading?: boolean;
+  bottomInset?: number;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -53,14 +54,19 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   isGroup = false,
   onSTT,
   isSTTLoading = false,
+  bottomInset = 8,
 }) => {
   const textInputRef = useRef<TextInput>(null);
   const canSend = value.trim().length > 0 && !disabled;
   const actionButtonClass = 'h-9 w-9 items-center justify-center rounded-full';
   const selectedCount = selectedMediaIds.length;
+  const composerBottomPadding = Math.max(bottomInset, 8);
 
   return (
-    <View className="border-t border-slate-200 bg-white px-4  py-2">
+    <View
+      className="border-t border-slate-200 bg-white px-4 pt-2"
+      style={{ paddingBottom: composerBottomPadding }}
+    >
       {replyToMessage && (
         <View className="mb-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
           <View className="flex-row items-center justify-between gap-3">

@@ -10,10 +10,18 @@ type PermissionLike = {
   granted?: boolean;
   status?: string;
   canAskAgain?: boolean;
+  accessPrivileges?: 'all' | 'limited' | 'none';
 };
 
 const isGranted = (permission?: PermissionLike | null) =>
-  Boolean(permission?.granted || permission?.status === 'granted');
+  Boolean(
+    permission?.granted ||
+    permission?.status === 'granted' ||
+    permission?.accessPrivileges === 'all' ||
+    permission?.accessPrivileges === 'limited',
+  );
+
+const MEDIA_LIBRARY_GRANULAR_PERMISSIONS: MediaLibrary.GranularPermission[] = ['photo', 'video'];
 
 const ensurePermissionOnce = async (
   key: string,
@@ -54,8 +62,8 @@ export const ensureImageLibraryPermission = () =>
 export const ensureMediaLibraryPermission = () =>
   ensurePermissionOnce(
     'media-library',
-    MediaLibrary.getPermissionsAsync,
-    MediaLibrary.requestPermissionsAsync,
+    () => MediaLibrary.getPermissionsAsync(false, MEDIA_LIBRARY_GRANULAR_PERMISSIONS),
+    () => MediaLibrary.requestPermissionsAsync(false, MEDIA_LIBRARY_GRANULAR_PERMISSIONS),
   );
 
 export const ensureMicrophonePermission = () =>

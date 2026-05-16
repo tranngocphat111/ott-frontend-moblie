@@ -38,7 +38,7 @@ export default function LoginOtpScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-50">
+    <SafeAreaView className="flex-1 bg-brand-50" edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
 
       <TouchableOpacity onPress={() => router.back()} className="px-6 pt-4">

@@ -18,10 +18,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { login, verify2FA, request2FAOtp, isLoading, errors } = useLogin();
   const {
     loginWithGoogle,
@@ -93,7 +94,7 @@ export default function LoginScreen() {
   const anyLoading = isLoading || googleLoading;
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-50">
+    <SafeAreaView className="flex-1 bg-brand-50" edges={["top", "left", "right"]}>
       <StatusBar style="dark" />
 
       <TouchableOpacity onPress={() => router.back()} className="px-6 pt-4">
@@ -214,7 +215,10 @@ export default function LoginScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View className="px-6 pb-6 pt-4 border-t border-brand-100 bg-white/80">
+      <View
+        className="px-6 pt-4 border-t border-brand-100 bg-white/80"
+        style={{ paddingBottom: Math.max(insets.bottom, 16) }}
+      >
         <View className="flex-row justify-center items-center">
           <Text className="text-brand-600 text-sm">Chưa có tài khoản? </Text>
           <TouchableOpacity

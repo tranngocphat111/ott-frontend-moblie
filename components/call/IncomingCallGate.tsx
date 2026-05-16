@@ -3,12 +3,14 @@ import { Image, Modal, Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/Authcontext';
 import { mobileGroupCallSession } from '@/services/call/mobileGroupCallSession';
 import { chatSocket, type CallType } from '@/services/socket/chatSocket';
 import { ChatApi } from '@/services/api';
 import { getAvatarFallbackLabel, getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
+import { DEFAULT_SYSTEM_BACKGROUND } from '@/utils/useSystemBackground';
+import * as SystemUI from 'expo-system-ui';
 
 type IncomingCallPayload = {
   conversationId: string;
@@ -16,6 +18,7 @@ type IncomingCallPayload = {
   callerId: string;
   callType: CallType;
   isGroup?: boolean;
+  participants?: string[];
   name?: string;
   avatar?: string;
   conversationName?: string;
@@ -65,10 +68,12 @@ const IncomingAvatar = ({ name, avatar }: IncomingCallDisplay) => {
 export const IncomingCallGate: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
   const { user, chatUserId } = useAuth();
   const userId = chatUserId || user?.id || '';
   const activeCallKeyRef = useRef<string | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
+  const bottomDockPadding = Math.max(insets.bottom + 10, 24);
 
   const acceptIncomingCall = useCallback((state: IncomingCallState) => {
     const { payload, display } = state;
@@ -190,6 +195,29 @@ export const IncomingCallGate: React.FC = () => {
     const onIncomingCall = async (payload: IncomingCallPayload) => {
       if (!payload?.conversationId || String(payload.callerId) === String(userId)) return;
 
+      if (payload.isGroup) {
+        const activeGroupCall = mobileGroupCallSession.getSnapshot();
+        const sameConversation =
+          activeGroupCall.visible &&
+          String(activeGroupCall.conversationId) === String(payload.conversationId);
+        const sameCall =
+          !payload.callId ||
+          !activeGroupCall.callId ||
+          String(activeGroupCall.callId) === String(payload.callId);
+        const isAlreadyParticipant =
+          Array.isArray(payload.participants) &&
+          payload.participants.some((id) => String(id) === String(userId));
+
+        if ((sameConversation && sameCall) || isAlreadyParticipant) {
+          return;
+        }
+
+        if (activeGroupCall.visible) {
+          declineIncomingCall(payload);
+          return;
+        }
+      }
+
       if (pathname?.includes('/call')) {
         declineIncomingCall(payload);
         return;
@@ -232,6 +260,15 @@ export const IncomingCallGate: React.FC = () => {
       ? 'Cuộc gọi video'
       : 'Cuộc gọi thoại';
 
+  useEffect(() => {
+    if (!incomingCall) return;
+
+    void SystemUI.setBackgroundColorAsync('#100b07');
+    return () => {
+      void SystemUI.setBackgroundColorAsync(DEFAULT_SYSTEM_BACKGROUND);
+    };
+  }, [incomingCall]);
+
   return (
     <Modal
       visible={!!incomingCall}
@@ -245,7 +282,11 @@ export const IncomingCallGate: React.FC = () => {
         colors={['rgba(35,26,16,0.96)', 'rgba(16,11,7,0.96)']}
         style={{ flex: 1 }}
       >
-        <SafeAreaView className="flex-1 justify-between px-6 py-9">
+        <SafeAreaView
+          edges={['top', 'left', 'right']}
+          className="flex-1 justify-between px-6 pt-9"
+          style={{ paddingBottom: bottomDockPadding }}
+        >
           <View className="items-center pt-10">
             {incomingCall && <IncomingAvatar {...incomingCall.display} />}
             <Text className="mt-6 text-center text-2xl font-bold text-white">

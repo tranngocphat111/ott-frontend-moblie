@@ -71,7 +71,7 @@ export default function SetupPhoneScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-50">
+    <SafeAreaView className="flex-1 bg-brand-50" edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
 
       <KeyboardAvoidingView

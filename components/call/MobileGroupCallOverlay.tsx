@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Modal, Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatApi } from '@/services/api';
 import {
   mobileGroupCallSession,
@@ -11,9 +11,12 @@ import {
 import { chatSocket } from '@/services/socket/chatSocket';
 import { LIVEKIT_CONFIG } from '@/configuration/api';
 import { getAvatarFallbackLabel, resolveMediaUrl } from '@/utils/chat';
+import { DEFAULT_SYSTEM_BACKGROUND } from '@/utils/useSystemBackground';
+import * as SystemUI from 'expo-system-ui';
 
 const BROWN = '#9a6a43';
 const BROWN_SOFT = '#e8d6c5';
+const MAX_GROUP_CALL_PARTICIPANTS = 8;
 
 declare const require: any;
 
@@ -110,75 +113,84 @@ const LiveKitUnavailableView: React.FC<
   notice = 'Đang tải phòng camera...',
   onLeave,
   onOpenInvite,
-}) => (
-  <LinearGradient
-    colors={['#4a2f1b', '#21140b', '#0f0a06']}
-    style={{ flex: 1 }}
-  >
-    <SafeAreaView className="flex-1 px-5 py-5">
-      <View className="flex-row items-center justify-between">
-        <View className="min-w-0 flex-1 flex-row items-center">
-          <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-white/12">
-            <Text className="text-base font-bold text-white">
-              {getAvatarFallbackLabel(title)}
-            </Text>
+}) => {
+  const insets = useSafeAreaInsets();
+  const bottomDockPadding = Math.max(insets.bottom + 8, 20);
+
+  return (
+    <LinearGradient
+      colors={['#4a2f1b', '#21140b', '#0f0a06']}
+      style={{ flex: 1 }}
+    >
+      <SafeAreaView
+        edges={['top', 'left', 'right']}
+        className="flex-1 px-5 pt-5"
+        style={{ paddingBottom: bottomDockPadding }}
+      >
+        <View className="flex-row items-center justify-between">
+          <View className="min-w-0 flex-1 flex-row items-center">
+            <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-white/12">
+              <Text className="text-base font-bold text-white">
+                {getAvatarFallbackLabel(title)}
+              </Text>
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-xl font-bold text-white" numberOfLines={1}>
+                {title}
+              </Text>
+              <Text className="mt-1 text-xs font-semibold uppercase text-[#dfc0a4]">
+                {participantCount} người tham gia
+              </Text>
+            </View>
           </View>
-          <View className="min-w-0 flex-1">
-            <Text className="text-xl font-bold text-white" numberOfLines={1}>
-              {title}
-            </Text>
-            <Text className="mt-1 text-xs font-semibold uppercase text-[#dfc0a4]">
-              {participantCount} người tham gia
-            </Text>
+
+          <View className="rounded-full bg-[#111827]/70 px-3 py-1.5">
+            <Text className="text-xs font-bold text-emerald-300">{elapsedLabel}</Text>
           </View>
         </View>
 
-        <View className="rounded-full bg-[#111827]/70 px-3 py-1.5">
-          <Text className="text-xs font-bold text-emerald-300">{elapsedLabel}</Text>
-        </View>
-      </View>
-
-      <View className="flex-1 items-center justify-center px-4">
-        <GroupCallAvatar title={title} avatar={avatarUrl || ''} />
-        <Text className="mt-7 text-center text-2xl font-bold text-white">
-          Cuộc gọi nhóm
-        </Text>
-        <View className="mt-4 flex-row items-center rounded-2xl bg-white/10 px-4 py-3">
-          <ActivityIndicator color={BROWN_SOFT} />
-          <Text className="ml-3 flex-1 text-center text-sm font-semibold text-white/75">
-            {notice}
+        <View className="flex-1 items-center justify-center px-4">
+          <GroupCallAvatar title={title} avatar={avatarUrl || ''} />
+          <Text className="mt-7 text-center text-2xl font-bold text-white">
+            Cuộc gọi nhóm
           </Text>
+          <View className="mt-4 flex-row items-center rounded-2xl bg-white/10 px-4 py-3">
+            <ActivityIndicator color={BROWN_SOFT} />
+            <Text className="ml-3 flex-1 text-center text-sm font-semibold text-white/75">
+              {notice}
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <View className="rounded-[32px] border border-[#d8b79a]/25 bg-[#17100b]/85 px-5 py-4">
-        <View className="flex-row items-start justify-center gap-4">
-          {onOpenInvite && (
+        <View className="rounded-[32px] border border-[#d8b79a]/25 bg-[#17100b]/85 px-5 py-4">
+          <View className="flex-row items-start justify-center gap-4">
+            {onOpenInvite && (
+              <View className="items-center">
+                <Pressable
+                  onPress={onOpenInvite}
+                  className="h-14 w-14 items-center justify-center rounded-full bg-[#b78457]"
+                >
+                  <Feather name="user-plus" size={23} color="#fff" />
+                </Pressable>
+                <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Thêm</Text>
+              </View>
+            )}
+
             <View className="items-center">
               <Pressable
-                onPress={onOpenInvite}
-                className="h-14 w-14 items-center justify-center rounded-full bg-[#b78457]"
+                onPress={onLeave}
+                className="h-14 w-14 items-center justify-center rounded-full bg-[#ef4444]"
               >
-                <Feather name="user-plus" size={23} color="#fff" />
+                <Feather name="phone-off" size={23} color="#fff" />
               </Pressable>
-              <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Thêm</Text>
+              <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Kết thúc</Text>
             </View>
-          )}
-
-          <View className="items-center">
-            <Pressable
-              onPress={onLeave}
-              className="h-14 w-14 items-center justify-center rounded-full bg-[#ef4444]"
-            >
-              <Feather name="phone-off" size={23} color="#fff" />
-            </Pressable>
-            <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Kết thúc</Text>
           </View>
         </View>
-      </View>
-    </SafeAreaView>
-  </LinearGradient>
-);
+      </SafeAreaView>
+    </LinearGradient>
+  );
+};
 
 const SafeLiveKitGroupCallView: React.FC<SafeLiveKitGroupCallViewProps> = (props) => {
   const [LiveKitView, setLiveKitView] = useState<React.ComponentType<any> | null>(null);
@@ -225,6 +237,7 @@ type InviteSheetProps = {
   candidates: CallMemberOption[];
   selectedIds: string[];
   submitting: boolean;
+  maxSelectable: number;
   onClose: () => void;
   onToggle: (memberId: string) => void;
   onSubmit: () => void;
@@ -235,20 +248,27 @@ const InviteMembersSheet: React.FC<InviteSheetProps> = ({
   candidates,
   selectedIds,
   submitting,
+  maxSelectable,
   onClose,
   onToggle,
   onSubmit,
 }) => {
+  const insets = useSafeAreaInsets();
+  const sheetBottomPadding = Math.max(insets.bottom + 16, 24);
+
   if (!visible) return null;
 
   return (
     <View className="absolute inset-0 justify-end bg-black/55">
-      <View className="max-h-[72%] rounded-t-[28px] border border-[#ead8c7] bg-[#fffaf6] px-5 pb-6 pt-5">
+      <View
+        className="max-h-[72%] rounded-t-[28px] border border-[#ead8c7] bg-[#fffaf6] px-5 pt-5"
+        style={{ paddingBottom: sheetBottomPadding }}
+      >
         <View className="mb-4 flex-row items-center justify-between">
           <View>
             <Text className="text-lg font-bold text-[#231a10]">Thêm vào cuộc gọi</Text>
             <Text className="mt-1 text-xs font-medium text-[#8b6642]">
-              Mời thành viên nhóm đang chưa tham gia
+              Còn {Math.max(maxSelectable, 0)} chỗ trống trong cuộc gọi
             </Text>
           </View>
           <Pressable
@@ -259,7 +279,14 @@ const InviteMembersSheet: React.FC<InviteSheetProps> = ({
           </Pressable>
         </View>
 
-        {candidates.length === 0 ? (
+        {maxSelectable <= 0 ? (
+          <View className="items-center rounded-2xl border border-[#ead8c7] bg-white px-4 py-8">
+            <Feather name="users" size={28} color="#b78457" />
+            <Text className="mt-3 text-center text-sm font-semibold text-[#694d31]">
+              Cuộc gọi nhóm đã đủ 8 người tham gia.
+            </Text>
+          </View>
+        ) : candidates.length === 0 ? (
           <View className="items-center rounded-2xl border border-[#ead8c7] bg-white px-4 py-8">
             <Feather name="users" size={28} color="#b78457" />
             <Text className="mt-3 text-center text-sm font-semibold text-[#694d31]">
@@ -306,10 +333,12 @@ const InviteMembersSheet: React.FC<InviteSheetProps> = ({
         )}
 
         <Pressable
-          disabled={selectedIds.length === 0 || submitting}
+          disabled={selectedIds.length === 0 || submitting || maxSelectable <= 0}
           onPress={onSubmit}
           className={`mt-4 h-12 items-center justify-center rounded-2xl ${
-            selectedIds.length === 0 || submitting ? 'bg-[#d8c8b8]' : 'bg-[#8b6642]'
+            selectedIds.length === 0 || submitting || maxSelectable <= 0
+              ? 'bg-[#d8c8b8]'
+              : 'bg-[#8b6642]'
           }`}
         >
           <Text className="text-sm font-bold text-white">
@@ -322,6 +351,8 @@ const InviteMembersSheet: React.FC<InviteSheetProps> = ({
 };
 
 export const MobileGroupCallOverlay = () => {
+  const insets = useSafeAreaInsets();
+  const bottomDockPadding = Math.max(insets.bottom + 8, 20);
   const [snapshot, setSnapshot] = useState<MobileGroupCallSnapshot>(
     mobileGroupCallSession.getSnapshot(),
   );
@@ -336,6 +367,15 @@ export const MobileGroupCallOverlay = () => {
       setSnapshot(mobileGroupCallSession.getSnapshot());
     });
   }, []);
+
+  useEffect(() => {
+    if (!snapshot.visible) return;
+
+    void SystemUI.setBackgroundColorAsync('#0f0a06');
+    return () => {
+      void SystemUI.setBackgroundColorAsync(DEFAULT_SYSTEM_BACKGROUND);
+    };
+  }, [snapshot.visible]);
 
   useEffect(() => {
     if (!snapshot.visible || !snapshot.startedAt) return;
@@ -383,9 +423,12 @@ export const MobileGroupCallOverlay = () => {
 
   const title = snapshot.title || 'Cuộc gọi nhóm';
   const participantCount =
-    snapshot.participantCount ||
-    snapshot.participants.length ||
-    (snapshot.status === 'idle' ? 0 : 1);
+    Math.min(
+      MAX_GROUP_CALL_PARTICIPANTS,
+      snapshot.participantCount ||
+        snapshot.participants.length ||
+        (snapshot.status === 'idle' ? 0 : 1),
+    );
   const elapsed = useMemo(
     () => formatElapsed(snapshot.startedAt, now),
     [now, snapshot.startedAt],
@@ -424,6 +467,10 @@ export const MobileGroupCallOverlay = () => {
     () => new Set(snapshot.participants.map((id) => String(id || '').trim()).filter(Boolean)),
     [snapshot.participants],
   );
+  const participantKey = useMemo(
+    () => snapshot.participants.map((id) => String(id || '').trim()).filter(Boolean).sort().join('|'),
+    [snapshot.participants],
+  );
   const participantDisplayById = useMemo(() => {
     const map: Record<string, ParticipantDisplay> = {};
     groupMembers.forEach((member) => {
@@ -432,13 +479,26 @@ export const MobileGroupCallOverlay = () => {
         avatar: member.avatarUrl,
       };
     });
+    Object.entries(snapshot.participantDetails || {}).forEach(([userId, display]) => {
+      const id = String(userId || '').trim();
+      if (!id) return;
+
+      map[id] = {
+        name: id === snapshot.userId ? 'Bạn' : display.name || map[id]?.name || `User ${id.slice(-4)}`,
+        avatar: display.avatar || map[id]?.avatar,
+      };
+    });
 
     if (snapshot.userId && !map[snapshot.userId]) {
       map[snapshot.userId] = { name: 'Bạn' };
     }
 
     return map;
-  }, [groupMembers, snapshot.userId]);
+  }, [groupMembers, snapshot.participantDetails, snapshot.userId]);
+  const remainingInviteSlots = Math.max(
+    0,
+    MAX_GROUP_CALL_PARTICIPANTS - participantCount,
+  );
   const inviteCandidates = useMemo(
     () =>
       groupMembers.filter(
@@ -446,9 +506,17 @@ export const MobileGroupCallOverlay = () => {
           member.id &&
           member.id !== snapshot.userId &&
           !participantIdSet.has(member.id),
-      ),
-    [groupMembers, participantIdSet, snapshot.userId],
+      ).slice(0, remainingInviteSlots),
+    [groupMembers, participantIdSet, remainingInviteSlots, snapshot.userId],
   );
+
+  useEffect(() => {
+    setSelectedInviteeIds((current) =>
+      current
+        .filter((memberId) => !participantIdSet.has(memberId))
+        .slice(0, remainingInviteSlots),
+    );
+  }, [participantIdSet, participantKey, remainingInviteSlots]);
 
   const closeCall = () => {
     if (isError) {
@@ -467,6 +535,8 @@ export const MobileGroupCallOverlay = () => {
     setSelectedInviteeIds((current) =>
       current.includes(memberId)
         ? current.filter((id) => id !== memberId)
+        : current.length >= remainingInviteSlots
+          ? current
         : [...current, memberId],
     );
   };
@@ -476,6 +546,7 @@ export const MobileGroupCallOverlay = () => {
       !snapshot.conversationId ||
       !snapshot.userId ||
       selectedInviteeIds.length === 0 ||
+      remainingInviteSlots <= 0 ||
       inviteSubmitting
     ) {
       return;
@@ -514,13 +585,14 @@ export const MobileGroupCallOverlay = () => {
             participantCount={participantCount}
             participantDisplayById={participantDisplayById}
             onLeave={() => void mobileGroupCallSession.leaveCurrentCall()}
-            onOpenInvite={openInvite}
+            onOpenInvite={remainingInviteSlots > 0 ? openInvite : undefined}
           />
           <InviteMembersSheet
             visible={inviteVisible}
             candidates={inviteCandidates}
             selectedIds={selectedInviteeIds}
             submitting={inviteSubmitting}
+            maxSelectable={remainingInviteSlots}
             onClose={() => setInviteVisible(false)}
             onToggle={toggleInvitee}
             onSubmit={submitInvite}
@@ -541,7 +613,11 @@ export const MobileGroupCallOverlay = () => {
         colors={['#4a2f1b', '#21140b', '#0f0a06']}
         style={{ flex: 1 }}
       >
-        <SafeAreaView className="flex-1 px-5 py-5">
+        <SafeAreaView
+          edges={['top', 'left', 'right']}
+          className="flex-1 px-5 pt-5"
+          style={{ paddingBottom: bottomDockPadding }}
+        >
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center">
               <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-white/12">
@@ -604,7 +680,9 @@ export const MobileGroupCallOverlay = () => {
                   <View className="items-center">
                     <Pressable
                       onPress={openInvite}
+                      disabled={remainingInviteSlots <= 0}
                       className="h-14 w-14 items-center justify-center rounded-full bg-[#b78457]"
+                      style={{ opacity: remainingInviteSlots <= 0 ? 0.45 : 1 }}
                     >
                       <Feather name="user-plus" size={23} color="#fff" />
                     </Pressable>
@@ -640,6 +718,7 @@ export const MobileGroupCallOverlay = () => {
           candidates={inviteCandidates}
           selectedIds={selectedInviteeIds}
           submitting={inviteSubmitting}
+          maxSelectable={remainingInviteSlots}
           onClose={() => setInviteVisible(false)}
           onToggle={toggleInvitee}
           onSubmit={submitInvite}

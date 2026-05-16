@@ -3,6 +3,14 @@ import { CHAT_API_CONFIG } from '@/configuration/api';
 
 export type CallType = 'voice' | 'video';
 
+export type CallParticipantDetail = {
+	userId?: string;
+	user_id?: string;
+	id?: string;
+	name?: string;
+	avatar?: string;
+};
+
 type CallSessionAck = {
 	ok?: boolean;
 	reason?: string;
@@ -12,6 +20,7 @@ type CallSessionAck = {
 	isGroup?: boolean;
 	livekitToken?: string | null;
 	participants?: string[];
+	participantDetails?: CallParticipantDetail[];
 	targetUserId?: string;
 };
 
@@ -49,6 +58,7 @@ type ChatSocketEventMap = {
 		callId?: string;
 		callType: CallType;
 		participants?: string[];
+		participantDetails?: CallParticipantDetail[];
 		isGroup?: boolean;
 		livekitToken?: string | null;
 	}) => void;
@@ -60,6 +70,7 @@ type ChatSocketEventMap = {
 		startedAt?: string;
 		isGroup?: boolean;
 		participants?: string[];
+		participantDetails?: CallParticipantDetail[];
 		name?: string;
 		avatar?: string;
 		conversationName?: string;
@@ -74,6 +85,7 @@ type ChatSocketEventMap = {
 		callId?: string;
 		userId: string;
 		participants: string[];
+		participantDetails?: CallParticipantDetail[];
 		callType: CallType;
 		isGroup?: boolean;
 		livekitToken?: string | null;

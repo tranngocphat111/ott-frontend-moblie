@@ -6,10 +6,11 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { isLoading, errors, countdown, requestOtp, resendOtp, register } = useRegister();
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -39,7 +40,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-50">
+    <SafeAreaView className="flex-1 bg-brand-50" edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
 
       {step === 1 && (
@@ -82,7 +83,10 @@ export default function RegisterScreen() {
         />
       )}
 
-      <View className="px-6 pb-6 border-t border-brand-100 pt-4 bg-white/80">
+      <View
+        className="px-6 border-t border-brand-100 pt-4 bg-white/80"
+        style={{ paddingBottom: Math.max(insets.bottom, 16) }}
+      >
         <View className="flex-row justify-center items-center">
           <Text className="text-brand-600 text-sm">Đã có tài khoản? </Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
