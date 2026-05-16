@@ -13,14 +13,18 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSystemBackground } from '@/utils/useSystemBackground';
 
 export default function LandingScreen() {
   const router = useRouter();
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isCompact = height < 720;
   const intro = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
+  const actionBottomPadding = Math.max(insets.bottom + 10, isCompact ? 16 : 28);
+  useSystemBackground('#120c08');
 
   useEffect(() => {
     Animated.parallel([
@@ -95,7 +99,7 @@ export default function LandingScreen() {
         <View className="absolute -right-10 top-28 h-44 w-44 rotate-12 rounded-[32px] border border-white/10 bg-white/5" />
         <View className="absolute -left-16 bottom-24 h-52 w-52 -rotate-12 rounded-[36px] border border-[#d0a97e]/15 bg-[#d0a97e]/10" />
 
-        <SafeAreaView className="flex-1 px-6">
+        <SafeAreaView className="flex-1 px-6" edges={['top', 'left', 'right']}>
           <Animated.View
             style={introStyle}
             className={`${isCompact ? 'pt-4' : 'pt-8'} flex-row items-center justify-between`}
@@ -180,7 +184,10 @@ export default function LandingScreen() {
             </View>
           </Animated.View>
 
-          <Animated.View style={introStyle} className={`${isCompact ? 'pb-4' : 'pb-7'} gap-3`}>
+          <Animated.View
+            style={[introStyle, { paddingBottom: actionBottomPadding }]}
+            className="gap-3"
+          >
             <Pressable
               className="h-14 flex-row items-center justify-center rounded-2xl bg-white"
               onPress={() => router.push('/(auth)/login')}

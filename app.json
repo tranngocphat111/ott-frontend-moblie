@@ -12,7 +12,9 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/85627970-866c-453c-a0c2-981b3703f388"
+      "url": "https://u.expo.dev/85627970-866c-453c-a0c2-981b3703f388",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     },
     "owner": "piin-nhs",
     "ios": {
@@ -81,7 +83,11 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Cho phép truy cập thư viện để hiển thị ảnh/video gần đây và gửi trong cuộc trò chuyện"
+          "photosPermission": "Cho phép truy cập thư viện để hiển thị ảnh/video gần đây và gửi trong cuộc trò chuyện",
+          "granularPermissions": [
+            "photo",
+            "video"
+          ]
         }
       ],
       [

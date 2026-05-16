@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
+import * as Updates from 'expo-updates';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -85,6 +86,30 @@ export default function RootLayout() {
     return () => {
       clearTimeout(fallbackTimer);
       clearTimeout(bootTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (__DEV__ || !Updates.isEnabled) return;
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void Updates.checkForUpdateAsync()
+        .then(async (update) => {
+          if (cancelled || !update.isAvailable) return;
+          await Updates.fetchUpdateAsync();
+          if (!cancelled) {
+            await Updates.reloadAsync();
+          }
+        })
+        .catch((error) => {
+          console.warn('Không thể kiểm tra bản cập nhật OTA:', error);
+        });
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
     };
   }, []);
 

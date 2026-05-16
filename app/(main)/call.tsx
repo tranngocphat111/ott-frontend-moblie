@@ -23,6 +23,7 @@ import { chatSocket, type CallType } from '@/services/socket/chatSocket';
 import { getAvatarFallbackLabel, resolveMediaUrl } from '@/utils/chat';
 import { ChatApi } from '@/services/api';
 import { LIVEKIT_CONFIG } from '@/configuration/api';
+import { useSystemBackground } from '@/utils/useSystemBackground';
 
 declare const require: any;
 
@@ -211,49 +212,55 @@ const LiveKitFallbackCallView: React.FC<SafeLiveKitGroupCallViewProps> = ({
   participantCount,
   onLeave,
   onOpenInvite,
-}) => (
-  <View className="flex-1 bg-[#160f0a]">
-    <StatusBar style="light" translucent backgroundColor="transparent" />
-    <LinearGradient
-      colors={['#3b2718', '#1d130c', '#100b07']}
-      style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
-    />
+}) => {
+  const insets = useSafeAreaInsets();
+  const controlsBottomPadding = Math.max(insets.bottom + 12, 20);
 
-    <View className="absolute left-5 right-5 top-12 z-10 flex-row items-center justify-between">
-      <View className="min-w-0 flex-1 flex-row items-center">
-        <AvatarCircle name={title} avatarUrl={avatarUrl} size={42} textSize="text-base" />
-        <View className="ml-3 min-w-0 flex-1">
-          <View className="flex-row items-center">
-            <Text className="max-w-[70%] text-xl font-bold text-white" numberOfLines={1}>
-              {title}
-            </Text>
-            <View className="ml-3 rounded-lg border border-[#d0a97e]/20 bg-black/45 px-2.5 py-1">
-              <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
+  return (
+    <View className="flex-1 bg-[#160f0a]">
+      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <LinearGradient
+        colors={['#3b2718', '#1d130c', '#100b07']}
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+      />
+
+      <View className="absolute left-5 right-5 top-12 z-10 flex-row items-center justify-between">
+        <View className="min-w-0 flex-1 flex-row items-center">
+          <AvatarCircle name={title} avatarUrl={avatarUrl} size={42} textSize="text-base" />
+          <View className="ml-3 min-w-0 flex-1">
+            <View className="flex-row items-center">
+              <Text className="max-w-[70%] text-xl font-bold text-white" numberOfLines={1}>
+                {title}
+              </Text>
+              <View className="ml-3 rounded-lg border border-[#d0a97e]/20 bg-black/45 px-2.5 py-1">
+                <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
+              </View>
             </View>
+            <Text
+              className="mt-1 text-xs font-semibold uppercase"
+              style={{ color: 'rgba(255,255,255,0.72)' }}
+            >
+              {participantCount} người tham gia
+            </Text>
           </View>
-          <Text
-            className="mt-1 text-xs font-semibold uppercase"
-            style={{ color: 'rgba(255,255,255,0.72)' }}
-          >
-            {participantCount} người tham gia
+        </View>
+      </View>
+
+      <View className="flex-1 items-center justify-center px-8">
+        <AvatarCircle name={title} avatarUrl={avatarUrl} size={148} textSize="text-5xl" />
+        <Text className="mt-5 text-center text-2xl font-bold text-white">{title}</Text>
+        <View className="mt-4 flex-row items-center rounded-2xl border border-[#d0a97e]/20 bg-black/35 px-4 py-3">
+          <ActivityIndicator color={THEME_COLORS.primary[300]} size="small" />
+          <Text className="ml-3 flex-1 text-center text-sm font-semibold text-white/80">
+            Đang giữ kết nối cuộc gọi...
           </Text>
         </View>
       </View>
-    </View>
 
-    <View className="flex-1 items-center justify-center px-8">
-      <AvatarCircle name={title} avatarUrl={avatarUrl} size={148} textSize="text-5xl" />
-      <Text className="mt-5 text-center text-2xl font-bold text-white">{title}</Text>
-      <View className="mt-4 flex-row items-center rounded-2xl border border-[#d0a97e]/20 bg-black/35 px-4 py-3">
-        <ActivityIndicator color={THEME_COLORS.primary[300]} size="small" />
-        <Text className="ml-3 flex-1 text-center text-sm font-semibold text-white/80">
-          Đang giữ kết nối cuộc gọi...
-        </Text>
-      </View>
-    </View>
-
-    <SafeAreaView className="absolute bottom-0 left-0 right-0">
-      <View className="mb-5 items-center px-6">
+      <View
+        className="absolute bottom-0 left-0 right-0 items-center px-6"
+        style={{ paddingBottom: controlsBottomPadding }}
+      >
         <View className="flex-row items-start gap-5 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
           {onOpenInvite && (
             <CallControlButton icon="user-plus" label="Thêm" onPress={onOpenInvite} />
@@ -261,9 +268,9 @@ const LiveKitFallbackCallView: React.FC<SafeLiveKitGroupCallViewProps> = ({
           <CallControlButton icon="phone-off" label="Kết thúc" danger onPress={onLeave} />
         </View>
       </View>
-    </SafeAreaView>
-  </View>
-);
+    </View>
+  );
+};
 
 const SafeLiveKitGroupCallView: React.FC<SafeLiveKitGroupCallViewProps> = (props) => {
   const [LiveKitView, setLiveKitView] = useState<React.ComponentType<any> | null>(null);
@@ -296,6 +303,8 @@ const SafeLiveKitGroupCallView: React.FC<SafeLiveKitGroupCallViewProps> = (props
 export default function CallScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const controlsBottomPadding = Math.max(insets.bottom + 12, 20);
+  useSystemBackground('#160f0a');
   const params = useLocalSearchParams<{
     conversationId?: string;
     type?: string;
@@ -644,7 +653,11 @@ export default function CallScreen() {
 
   if (!conversationId || !userId) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-[#160f0a] px-6">
+      <SafeAreaView
+        edges={['top', 'left', 'right']}
+        className="flex-1 items-center justify-center bg-[#160f0a] px-6"
+        style={{ paddingBottom: Math.max(insets.bottom, 24) }}
+      >
         <Text className="text-center text-base font-semibold text-white">
           Không tìm thấy thông tin cuộc gọi
         </Text>
@@ -660,7 +673,11 @@ export default function CallScreen() {
 
   if (callError) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-[#160f0a] px-6">
+      <SafeAreaView
+        edges={['top', 'left', 'right']}
+        className="flex-1 items-center justify-center bg-[#160f0a] px-6"
+        style={{ paddingBottom: Math.max(insets.bottom, 24) }}
+      >
         <View className="w-full rounded-[28px] border border-[#d0a97e]/30 bg-[#fffaf6] px-5 py-6">
           <View className="h-14 w-14 items-center justify-center rounded-full bg-[#f5e8dc]">
             <Feather name="video-off" size={24} color="#8b6642" />
@@ -891,42 +908,43 @@ export default function CallScreen() {
         </View>
       )}
 
-      <SafeAreaView className="absolute bottom-0 left-0 right-0">
-        <View className="mb-5 items-center px-6">
-          <View className="flex-row items-start gap-5 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
+      <View
+        className="absolute bottom-0 left-0 right-0 items-center px-6"
+        style={{ paddingBottom: controlsBottomPadding }}
+      >
+        <View className="flex-row items-start gap-5 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
+          <CallControlButton
+            icon={isMuted ? 'mic-off' : 'mic'}
+            label={isMuted ? 'Bật mic' : 'Tắt mic'}
+            active={isMuted}
+            onPress={toggleMic}
+          />
+
+          {callType === 'video' && (
             <CallControlButton
-              icon={isMuted ? 'mic-off' : 'mic'}
-              label={isMuted ? 'Bật mic' : 'Tắt mic'}
-              active={isMuted}
-              onPress={toggleMic}
+              icon={isCameraOff ? 'video-off' : 'video'}
+              label={isCameraOff ? 'Bật cam' : 'Tắt cam'}
+              active={isCameraOff}
+              onPress={toggleCamera}
             />
+          )}
 
-            {callType === 'video' && (
-              <CallControlButton
-                icon={isCameraOff ? 'video-off' : 'video'}
-                label={isCameraOff ? 'Bật cam' : 'Tắt cam'}
-                active={isCameraOff}
-                onPress={toggleCamera}
-              />
-            )}
-
-            {isGroup && (
-              <CallControlButton
-                icon="user-plus"
-                label="Thêm"
-                onPress={handleOpenInviteModal}
-              />
-            )}
-
+          {isGroup && (
             <CallControlButton
-              icon="phone-off"
-              label="Kết thúc"
-              danger
-              onPress={() => void handleLeave()}
+              icon="user-plus"
+              label="Thêm"
+              onPress={handleOpenInviteModal}
             />
-          </View>
+          )}
+
+          <CallControlButton
+            icon="phone-off"
+            label="Kết thúc"
+            danger
+            onPress={() => void handleLeave()}
+          />
         </View>
-      </SafeAreaView>
+      </View>
       {inviteMembersModal}
     </View>
   );

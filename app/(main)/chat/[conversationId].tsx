@@ -73,6 +73,7 @@ import {
   ensureMediaLibraryPermission,
   ensureMicrophonePermission,
 } from "@/utils/appPermissions";
+import { useSystemBackground } from "@/utils/useSystemBackground";
 import {
   useChatPanels,
   useConversationMessages,
@@ -135,6 +136,7 @@ const CHAT_BROWN = '#d2a177';
 const CHAT_BROWN_SOFT = '#f5e8dc';
 const CHAT_PANEL_HEIGHT = 260;
 const MAX_PINNED_MESSAGES = 3;
+const MAX_GROUP_CALL_PARTICIPANTS = 8;
 const MAX_GROUP_CALL_INVITEES = 7;
 
 const formatLastSeenLabel = (value?: Date | null) => {
@@ -598,8 +600,11 @@ const ChatTypingIndicator = ({
 };
 
 export default function ChatDetailScreen() {
+  useSystemBackground("#ffffff");
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const chatViewportHeightRef = useRef(0);
+  const [androidKeyboardInset, setAndroidKeyboardInset] = useState(0);
   const {
     conversationId,
     previewUrl,
@@ -1088,6 +1093,19 @@ export default function ChatDetailScreen() {
 
     if (isGroupCall) {
       if (callConversation?.is_calling) {
+        const activeParticipantCount = Number(
+          callConversation?.active_call_participant_count ||
+            callConversation?.call_participant_count ||
+            0,
+        );
+        if (activeParticipantCount >= MAX_GROUP_CALL_PARTICIPANTS) {
+          Alert.alert(
+            'Cuộc gọi đã đủ người',
+            `Cuộc gọi nhóm tối đa ${MAX_GROUP_CALL_PARTICIPANTS} người tham gia.`,
+          );
+          return;
+        }
+
         void mobileGroupCallSession.joinGroupCall({
           conversationId: targetConversationId,
           userId: String(userIdForChat),
@@ -1177,6 +1195,18 @@ export default function ChatDetailScreen() {
     closeAllPanels({ clearMediaSelection: true });
   }, [closeAllPanels]);
 
+  const toggleImagePanelFromComposer = useCallback(() => {
+    toggleImagePanel();
+  }, [toggleImagePanel]);
+
+  const toggleVoicePanelFromComposer = useCallback(() => {
+    toggleVoicePanel();
+  }, [toggleVoicePanel]);
+
+  const toggleExtraPanelFromComposer = useCallback(() => {
+    toggleExtraPanel();
+  }, [toggleExtraPanel]);
+
   useEffect(() => {
     const keyboardShowSubscription = Keyboard.addListener('keyboardDidShow', () => {
       closeAllPanels({ clearMediaSelection: true });
@@ -1186,6 +1216,31 @@ export default function ChatDetailScreen() {
       keyboardShowSubscription.remove();
     };
   }, [closeAllPanels]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const keyboardShowSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      const keyboardHeight = Math.max(0, Number(event.endCoordinates?.height || 0));
+      const keyboardTop = Number(event.endCoordinates?.screenY || 0);
+      const viewportHeight = chatViewportHeightRef.current;
+      const coveredHeight =
+        viewportHeight > 0 && keyboardTop > 0
+          ? Math.max(0, viewportHeight - keyboardTop)
+          : keyboardHeight;
+
+      setAndroidKeyboardInset(Math.max(coveredHeight, 0));
+      setPendingScrollToBottom();
+    });
+    const keyboardHideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setAndroidKeyboardInset(0);
+    });
+
+    return () => {
+      keyboardShowSubscription.remove();
+      keyboardHideSubscription.remove();
+    };
+  }, [setPendingScrollToBottom]);
 
   const openMessageMenu = useCallback((message: ChatMessage) => {
     dismissKeyboard();
@@ -1785,25 +1840,25 @@ export default function ChatDetailScreen() {
     setIsSendingAttachment(true);
     dismissKeyboard();
 
-    const hasLibraryPermission = await ensureImageLibraryPermission();
-    if (!hasLibraryPermission) {
+    if (Platform.OS === 'android') {
+      await ensureImageLibraryPermission().catch(() => false);
+    } else if (!(await ensureImageLibraryPermission())) {
       setIsSendingAttachment(false);
       Alert.alert("Quyền truy cập", "Bạn cần cấp quyền thư viện ảnh để gửi ảnh.");
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9,
-      allowsMultipleSelection: true,
-      selectionLimit: 10,
-    });
-    if (result.canceled || result.assets.length === 0) {
-      setIsSendingAttachment(false);
-      return;
-    }
-
     try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        quality: 0.9,
+        allowsMultipleSelection: true,
+        selectionLimit: 10,
+      });
+      if (result.canceled || result.assets.length === 0) {
+        return;
+      }
+
       const imageAssets = result.assets.filter((asset) => String(asset.type || '').toLowerCase() !== 'video');
       const videoAssets = result.assets.filter((asset) => String(asset.type || '').toLowerCase() === 'video');
 
@@ -1829,7 +1884,7 @@ export default function ChatDetailScreen() {
       setUploadProgress(null);
       setIsSendingAttachment(false);
     }
-  }, [closeImagePanel, conversationId, dismissKeyboard, isSendingAttachment, uploadAndSendImages, userIdForChat]);
+  }, [closeImagePanel, conversationId, dismissKeyboard, isSendingAttachment, uploadAndSendImages, uploadAndSendSingleFile, userIdForChat]);
 
   const takePhotoAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
@@ -2750,13 +2805,17 @@ export default function ChatDetailScreen() {
   }, [translatingMessageId, messages]);
   return (
     <SafeAreaView
-      className="flex-1 bg-surface-sunken pb-6"
+      className="flex-1 bg-surface-sunken"
       edges={["left", "right"]}
+      onLayout={(event) => {
+        chatViewportHeightRef.current = event.nativeEvent.layout.height;
+      }}
     >
       <StatusBar style="light" translucent backgroundColor="transparent" />
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={0}
       >
         <ChatScreenHeader
           title={title}
@@ -3035,9 +3094,13 @@ export default function ChatDetailScreen() {
               onInputFocus={handleComposerInputFocus}
               onInputPressIn={handleComposerInputPressIn}
               onSend={() => void onSendMessage()}
-              onToggleImagePanel={toggleImagePanel}
-              onToggleVoicePanel={toggleVoicePanel}
-              onToggleExtraPanel={toggleExtraPanel}
+              onToggleImagePanel={
+                Platform.OS === 'android'
+                  ? () => void pickImagesAndSend()
+                  : toggleImagePanelFromComposer
+              }
+              onToggleVoicePanel={toggleVoicePanelFromComposer}
+              onToggleExtraPanel={toggleExtraPanelFromComposer}
               onPickFile={() => void pickFileAndSend()}
               imagePanelActive={imagePanelVisible}
               voicePanelActive={voicePanelVisible}
@@ -3052,6 +3115,11 @@ export default function ChatDetailScreen() {
               onSendSelected={() => void sendSelectedPanelMedia()}
               onSTT={handleTranscribeVoice}
               isSTTLoading={isSTTLoading}
+              bottomInset={
+                Platform.OS === 'android'
+                  ? Math.max(androidKeyboardInset, insets.bottom, 8)
+                  : Math.max(insets.bottom, 0)
+              }
             />
           </View>
         ) : !isChatLocked && isDissolved ? (
@@ -3082,6 +3150,7 @@ export default function ChatDetailScreen() {
             mediaLoading={mediaLoading}
             onClose={closeImagePanel}
             onTakePhoto={() => void takePhotoAndSend()}
+            onOpenLibrary={() => void pickImagesAndSend()}
             onToggleSelectMedia={toggleSelectMedia}
             onClearSelection={clearSelectedMedia}
             onSendSelected={() => void sendSelectedPanelMedia()}

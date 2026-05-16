@@ -16,6 +16,7 @@ export type ChatPanelMediaAsset = {
 
 type ChatMediaGridItem =
   | { id: '__camera__'; kind: 'camera' }
+  | { id: '__library__'; kind: 'library' }
   | { id: string; kind: 'asset'; asset: ChatPanelMediaAsset };
 
 type Props = {
@@ -26,6 +27,7 @@ type Props = {
   mediaLoading: boolean;
   onClose: () => void;
   onTakePhoto: () => void;
+  onOpenLibrary?: () => void;
   onToggleSelectMedia: (assetId: string) => void;
   onClearSelection: () => void;
   onSendSelected: () => void;
@@ -40,6 +42,7 @@ export const ChatMediaPanel: React.FC<Props> = ({
   mediaLoading,
   onClose,
   onTakePhoto,
+  onOpenLibrary,
   onToggleSelectMedia,
   onClearSelection,
   onSendSelected,
@@ -51,6 +54,7 @@ export const ChatMediaPanel: React.FC<Props> = ({
   const mediaTileSize = Math.floor((windowWidth - mediaHorizontalPadding * 2 - mediaGap * 2) / 3);
   const gridData: ChatMediaGridItem[] = [
     { id: '__camera__', kind: 'camera' },
+    { id: '__library__', kind: 'library' },
     ...mediaAssets.map((asset) => ({ id: asset.id, kind: 'asset' as const, asset })),
   ];
 
@@ -93,6 +97,28 @@ export const ChatMediaPanel: React.FC<Props> = ({
               >
                 <Feather name="camera" size={22} color="#334155" />
                 <Text className="mt-2 text-[13px] text-slate-700">Chụp ảnh</Text>
+              </Pressable>
+            );
+          }
+
+          if (item.kind === 'library') {
+            return (
+              <Pressable
+                onPress={onOpenLibrary}
+                style={{
+                  width: mediaTileSize,
+                  height: mediaTileSize,
+                  marginBottom: mediaGap,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: '#d8b79a',
+                  backgroundColor: '#fff7ed',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="image" size={22} color={accentColor} />
+                <Text className="mt-2 text-[13px] font-semibold text-slate-700">Thư viện</Text>
               </Pressable>
             );
           }

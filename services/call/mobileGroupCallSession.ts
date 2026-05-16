@@ -2,6 +2,11 @@ import { chatSocket, type CallType } from '@/services/socket/chatSocket';
 
 type GroupCallStatus = 'idle' | 'connecting' | 'active' | 'error';
 
+type ParticipantDisplay = {
+  name: string;
+  avatar?: string;
+};
+
 export type MobileGroupCallSnapshot = {
   visible: boolean;
   status: GroupCallStatus;
@@ -11,6 +16,7 @@ export type MobileGroupCallSnapshot = {
   title: string;
   avatar: string;
   participants: string[];
+  participantDetails: Record<string, ParticipantDisplay>;
   participantCount: number;
   error: string;
   startedAt: number | null;
@@ -38,6 +44,7 @@ const emptySnapshot: MobileGroupCallSnapshot = {
   title: '',
   avatar: '',
   participants: [],
+  participantDetails: {},
   participantCount: 0,
   error: '',
   startedAt: null,
@@ -71,7 +78,63 @@ const isCurrentConversation = (conversationId?: string | null) =>
   !!snapshot.conversationId &&
   normalizeId(conversationId) === normalizeId(snapshot.conversationId);
 
-const applyParticipants = (participants?: string[], participantCount?: number) => {
+const normalizeParticipantDetails = (details?: any) => {
+  const entries: [string, ParticipantDisplay][] = [];
+
+  if (Array.isArray(details)) {
+    details.forEach((detail) => {
+      const id = normalizeId(detail?.userId || detail?.user_id || detail?.id);
+      if (!id) return;
+
+      const name = String(detail?.name || '').trim();
+      const avatar = String(detail?.avatar || '').trim();
+      entries.push([
+        id,
+        {
+          name: name || `User ${id.slice(-4)}`,
+          avatar,
+        },
+      ]);
+    });
+  } else if (details && typeof details === 'object') {
+    Object.entries(details).forEach(([rawId, value]) => {
+      const id = normalizeId(rawId);
+      if (!id) return;
+
+      const detail = value as Partial<ParticipantDisplay>;
+      const name = String(detail?.name || '').trim();
+      const avatar = String(detail?.avatar || '').trim();
+      entries.push([
+        id,
+        {
+          name: name || `User ${id.slice(-4)}`,
+          avatar,
+        },
+      ]);
+    });
+  }
+
+  return Object.fromEntries(entries);
+};
+
+const applyParticipantDetails = (details?: any) => {
+  const normalized = normalizeParticipantDetails(details);
+  if (Object.keys(normalized).length === 0) return;
+
+  setSnapshot({
+    participantDetails: {
+      ...snapshot.participantDetails,
+      ...normalized,
+    },
+  });
+};
+
+const applyParticipants = (
+  participants?: string[],
+  participantCount?: number,
+  participantDetails?: any,
+) => {
+  applyParticipantDetails(participantDetails);
   const nextParticipants = Array.isArray(participants)
     ? participants.map((id) => normalizeId(id)).filter(Boolean)
     : snapshot.participants;
@@ -104,7 +167,7 @@ const bindSocketListeners = () => {
       startedAt: snapshot.startedAt || Date.now(),
     });
     applyLiveKitToken(payload?.livekitToken);
-    applyParticipants(payload?.participants);
+    applyParticipants(payload?.participants, undefined, payload?.participantDetails);
   }) as any);
 
   chatSocket.on('nguoi_dung_tham_gia_goi', ((payload: any) => {
@@ -118,7 +181,7 @@ const bindSocketListeners = () => {
     if (normalizeId(payload?.userId) === normalizeId(snapshot.userId)) {
       applyLiveKitToken(payload?.livekitToken);
     }
-    applyParticipants(payload?.participants);
+    applyParticipants(payload?.participants, undefined, payload?.participantDetails);
   }) as any);
 
   chatSocket.on('nguoi_dung_roi_goi', ((payload: any) => {
@@ -139,7 +202,11 @@ const bindSocketListeners = () => {
       callId: normalizeId(payload?.callId) || snapshot.callId,
       startedAt: snapshot.startedAt || Date.now(),
     });
-    applyParticipants(undefined, Number(payload?.participantCount || 0));
+    applyParticipants(
+      Array.isArray(payload?.participants) ? payload.participants : undefined,
+      Number(payload?.participantCount || 0),
+      payload?.participantDetails,
+    );
   }) as any);
 
   chatSocket.on('ket_thuc_phong_goi', ((payload: any) => {
@@ -177,6 +244,7 @@ const openConnecting = (options: OpenGroupCallOptions) => {
     title: options.title || 'Cuộc gọi nhóm',
     avatar: options.avatar || '',
     participants: [options.userId].filter(Boolean),
+    participantDetails: {},
     participantCount: 1,
     error: '',
     startedAt: Date.now(),
@@ -199,6 +267,9 @@ const normalizeErrorMessage = (error: unknown) => {
   }
   if (/already_active/i.test(reason)) {
     return 'Cuộc gọi nhóm đang diễn ra. Hãy bấm tham gia lại.';
+  }
+  if (/group_call_full/i.test(reason)) {
+    return 'Cuộc gọi nhóm đã đủ 8 người tham gia.';
   }
   return 'Không thể kết nối cuộc gọi nhóm. Vui lòng thử lại.';
 };
@@ -243,6 +314,10 @@ export const mobileGroupCallSession = {
         status: 'active',
         callId: normalizeId(response?.callId) || snapshot.callId,
         participants: response?.participants || snapshot.participants,
+        participantDetails: {
+          ...snapshot.participantDetails,
+          ...normalizeParticipantDetails(response?.participantDetails),
+        },
         participantCount: Math.max(
           response?.participants?.length || 0,
           snapshot.participantCount || 1,
@@ -278,6 +353,10 @@ export const mobileGroupCallSession = {
         status: 'active',
         callId: normalizeId(response?.callId) || snapshot.callId,
         participants: response?.participants || snapshot.participants,
+        participantDetails: {
+          ...snapshot.participantDetails,
+          ...normalizeParticipantDetails(response?.participantDetails),
+        },
         participantCount: Math.max(
           response?.participants?.length || 0,
           snapshot.participantCount || 1,

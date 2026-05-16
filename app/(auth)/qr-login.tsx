@@ -6,11 +6,12 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useQrGenerate } from '@/hooks/auth/useQrGenerate';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME_COLORS } from '@/constants/theme';
 
 export default function QrLoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { qrCode, status, isLoading, error, countdown, generateQr, refreshQr } = useQrGenerate();
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function QrLoginScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-50">
+    <SafeAreaView className="flex-1 bg-brand-50" edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
       
       <TouchableOpacity
@@ -177,7 +178,7 @@ export default function QrLoginScreen() {
       </View>
 
       {/* Footer */}
-      <View className="px-6 pb-6">
+      <View className="px-6" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
         <View className="flex-row justify-center items-center">
           <Text className="text-gray-600 text-sm">
             Chưa có ứng dụng?{' '}
