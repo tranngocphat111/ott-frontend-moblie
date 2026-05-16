@@ -2129,7 +2129,8 @@ export default function ChatDetailScreen() {
     }
 
     let locked = false;
-    for (const message of messages) {
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index];
       const action = String(message?.system_meta?.action || "").toLowerCase();
       if (!action) continue;
 
@@ -2775,7 +2776,7 @@ export default function ChatDetailScreen() {
   }, [translatingMessageId, messages]);
   return (
     <SafeAreaView
-      className="flex-1 bg-surface-sunken mb-6"
+      className="flex-1 bg-surface-sunken pb-6"
       edges={["left", "right"]}
     >
       <StatusBar style="light" translucent backgroundColor="transparent" />
@@ -2797,7 +2798,7 @@ export default function ChatDetailScreen() {
               router.replace("/(main)/(tabs)/home");
             }
           }}
-          onPhone={isMyDocuments ? undefined : () => void openMobileCall('voice')}
+          onPhone={isMyDocuments || isGroup ? undefined : () => void openMobileCall('voice')}
           onVideo={isMyDocuments ? undefined : () => void openMobileCall('video')}
           onSummarize={handleSummarizeChat}
           onMenu={() =>
@@ -2966,7 +2967,8 @@ export default function ChatDetailScreen() {
             {showScrollToBottom && (
               <Pressable
                 onPress={scrollToBottom}
-                className="absolute bottom-4 right-4 h-11 w-11 items-center justify-center rounded-full border border-[#d8b79a] bg-[#b78457] shadow-lg"
+                className="absolute bottom-4 h-11 w-11 items-center justify-center rounded-full border border-[#d8b79a] bg-[#b78457] shadow-lg"
+                style={{ left: '50%', transform: [{ translateX: -22 }] }}
               >
                 <Feather name="chevron-down" size={20} color="#ffffff" />
               </Pressable>

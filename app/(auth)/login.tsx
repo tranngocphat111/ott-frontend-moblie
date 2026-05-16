@@ -101,13 +101,15 @@ export default function LoginScreen() {
       </TouchableOpacity>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
       >
         <ScrollView
           className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         >
           <View className="px-6 pt-6 pb-6">
             <View className="items-center mb-8">
@@ -121,7 +123,7 @@ export default function LoginScreen() {
               <Text className="text-2xl font-bold text-brand-900">
                 Đăng nhập
               </Text>
-              <Text className="text-sm  text-red-600 mt-1">
+              <Text className="text-sm  text-brand-600 mt-1">
                 Nhập thông tin để tiếp tục
               </Text>
             </View>
@@ -136,6 +138,10 @@ export default function LoginScreen() {
               required
               autoCapitalize="none"
               keyboardType="email-address"
+              inputMode="email"
+              autoComplete="username"
+              textContentType="username"
+              returnKeyType="next"
             />
 
             <TextInputField
@@ -148,6 +154,9 @@ export default function LoginScreen() {
               required
               secureTextEntry
               autoCapitalize="none"
+              autoComplete="current-password"
+              textContentType="password"
+              returnKeyType="done"
             />
 
             <TouchableOpacity

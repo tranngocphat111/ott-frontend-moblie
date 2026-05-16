@@ -231,7 +231,10 @@ const LiveKitFallbackCallView: React.FC<SafeLiveKitGroupCallViewProps> = ({
               <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
             </View>
           </View>
-          <Text className="mt-1 text-xs font-semibold uppercase text-white/72">
+          <Text
+            className="mt-1 text-xs font-semibold uppercase"
+            style={{ color: 'rgba(255,255,255,0.72)' }}
+          >
             {participantCount} người tham gia
           </Text>
         </View>

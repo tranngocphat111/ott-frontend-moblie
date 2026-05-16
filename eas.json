@@ -7,8 +7,14 @@
       "channel": "preview",
       "distribution": "internal",
       "env": {
+        "EXPO_PUBLIC_API_URL": "http://18.142.137.171/riff/api",
+        "EXPO_PUBLIC_TIMEOUT": "30000",
         "EXPO_PUBLIC_LIVEKIT_URL": "wss://chat-service-wplw6oap.livekit.cloud",
-        "EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT": "false"
+        "EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT": "true",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "379121421305-4t49t44oqt1qj07ug35n298983ga93ua.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_REDIRECT_URI": "http://localhost:5173/auth/google/callback",
+        "EXPO_PUBLIC_APP_NAME": "Riff",
+        "EXPO_PUBLIC_APP_VERSION": "1.0.0"
       },
       "android": {
         "buildType": "apk"

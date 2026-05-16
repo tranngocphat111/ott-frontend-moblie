@@ -3,7 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import * as WebBrowser from 'expo-web-browser';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import { PresenceProvider } from '@/contexts/PresenceContext';
 import { ThemeProvider } from '@/contexts/Themecontext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { THEME_COLORS } from '@/constants/theme';
+import LoadingScreen from '@/components/common/LoadingScreen';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -70,6 +71,8 @@ class ErrorBoundary extends React.Component<
 }
 
 export default function RootLayout() {
+  const [showBootOverlay, setShowBootOverlay] = useState(true);
+
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(THEME_COLORS.surface.DEFAULT);
     const hideSplash = () => {
@@ -78,7 +81,11 @@ export default function RootLayout() {
 
     hideSplash();
     const fallbackTimer = setTimeout(hideSplash, 500);
-    return () => clearTimeout(fallbackTimer);
+    const bootTimer = setTimeout(() => setShowBootOverlay(false), 900);
+    return () => {
+      clearTimeout(fallbackTimer);
+      clearTimeout(bootTimer);
+    };
   }, []);
 
   return (
@@ -96,6 +103,22 @@ export default function RootLayout() {
                 <ToastProvider>
                   <RootLayoutNav />
                   <StatusBar style="auto" />
+                  {showBootOverlay && (
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                        zIndex: 999,
+                        elevation: 999,
+                      }}
+                    >
+                      <LoadingScreen message="Đang mở Riff" />
+                    </View>
+                  )}
                 </ToastProvider>
               </PresenceProvider>
             </AuthProvider>

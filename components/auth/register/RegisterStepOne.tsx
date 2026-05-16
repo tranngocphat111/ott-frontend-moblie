@@ -54,13 +54,15 @@ export default function RegisterStepOne({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       className="flex-1"
     >
       <ScrollView
         className="flex-1"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
         <View className="px-6 pt-8 pb-6">
           <View className="mb-6">
@@ -93,6 +95,9 @@ export default function RegisterStepOne({
             icon="user"
             required
             autoCapitalize="words"
+            autoComplete="name"
+            textContentType="name"
+            returnKeyType="next"
           />
 
           <PhoneInput
@@ -111,7 +116,11 @@ export default function RegisterStepOne({
             icon="mail"
             required
             keyboardType="email-address"
+            inputMode="email"
             autoCapitalize="none"
+            autoComplete="email"
+            textContentType="emailAddress"
+            returnKeyType="next"
           />
 
           <TextInputField
@@ -124,6 +133,9 @@ export default function RegisterStepOne({
             required
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="next"
           />
 
           <TextInputField
@@ -136,6 +148,9 @@ export default function RegisterStepOne({
             required
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="done"
           />
 
           {(password.length > 0 || confirmPassword.length > 0) && (

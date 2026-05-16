@@ -36,6 +36,7 @@ export function useMessageScroll({
     setInitialScrollReady(false);
     setShowScrollToBottom(false);
     showScrollToBottomRef.current = false;
+    setHasMoreOlder(true);
     setHasMoreNewer(false);
   }, [conversationId]);
 
@@ -43,6 +44,15 @@ export function useMessageScroll({
     if (showScrollToBottomRef.current === next) return;
     showScrollToBottomRef.current = next;
     setShowScrollToBottom(next);
+  }, []);
+
+  const scrollToListEnd = useCallback((animated: boolean) => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd?.({ animated });
+      setTimeout(() => {
+        listRef.current?.scrollToEnd?.({ animated });
+      }, 60);
+    });
   }, []);
 
   const compareIds = useCallback((left?: string, right?: string) => {
@@ -69,8 +79,8 @@ export function useMessageScroll({
       return;
     }
 
-    const lastMessage = messages[messages.length - 1];
-    const before = lastMessage.msg_id || lastMessage._id;
+    const firstMessage = messages[0];
+    const before = firstMessage.msg_id || firstMessage._id;
     if (!before) return;
 
     setLoadingOlder(true);
@@ -84,7 +94,7 @@ export function useMessageScroll({
       // Increase target to 20 and allow up to 5 attempts to fill the gap.
       while (hasMore && countVisualItems(batchMessages) < 20 && attempts < 5) {
         attempts++;
-        const oldestInBatch = batchMessages[batchMessages.length - 1];
+        const oldestInBatch = batchMessages[0];
         if (!oldestInBatch?.msg_id) break;
 
         try {
@@ -94,7 +104,7 @@ export function useMessageScroll({
             hasMore = false;
             break;
           }
-          batchMessages = [...batchMessages, ...nextMessages];
+          batchMessages = normalizeMessages([...nextMessages, ...batchMessages]);
           hasMore = nextPayload.hasMore;
         } catch (err) {
           console.error('Batch auto-fill failed:', err);
@@ -103,7 +113,7 @@ export function useMessageScroll({
       }
 
       if (batchMessages.length > 0) {
-        setMessages((current) => normalizeMessages([...current, ...batchMessages]));
+        setMessages((current) => normalizeMessages([...batchMessages, ...current]));
       }
 
       setHasMoreOlder(hasMore);
@@ -118,9 +128,10 @@ export function useMessageScroll({
     (_width: number, height: number) => {
       if (!initialScrollReady && messages.length > 0) {
         setInitialScrollReady(true);
+        scrollToListEnd(false);
       }
     },
-    [initialScrollReady, messages.length],
+    [initialScrollReady, messages.length, scrollToListEnd],
   );
 
   const loadNewerMessages = useCallback(async () => {
@@ -128,8 +139,8 @@ export function useMessageScroll({
       return;
     }
 
-    const firstMessage = messages[0];
-    const anchorId = firstMessage.msg_id || firstMessage._id;
+    const lastMessage = messages[messages.length - 1];
+    const anchorId = lastMessage.msg_id || lastMessage._id;
     if (!anchorId) return;
 
     setLoadingNewer(true);
@@ -158,37 +169,34 @@ export function useMessageScroll({
 
   const onScroll = useCallback((event: any) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
-    const distanceToOldest =
+    const distanceToBottom =
       event.nativeEvent.contentSize.height -
       (event.nativeEvent.layoutMeasurement.height + currentOffset);
 
-    // FlashList is inverted: offset 0 is the newest message at the bottom.
-    if (currentOffset > 120) {
+    if (distanceToBottom > 120) {
       setScrollToBottomVisible(true);
     } else {
       setScrollToBottomVisible(false);
     }
 
-    if (distanceToOldest < 120) {
+    if (currentOffset < 120) {
       void loadOlderMessages();
     }
 
-    if (currentOffset < 120 && hasMoreNewer) {
+    if (distanceToBottom < 120 && hasMoreNewer) {
       void loadNewerMessages();
     }
   }, [hasMoreNewer, loadNewerMessages, loadOlderMessages, setScrollToBottomVisible]);
 
   const setPendingScrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: true });
-    });
+    scrollToListEnd(true);
     setScrollToBottomVisible(false);
-  }, [setScrollToBottomVisible]);
+  }, [scrollToListEnd, setScrollToBottomVisible]);
 
   const scrollToBottom = useCallback(() => {
-    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    scrollToListEnd(true);
     setScrollToBottomVisible(false);
-  }, [setScrollToBottomVisible]);
+  }, [scrollToListEnd, setScrollToBottomVisible]);
 
   return {
     listRef,

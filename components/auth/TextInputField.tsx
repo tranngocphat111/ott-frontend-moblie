@@ -1,7 +1,14 @@
 // components/auth/TextInputField.tsx
 import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Platform,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  type TextInputProps,
+} from 'react-native';
 
 interface TextInputFieldProps {
   label: string;
@@ -12,12 +19,16 @@ interface TextInputFieldProps {
   icon?: string;
   required?: boolean;
   secureTextEntry?: boolean;
-  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  keyboardType?: TextInputProps['keyboardType'];
   maxLength?: number;
   editable?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   multiline?: boolean;
   numberOfLines?: number;
+  autoComplete?: TextInputProps['autoComplete'];
+  textContentType?: TextInputProps['textContentType'];
+  returnKeyType?: TextInputProps['returnKeyType'];
+  inputMode?: TextInputProps['inputMode'];
 }
 
 export default function TextInputField({
@@ -35,8 +46,13 @@ export default function TextInputField({
   autoCapitalize = 'sentences',
   multiline = false,
   numberOfLines = 1,
+  autoComplete,
+  textContentType,
+  returnKeyType,
+  inputMode,
 }: TextInputFieldProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const inputHeight = multiline ? Math.max(numberOfLines * 22, 72) : 24;
 
   return (
     <View className="mb-4">
@@ -49,10 +65,11 @@ export default function TextInputField({
 
       <View
         className={`flex-row items-center border rounded-2xl px-4 ${
-          multiline ? 'items-start py-3.5' : 'py-3.5'
+          multiline ? 'items-start py-3.5' : 'py-0'
         } ${error ? 'border-red-400 bg-red-50/50' : 'border-brand-200 bg-surface-raised'} ${
           !editable ? 'bg-brand-100' : ''
         }`}
+        style={{ minHeight: multiline ? undefined : 56 }}
       >
         {icon && (
           <Feather
@@ -74,11 +91,24 @@ export default function TextInputField({
           secureTextEntry={secureTextEntry && !showPassword}
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
+          autoComplete={autoComplete}
+          textContentType={textContentType}
+          returnKeyType={returnKeyType}
+          inputMode={inputMode}
+          importantForAutofill="yes"
+          underlineColorAndroid="transparent"
           multiline={multiline}
           numberOfLines={multiline ? numberOfLines : 1}
           textAlignVertical={multiline ? 'top' : 'center'}
           className={`flex-1 text-sm text-brand-900 ${icon ? 'ml-3' : ''}`}
-          style={{ minHeight: multiline ? 72 : undefined }}
+          style={{
+            minHeight: inputHeight,
+            paddingVertical: 0,
+            fontSize: 14,
+            lineHeight: 20,
+            color: '#231a10',
+            ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+          }}
         />
 
         {secureTextEntry && (

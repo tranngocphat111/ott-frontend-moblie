@@ -54,10 +54,15 @@ export default function TwoFactorStep({
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1"
       >
-        <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           <View className="px-6 pt-6 pb-6">
 
             {/* Icon + title */}
@@ -88,8 +93,19 @@ export default function TwoFactorStep({
                   maxLength={8}
                   placeholder="· · · · · · · ·"
                   autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  importantForAutofill="yes"
+                  returnKeyType="done"
+                  underlineColorAndroid="transparent"
                   className="border border-brand-200 rounded-2xl bg-white text-center text-2xl font-bold tracking-widest text-brand-900 py-4"
-                  style={{ fontFamily: 'monospace', letterSpacing: 8 }}
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: 8,
+                    paddingVertical: 0,
+                    minHeight: 58,
+                    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+                  }}
                 />
               </View>
             ) : (
