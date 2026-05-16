@@ -8,7 +8,7 @@ import {
   useConversationContextMenu,
 } from '@/contexts/ConversationContextMenuContext';
 import { THEME_COLORS } from '@/constants/theme';
-import { formatConversationTime, getConversationAvatar, getConversationTitle, getMessageBodyText, isSystemMessageType } from '@/utils/chat';
+import { formatConversationTime, getAvatarFallbackLabel, getConversationAvatar, getConversationTitle, getMessageBodyText, isSystemMessageType } from '@/utils/chat';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type { ChatCategory } from '@/services/api/chat';
 
@@ -141,14 +141,7 @@ function HomeConversationListBody({
     : '';
   const activeIsSystemLastMessage = isSystemMessageType(activeItem?.conversation.last_message?.type);
 
-  const activeInitials = String(activeTitle || '?')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((token) => token[0])
-    .join('')
-    .toUpperCase() || '?';
+  const activeInitials = getAvatarFallbackLabel(activeTitle);
 
   return (
     <View ref={containerRef} style={{ flex: 1 }}>

@@ -238,6 +238,7 @@ export function useConversationMessages(conversationId: string | undefined, user
     isDissolved,
     setMessages,
     setPinnedMessages,
+    setConversation,
     loadConversation,
     normalizeMessages,
     normalizePinnedMessages,

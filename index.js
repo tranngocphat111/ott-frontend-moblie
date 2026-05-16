@@ -1,1 +1,3 @@
-import 'expo-router/entry';
+require('react-native-url-polyfill/auto');
+
+require('expo-router/entry');

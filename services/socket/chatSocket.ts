@@ -43,6 +43,7 @@ type ChatSocketEventMap = {
 	trang_thai_hoat_dong: (payload: { userId: string; isOnline: boolean; lastSeenAt?: string | null }) => void;
 	san_sang_de_goi: (payload: { conversationId: string }) => void;
 	nguoi_dung_ban_goi: (payload: { conversationId: string; targetUserId: string; reason?: string }) => void;
+	khong_the_tham_gia_goi: (payload: { conversationId: string; callId?: string; reason?: string }) => void;
 	bat_dau_goi_thanh_cong: (payload: {
 		conversationId: string;
 		callId?: string;
@@ -59,6 +60,14 @@ type ChatSocketEventMap = {
 		startedAt?: string;
 		isGroup?: boolean;
 		participants?: string[];
+		name?: string;
+		avatar?: string;
+		conversationName?: string;
+		conversationAvatar?: string;
+		groupName?: string;
+		groupAvatar?: string;
+		callerName?: string;
+		callerAvatar?: string;
 	}) => void;
 	nguoi_dung_tham_gia_goi: (payload: {
 		conversationId: string;
@@ -110,6 +119,8 @@ type ChatSocketEventMap = {
 	}) => void;
 	cap_nhat_trang_thai_goi_nhom: (payload: any) => void;
 };
+
+const CALL_ACK_TIMEOUT_MS = 10000;
 
 class ChatSocketService {
 	private socket: Socket | null = null;
@@ -181,15 +192,25 @@ class ChatSocketService {
 	private emitWithAck<T = unknown>(
 		event: string,
 		payload: unknown,
-		timeoutMs = 3000,
+		timeoutMs = 8000,
 	): Promise<T | null> {
 		const socket = this.ensureSocket();
 
 		return new Promise((resolve) => {
 			let settled = false;
+			let connectHandler: (() => void) | null = null;
+			let timer: ReturnType<typeof setTimeout> | null = null;
 			const finish = (value: T | null) => {
 				if (settled) return;
 				settled = true;
+				if (timer) {
+					clearTimeout(timer);
+					timer = null;
+				}
+				if (connectHandler) {
+					socket.off('connect', connectHandler);
+					connectHandler = null;
+				}
 				resolve(value);
 			};
 
@@ -217,11 +238,16 @@ class ChatSocketService {
 				return;
 			}
 
-			const timer = setTimeout(() => finish(null), timeoutMs);
-			socket.once('connect', () => {
-				clearTimeout(timer);
+			timer = setTimeout(() => finish(null), timeoutMs);
+			connectHandler = () => {
+				if (timer) {
+					clearTimeout(timer);
+					timer = null;
+				}
 				action();
-			});
+			};
+			socket.once('connect', connectHandler);
+			socket.connect();
 		});
 	}
 
@@ -301,7 +327,7 @@ class ChatSocketService {
 			callerId,
 			callType,
 			invitedUserIds,
-		});
+		}, CALL_ACK_TIMEOUT_MS);
 	}
 
 	joinCall(
@@ -315,7 +341,7 @@ class ChatSocketService {
 			callId,
 			userId,
 			callType,
-		});
+		}, CALL_ACK_TIMEOUT_MS);
 	}
 
 	leaveCall(conversationId: string, userId: string, callId?: string | null) {

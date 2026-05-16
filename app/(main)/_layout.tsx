@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { THEME_COLORS } from '@/constants/theme';
 import { IncomingCallGate } from '@/components/call/IncomingCallGate';
+import { MobileGroupCallOverlay } from '@/components/call/MobileGroupCallOverlay';
 import { useEffect } from 'react';
 import { warmUpAppPermissionsOnce } from '@/utils/appPermissions';
 
@@ -12,6 +13,7 @@ export default function MainLayout() {
   return (
     <>
       <IncomingCallGate />
+      <MobileGroupCallOverlay />
       <Stack
         screenOptions={{
           headerShown: false,

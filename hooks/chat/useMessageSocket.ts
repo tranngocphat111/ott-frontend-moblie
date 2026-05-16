@@ -18,6 +18,7 @@ interface UseMessageSocketProps {
   onGroupDissolved?: (payload: any) => void;
   onConversationSynced?: (payload: any) => void;
   onGroupUpdated?: (payload: any) => void;
+  onGroupCallUpdated?: (payload: any) => void;
 }
 
 export function useMessageSocket({
@@ -35,7 +36,8 @@ export function useMessageSocket({
   onBlockedFromGroup,
   onGroupDissolved,
   onConversationSynced,
-  onGroupUpdated
+  onGroupUpdated,
+  onGroupCallUpdated
 }: UseMessageSocketProps) {
   useEffect(() => {
     if (!conversationId || !userIdForChat) return;
@@ -79,6 +81,10 @@ export function useMessageSocket({
       chatSocket.on('cap_nhat_nhom', onGroupUpdated as any);
     }
 
+    if (onGroupCallUpdated) {
+      chatSocket.on('cap_nhat_trang_thai_goi_nhom', onGroupCallUpdated as any);
+    }
+
     return () => {
       chatSocket.leaveConversation(conversationId);
 
@@ -116,6 +122,10 @@ export function useMessageSocket({
       if (onGroupUpdated) {
         chatSocket.off('cap_nhat_nhom', onGroupUpdated as any);
       }
+
+      if (onGroupCallUpdated) {
+        chatSocket.off('cap_nhat_trang_thai_goi_nhom', onGroupCallUpdated as any);
+      }
     };
   }, [
     conversationId,
@@ -132,6 +142,7 @@ export function useMessageSocket({
     onBlockedFromGroup,
     onGroupDissolved,
     onConversationSynced,
-    onGroupUpdated
+    onGroupUpdated,
+    onGroupCallUpdated
   ]);
 }
