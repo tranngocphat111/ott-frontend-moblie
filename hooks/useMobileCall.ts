@@ -323,10 +323,10 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       const hasLiveVideo = existing.getVideoTracks().some(isLiveTrack);
 
       if (hasLiveAudio && (mode === 'voice' || hasLiveVideo)) {
-        existing.getAudioTracks().forEach((track) => {
+        existing.getAudioTracks().forEach((track: MobileMediaTrack) => {
           track.enabled = true;
         });
-        existing.getVideoTracks().forEach((track) => {
+        existing.getVideoTracks().forEach((track: MobileMediaTrack) => {
           track.enabled = true;
         });
         setIsMuted(false);
@@ -373,7 +373,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       const stream = localStreamRef.current;
 
       if (stream) {
-        stream.getTracks().forEach((track) => {
+        stream.getTracks().forEach((track: MobileMediaTrack) => {
           pc.addTrack(track, stream);
         });
       }
@@ -698,7 +698,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     if (!stream) return;
 
     if (!isMuted) {
-      stream.getAudioTracks().forEach((track) => {
+      stream.getAudioTracks().forEach((track: MobileMediaTrack) => {
         track.enabled = false;
       });
       setIsMuted(true);
@@ -708,7 +708,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     void (async () => {
       const liveAudioTracks = stream.getAudioTracks().filter(isLiveTrack);
       if (liveAudioTracks.length > 0) {
-        liveAudioTracks.forEach((track) => {
+        liveAudioTracks.forEach((track: MobileMediaTrack) => {
           track.enabled = true;
         });
         setIsMuted(false);
@@ -721,7 +721,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         return;
       }
 
-      stream.getAudioTracks().forEach((track) => {
+      stream.getAudioTracks().forEach((track: MobileMediaTrack) => {
         stream.removeTrack(track);
         stopTrack(track);
       });
@@ -738,7 +738,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     if (!stream) return;
 
     if (!isCameraOff) {
-      stream.getVideoTracks().forEach((track) => {
+      stream.getVideoTracks().forEach((track: MobileMediaTrack) => {
         track.enabled = false;
       });
       setIsCameraOff(true);
@@ -749,7 +749,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     void (async () => {
       const liveVideoTracks = stream.getVideoTracks().filter(isLiveTrack);
       if (liveVideoTracks.length > 0) {
-        liveVideoTracks.forEach((track) => {
+        liveVideoTracks.forEach((track: MobileMediaTrack) => {
           track.enabled = true;
         });
         setIsCameraOff(false);
@@ -764,7 +764,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
         return;
       }
 
-      stream.getVideoTracks().forEach((track) => {
+      stream.getVideoTracks().forEach((track: MobileMediaTrack) => {
         stream.removeTrack(track);
         stopTrack(track);
       });

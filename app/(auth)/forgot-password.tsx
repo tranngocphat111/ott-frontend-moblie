@@ -50,13 +50,15 @@ export default function ForgotPasswordScreen() {
       </TouchableOpacity>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1"
       >
         <ScrollView
           className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
           <View className="px-6 pt-8 pb-6">
 
@@ -148,6 +150,9 @@ export default function ForgotPasswordScreen() {
                   required
                   secureTextEntry
                   autoCapitalize="none"
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  returnKeyType="next"
                 />
                 <TextInputField
                   label="Xác nhận mật khẩu"
@@ -159,6 +164,9 @@ export default function ForgotPasswordScreen() {
                   required
                   secureTextEntry
                   autoCapitalize="none"
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  returnKeyType="done"
                 />
               </>
             )}

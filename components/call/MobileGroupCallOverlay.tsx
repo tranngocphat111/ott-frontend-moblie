@@ -40,6 +40,11 @@ type SafeLiveKitGroupCallViewProps = {
   onOpenInvite?: () => void;
 };
 
+type LiveKitReadiness = {
+  ready: boolean;
+  reason: string;
+};
+
 const getMemberId = (member: any) =>
   String(member?.user_id || member?.user?.user_id || member?._id || '').trim();
 
@@ -148,20 +153,6 @@ const LiveKitUnavailableView: React.FC<
 
       <View className="rounded-[32px] border border-[#d8b79a]/25 bg-[#17100b]/85 px-5 py-4">
         <View className="flex-row items-start justify-center gap-4">
-          <View className="items-center opacity-50">
-            <View className="h-14 w-14 items-center justify-center rounded-full bg-[#5b422f]">
-              <Feather name="mic" size={23} color="#fff" />
-            </View>
-            <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Tắt mic</Text>
-          </View>
-
-          <View className="items-center opacity-50">
-            <View className="h-14 w-14 items-center justify-center rounded-full bg-[#5b422f]">
-              <Feather name="video" size={23} color="#fff" />
-            </View>
-            <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Tắt cam</Text>
-          </View>
-
           {onOpenInvite && (
             <View className="items-center">
               <Pressable
@@ -409,11 +400,26 @@ export const MobileGroupCallOverlay = () => {
       ? 'Đã tham gia cuộc gọi'
       : 'Đang kết nối cuộc gọi...';
   const livekitServerUrl = LIVEKIT_CONFIG.URL.trim();
-  const canUseLiveKit =
-    isActive &&
-    LIVEKIT_CONFIG.ENABLE_NATIVE &&
-    !!snapshot.livekitToken &&
-    !!livekitServerUrl;
+  const livekitReadiness = useMemo<LiveKitReadiness>(() => {
+    if (!isActive) {
+      return { ready: false, reason: 'Đang chờ socket xác nhận cuộc gọi.' };
+    }
+
+    if (!LIVEKIT_CONFIG.ENABLE_NATIVE) {
+      return { ready: false, reason: 'Native LiveKit đang bị tắt trong cấu hình build.' };
+    }
+
+    if (!livekitServerUrl) {
+      return { ready: false, reason: 'Thiếu EXPO_PUBLIC_LIVEKIT_URL trong bundle mobile.' };
+    }
+
+    if (!snapshot.livekitToken) {
+      return { ready: false, reason: 'Backend chưa trả LiveKit token cho thiết bị này.' };
+    }
+
+    return { ready: true, reason: '' };
+  }, [isActive, livekitServerUrl, snapshot.livekitToken]);
+  const canUseLiveKit = livekitReadiness.ready;
   const participantIdSet = useMemo(
     () => new Set(snapshot.participants.map((id) => String(id || '').trim()).filter(Boolean)),
     [snapshot.participants],
@@ -568,6 +574,14 @@ export const MobileGroupCallOverlay = () => {
               {statusLabel}
             </Text>
 
+            {isActive && !canUseLiveKit && (
+              <View className="mt-4 rounded-2xl border border-[#d0a97e]/25 bg-black/25 px-4 py-3">
+                <Text className="text-center text-xs font-semibold text-[#dfc0a4]">
+                  {livekitReadiness.reason}
+                </Text>
+              </View>
+            )}
+
             {isConnecting && (
               <View className="mt-6 rounded-full bg-white/10 px-4 py-3">
                 <ActivityIndicator color={BROWN_SOFT} />
@@ -587,20 +601,6 @@ export const MobileGroupCallOverlay = () => {
             <View className="flex-row items-start justify-center gap-4">
               {!isError && (
                 <>
-                  <View className="items-center opacity-50">
-                    <View className="h-14 w-14 items-center justify-center rounded-full bg-[#5b422f]">
-                      <Feather name="mic" size={23} color="#fff" />
-                    </View>
-                    <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Tắt mic</Text>
-                  </View>
-
-                  <View className="items-center opacity-50">
-                    <View className="h-14 w-14 items-center justify-center rounded-full bg-[#5b422f]">
-                      <Feather name="video" size={23} color="#fff" />
-                    </View>
-                    <Text className="mt-1.5 text-[11px] font-semibold text-white/80">Tắt cam</Text>
-                  </View>
-
                   <View className="items-center">
                     <Pressable
                       onPress={openInvite}

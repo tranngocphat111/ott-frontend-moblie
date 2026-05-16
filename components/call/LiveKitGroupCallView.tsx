@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -89,12 +89,60 @@ const LiveKitControls = ({
     isCameraEnabled,
   } = useLocalParticipant();
   const [busyControl, setBusyControl] = useState<'mic' | 'camera' | null>(null);
+  const [displayMicEnabled, setDisplayMicEnabled] = useState(true);
+  const [displayCameraEnabled, setDisplayCameraEnabled] = useState(true);
+  const micSettledRef = useRef(false);
+  const cameraSettledRef = useRef(false);
+
+  useEffect(() => {
+    if (isMicrophoneEnabled) {
+      micSettledRef.current = true;
+      setDisplayMicEnabled(true);
+      return;
+    }
+
+    if (micSettledRef.current) {
+      setDisplayMicEnabled(false);
+    }
+  }, [isMicrophoneEnabled]);
+
+  useEffect(() => {
+    if (isCameraEnabled) {
+      cameraSettledRef.current = true;
+      setDisplayCameraEnabled(true);
+      return;
+    }
+
+    if (cameraSettledRef.current) {
+      setDisplayCameraEnabled(false);
+    }
+  }, [isCameraEnabled]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (!isMicrophoneEnabled) {
+        micSettledRef.current = true;
+        setDisplayMicEnabled(false);
+      }
+      if (!isCameraEnabled) {
+        cameraSettledRef.current = true;
+        setDisplayCameraEnabled(false);
+      }
+    }, 4500);
+
+    return () => clearTimeout(timeoutId);
+  }, [isCameraEnabled, isMicrophoneEnabled]);
 
   const toggleMic = async () => {
     if (busyControl) return;
+    const nextEnabled = !displayMicEnabled;
+    micSettledRef.current = true;
+    setDisplayMicEnabled(nextEnabled);
     setBusyControl('mic');
     try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+      await localParticipant.setMicrophoneEnabled(nextEnabled);
+    } catch {
+      setDisplayMicEnabled(!nextEnabled);
     } finally {
       setBusyControl(null);
     }
@@ -102,9 +150,14 @@ const LiveKitControls = ({
 
   const toggleCamera = async () => {
     if (busyControl) return;
+    const nextEnabled = !displayCameraEnabled;
+    cameraSettledRef.current = true;
+    setDisplayCameraEnabled(nextEnabled);
     setBusyControl('camera');
     try {
-      await localParticipant.setCameraEnabled(!isCameraEnabled);
+      await localParticipant.setCameraEnabled(nextEnabled);
+    } catch {
+      setDisplayCameraEnabled(!nextEnabled);
     } finally {
       setBusyControl(null);
     }
@@ -118,29 +171,29 @@ const LiveKitControls = ({
       <View className="items-center">
         <Pressable
           onPress={() => void toggleMic()}
-          className={`${buttonBase} ${isMicrophoneEnabled ? 'bg-[#5b422f]' : 'bg-[#ef4444]'}`}
+          className={`${buttonBase} ${displayMicEnabled ? 'bg-[#5b422f]' : 'bg-[#ef4444]'}`}
         >
           <Feather
-            name={isMicrophoneEnabled ? 'mic' : 'mic-off'}
+            name={displayMicEnabled ? 'mic' : 'mic-off'}
             size={23}
             color="#fff"
           />
         </Pressable>
-        <Text className={labelBase}>{isMicrophoneEnabled ? 'Tắt mic' : 'Bật mic'}</Text>
+        <Text className={labelBase}>{displayMicEnabled ? 'Tắt mic' : 'Bật mic'}</Text>
       </View>
 
       <View className="items-center">
         <Pressable
           onPress={() => void toggleCamera()}
-          className={`${buttonBase} ${isCameraEnabled ? 'bg-[#5b422f]' : 'bg-[#ef4444]'}`}
+          className={`${buttonBase} ${displayCameraEnabled ? 'bg-[#5b422f]' : 'bg-[#ef4444]'}`}
         >
           <Feather
-            name={isCameraEnabled ? 'video' : 'video-off'}
+            name={displayCameraEnabled ? 'video' : 'video-off'}
             size={23}
             color="#fff"
           />
         </Pressable>
-        <Text className={labelBase}>{isCameraEnabled ? 'Tắt cam' : 'Bật cam'}</Text>
+        <Text className={labelBase}>{displayCameraEnabled ? 'Tắt cam' : 'Bật cam'}</Text>
       </View>
 
       {onOpenInvite && (
@@ -174,20 +227,6 @@ const FallbackControls = ({
 
   return (
     <View className="flex-row items-start gap-4 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
-      <View className="items-center opacity-50">
-        <View className={`${buttonBase} bg-[#5b422f]`}>
-          <Feather name="mic" size={23} color="#fff" />
-        </View>
-        <Text className={labelBase}>Tắt mic</Text>
-      </View>
-
-      <View className="items-center opacity-50">
-        <View className={`${buttonBase} bg-[#5b422f]`}>
-          <Feather name="video" size={23} color="#fff" />
-        </View>
-        <Text className={labelBase}>Tắt cam</Text>
-      </View>
-
       {onOpenInvite && (
         <View className="items-center">
           <Pressable onPress={onOpenInvite} className={`${buttonBase} bg-[#b78457]`}>
@@ -240,7 +279,10 @@ const LiveKitConnectingFallback = ({
               <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
             </View>
           </View>
-          <Text className="mt-1 text-xs font-semibold uppercase text-white/72">
+          <Text
+            className="mt-1 text-xs font-semibold uppercase"
+            style={{ color: 'rgba(255,255,255,0.72)' }}
+          >
             {participantCount} người tham gia
           </Text>
         </View>
@@ -307,9 +349,29 @@ const LiveKitRoomContent = ({
   onLeave,
   onOpenInvite,
 }: Omit<LiveKitGroupCallViewProps, 'token' | 'serverUrl'>) => {
+  const { localParticipant } = useLocalParticipant();
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
     onlySubscribed: false,
   });
+
+  useEffect(() => {
+    const enableInitialMedia = async () => {
+      await Promise.allSettled([
+        localParticipant.setMicrophoneEnabled(true),
+        localParticipant.setCameraEnabled(true),
+      ]);
+    };
+
+    const retryIds = [0, 650, 1800].map((delay) =>
+      setTimeout(() => {
+        void enableInitialMedia();
+      }, delay),
+    );
+
+    return () => {
+      retryIds.forEach((retryId) => clearTimeout(retryId));
+    };
+  }, [localParticipant]);
 
   const sortedTracks = useMemo(() => {
     return [...tracks].sort((left, right) => {
@@ -397,7 +459,10 @@ const LiveKitRoomContent = ({
                 <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
               </View>
             </View>
-            <Text className="mt-1 text-xs font-semibold uppercase text-white/72">
+            <Text
+              className="mt-1 text-xs font-semibold uppercase"
+              style={{ color: 'rgba(255,255,255,0.72)' }}
+            >
               {participantCount} người tham gia
             </Text>
           </View>
@@ -441,6 +506,23 @@ export const LiveKitGroupCallView: React.FC<LiveKitGroupCallViewProps> = ({
 }) => {
   const [notice, setNotice] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    setNotice(null);
+    setIsConnected(false);
+  }, [token, serverUrl]);
+
+  useEffect(() => {
+    if (isConnected) return;
+
+    const timeoutId = setTimeout(() => {
+      setNotice((current) =>
+        current || 'LiveKit native chưa kết nối được. Hãy kiểm tra APK mới đã cài đúng cấu hình native.',
+      );
+    }, 8000);
+
+    return () => clearTimeout(timeoutId);
+  }, [isConnected, token, serverUrl]);
 
   useEffect(() => {
     void AudioSession.startAudioSession().catch((error) => {

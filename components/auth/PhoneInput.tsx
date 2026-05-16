@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface PhoneInputProps {
   value: string;
@@ -26,19 +26,35 @@ export default function PhoneInput({
       </Text>
 
       <View
-        className={`flex-row items-center border rounded-2xl px-4 py-3.5 ${
+        className={`flex-row items-center border rounded-2xl px-4 py-0 ${
           error ? 'border-red-500 bg-red-50/50' : 'border-brand-200 bg-surface-raised'
         } ${!editable ? 'bg-brand-100' : ''}`}
+        style={{ minHeight: 56 }}
       >
         <Feather name="phone" size={20} color={error ? '#dc2626' : '#8b6642'} />
 
         <TextInput
           className="flex-1 ml-3 text-base text-brand-900"
+          style={{
+            minHeight: 24,
+            paddingVertical: 0,
+            fontSize: 15,
+            lineHeight: 21,
+            color: '#231a10',
+            ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+          }}
           placeholder={placeholder}
           value={value}
           onChangeText={onChangeText}
           keyboardType="phone-pad"
+          inputMode="tel"
+          autoComplete="tel"
+          textContentType="telephoneNumber"
+          importantForAutofill="yes"
+          returnKeyType="next"
+          underlineColorAndroid="transparent"
           autoCapitalize="none"
+          autoCorrect={false}
           editable={editable}
           placeholderTextColor="#bc9166"
         />

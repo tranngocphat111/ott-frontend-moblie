@@ -211,36 +211,33 @@ export const ChatMessagesList: React.FC<Props> = ({
     <View className="relative flex-1">
       <FlashList
         ref={listRef}
-        {...({ inverted: true } as any)}
         data={displayData}
         keyExtractor={(item: any) => item.key}
         onScroll={onScroll}
         removeClippedSubviews
         drawDistance={560}
         scrollEventThrottle={16}
+        {...({ maintainVisibleContentPosition: { minIndexForVisible: 0 } } as any)}
         onContentSizeChange={onContentSizeChange}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
         renderItem={({ item, index }: { item: any; index: number }) => {
-          const newerItem = displayData[index - 1];
-          const olderItem = displayData[index + 1];
+          const olderItem = displayData[index - 1];
 
-          const getOldestMsg = (it: any) => it?.type === 'system-group' ? it.messages[it.messages.length - 1] : it?.message;
-          const getNewestMsg = (it: any) => it?.type === 'system-group' ? it.messages[0] : it?.message;
+          const getOldestMsg = (it: any) => it?.type === 'system-group' ? it.messages[0] : it?.message;
+          const getNewestMsg = (it: any) => it?.type === 'system-group' ? it.messages[it.messages.length - 1] : it?.message;
 
           const currentOldest = getOldestMsg(item);
-          const currentNewest = getNewestMsg(item);
           const olderNewest = getNewestMsg(olderItem);
-          const newerOldest = getOldestMsg(newerItem);
 
           const showTimestamp = shouldShowTimestampAtClusterEnd(
-            olderNewest?.createdAt || olderNewest?.created_at,
             currentOldest?.createdAt || currentOldest?.created_at,
+            olderNewest?.createdAt || olderNewest?.created_at,
           );
 
           if (item.type === 'system-group') {
             const groupMsgs = item.messages as ChatMessage[];
             const isExpanded = !!expandedGroups[item.key];
-            const visibleMsgs = isExpanded ? [...groupMsgs].reverse() : [];
+            const visibleMsgs = isExpanded ? groupMsgs : [];
 
             return (
               <View className="px-2">
@@ -273,6 +270,7 @@ export const ChatMessagesList: React.FC<Props> = ({
                         message={displaySystemMessage}
                         isMine={false}
                         conversation={conversation}
+                        isGroupConversation={isGroup}
                         mineAccentColor={mineAccentColor}
                         showSenderName={false}
                         highlight={highlightedMessageId === getMessageKey(sysMsg)}
@@ -336,6 +334,8 @@ export const ChatMessagesList: React.FC<Props> = ({
                   <ChatMessageBubble
                     message={displaySystemMessage}
                     isMine={false}
+                    conversation={conversation}
+                    isGroupConversation={isGroup}
                     mineAccentColor={mineAccentColor}
                     showSenderName={false}
                     highlight={isHighlighted}
@@ -393,6 +393,7 @@ export const ChatMessagesList: React.FC<Props> = ({
                     message={msg}
                     isMine={isMine}
                     conversation={conversation}
+                    isGroupConversation={isGroup}
                     mineAccentColor={mineAccentColor}
                     showSenderName={false}
                     highlight={isHighlighted}

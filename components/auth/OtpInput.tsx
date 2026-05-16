@@ -1,7 +1,7 @@
 // components/auth/OtpInput.tsx
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface OtpInputProps {
   value: string;
@@ -42,18 +42,33 @@ export default function OtpInput({
       </View>
 
       <View
-        className={`flex-row items-center border rounded-2xl px-4 py-3.5 ${
+        className={`flex-row items-center border rounded-2xl px-4 py-0 ${
           error ? 'border-red-500 bg-red-50/50' : 'border-brand-200 bg-surface-raised'
         }`}
+        style={{ minHeight: 56 }}
       >
         <Feather name="shield" size={20} color={error ? '#dc2626' : '#8b6642'} />
         <TextInput
           ref={inputRef}
           className="flex-1 ml-3 text-base text-brand-900 tracking-[5px]"
+          style={{
+            minHeight: 24,
+            paddingVertical: 0,
+            fontSize: 18,
+            lineHeight: 24,
+            color: '#231a10',
+            ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+          }}
           placeholder="000000"
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={(text) => onChangeText(text.replace(/\D/g, '').slice(0, 6))}
           keyboardType="number-pad"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          importantForAutofill="yes"
+          returnKeyType="done"
+          underlineColorAndroid="transparent"
           maxLength={6}
           placeholderTextColor="#bc9166"
         />

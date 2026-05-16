@@ -1,7 +1,7 @@
 import * as AuthSession from 'expo-auth-session';
 
 export const API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.6:8080/riff/api',
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://18.142.137.171/riff/api',
   TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
   HEADERS: {
     'Content-Type': 'application/json',
@@ -15,8 +15,8 @@ export const CHAT_API_CONFIG = {
 };
 
 export const LIVEKIT_CONFIG = {
-  URL: process.env.EXPO_PUBLIC_LIVEKIT_URL || '',
-  ENABLE_NATIVE: process.env.EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT === 'true',
+  URL: process.env.EXPO_PUBLIC_LIVEKIT_URL || 'wss://chat-service-wplw6oap.livekit.cloud',
+  ENABLE_NATIVE: process.env.EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT !== 'false',
 };
 
 export const NOTIFICATION_API_CONFIG = {

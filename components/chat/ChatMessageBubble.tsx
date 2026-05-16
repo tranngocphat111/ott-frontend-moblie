@@ -51,6 +51,7 @@ interface ChatMessageBubbleProps {
   onMediaReady?: (messageId: string) => void;
   mineAccentColor?: string;
   conversation?: ChatConversation | null;
+  isGroupConversation?: boolean;
   translatedText?: string;
   onTranslate?: () => void;
   isTranslating?: boolean;
@@ -144,6 +145,15 @@ const getReplyUiMeta = (reply: NonNullable<ChatMessage["reply_to"]>) => {
 
 const getSystemNotificationUi = (type?: string | null) => {
   const normalizedType = String(type || "").toLowerCase();
+
+  if (normalizedType === "call_join") {
+    return {
+      icon: Video,
+      iconColor: "#b45309",
+      badgeClassName: "border-amber-200 bg-amber-50",
+      textClassName: "text-amber-800",
+    };
+  }
 
   if (normalizedType === "system_add" || normalizedType === "system_friend_request") {
     const isFriendReq = normalizedType === "system_friend_request";
@@ -244,7 +254,7 @@ const getCallTypeUi = (type?: string | null) => {
   return { Icon: Phone, label: "Cuộc gọi" };
 };
 
-const getCallDisplayCopy = (message: ChatMessage) => {
+const getCallDisplayCopy = (message: ChatMessage, isGroupCall = false) => {
   const normalizedType = String(message.type || "").toLowerCase();
   const rawContent = getCallRawContent(message);
   const isVideoCall = /video/i.test(rawContent);
@@ -272,7 +282,7 @@ const getCallDisplayCopy = (message: ChatMessage) => {
     title: isMissedCall
       ? `Đã bỏ lỡ cuộc gọi ${isVideoCall ? "video" : "thoại"}`
       : `Cuộc gọi ${isVideoCall ? "video" : "thoại"}`,
-    subtitle: isMissedCall ? callTimeLabel : durationText || callTimeLabel,
+    subtitle: isGroupCall ? "" : isMissedCall ? callTimeLabel : durationText || callTimeLabel,
     isMissedCall,
     isVideoCall,
   };
@@ -291,6 +301,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   onMediaReady,
   mineAccentColor = "#dff0ff",
   conversation,
+  isGroupConversation = false,
   translatedText,
   onTranslate,
   isTranslating = false,
@@ -337,7 +348,11 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   const isCallMessage = isCallMessageType(message.type);
   const normalizedCallType = String(message.type || "").toLowerCase();
   const hideCallMessageBubble = normalizedCallType === "call_start" || normalizedCallType === "call_join";
-  const callCopy = isCallMessage ? getCallDisplayCopy(message) : null;
+  const isGroupCallMessage =
+    isGroupConversation ||
+    conversation?.type === "group" ||
+    Boolean((message.system_meta as any)?.isGroup);
+  const callCopy = isCallMessage ? getCallDisplayCopy(message, isGroupCallMessage) : null;
   const callTypeUi = getCallTypeUi(message.type);
   const CallStatusIcon = callTypeUi.Icon;
 
@@ -455,9 +470,11 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
                   <Text className="text-[14px] font-semibold leading-tight text-slate-900">
                     {callCopy.title}
                   </Text>
-                  <Text className="mt-0.5 text-[12px] text-slate-500" numberOfLines={1}>
-                    {callCopy.subtitle || callTypeUi.label}
-                  </Text>
+                  {!!callCopy.subtitle && (
+                    <Text className="mt-0.5 text-[12px] text-slate-500" numberOfLines={1}>
+                      {callCopy.subtitle}
+                    </Text>
+                  )}
                 </View>
               </View>
 

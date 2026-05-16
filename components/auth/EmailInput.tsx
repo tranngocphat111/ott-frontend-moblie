@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface EmailInputProps {
   value: string;
@@ -24,19 +24,35 @@ export default function EmailInput({
       </Text>
 
       <View
-        className={`flex-row items-center border rounded-2xl px-4 py-3.5 ${
+        className={`flex-row items-center border rounded-2xl px-4 py-0 ${
           error ? 'border-red-500 bg-red-50/50' : 'border-brand-200 bg-surface-raised'
         } ${!editable ? 'bg-brand-100' : ''}`}
+        style={{ minHeight: 56 }}
       >
         <Feather name="mail" size={20} color={error ? '#dc2626' : '#8b6642'} />
 
         <TextInput
           className="flex-1 ml-3 text-base text-brand-900"
+          style={{
+            minHeight: 24,
+            paddingVertical: 0,
+            fontSize: 15,
+            lineHeight: 21,
+            color: '#231a10',
+            ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+          }}
           placeholder="example@gmail.com"
           value={value}
           onChangeText={onChangeText}
           keyboardType="email-address"
+          inputMode="email"
+          autoComplete="email"
+          textContentType="emailAddress"
+          importantForAutofill="yes"
+          returnKeyType="next"
+          underlineColorAndroid="transparent"
           autoCapitalize="none"
+          autoCorrect={false}
           maxLength={100}
           editable={editable}
           placeholderTextColor="#bc9166"

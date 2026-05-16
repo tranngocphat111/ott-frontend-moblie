@@ -73,8 +73,6 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
     .map((member) => String(member.user_id || (member as any)._id || ''))
     .filter((id) => id && String(id) !== String(currentUserId || ''));
   const isOnline = conversation.type === 'private' && isUserOnline(otherUserIds[0]);
-  const activeCallConversation = conversation as any;
-  const hasActiveCall = !!activeCallConversation?.is_calling;
 
   React.useEffect(() => {
     if (otherUserIds.length > 0) {
@@ -232,15 +230,6 @@ React.useEffect(() => {
                 />
                 <Text className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                   {category.name}
-                </Text>
-              </View>
-            )}
-
-            {hasActiveCall && (
-              <View className="mb-1 flex-row items-center self-start rounded-full bg-emerald-50 px-2 py-1">
-                <View className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500" />
-                <Text className="text-[11px] font-bold text-emerald-700">
-                  Đang có cuộc gọi - mở để tham gia
                 </Text>
               </View>
             )}

@@ -42,7 +42,7 @@ export function useConversationMessages(conversationId: string | undefined, user
       const leftTime = new Date(left.createdAt || left.created_at || 0).getTime();
       const rightTime = new Date(right.createdAt || right.created_at || 0).getTime();
 
-      if (leftTime !== rightTime) return rightTime - leftTime;
+      if (leftTime !== rightTime) return leftTime - rightTime;
 
       const leftMsgId = String(left.msg_id || '0');
       const rightMsgId = String(right.msg_id || '0');
@@ -52,13 +52,13 @@ export function useConversationMessages(conversationId: string | undefined, user
           const lId = BigInt(leftMsgId);
           const rId = BigInt(rightMsgId);
           if (lId === rId) return 0;
-          return lId > rId ? -1 : 1;
+          return lId > rId ? 1 : -1;
         } catch {
           // Fallback to localeCompare if BigInt fails
         }
       }
 
-      return rightMsgId.localeCompare(leftMsgId);
+      return leftMsgId.localeCompare(rightMsgId);
     });
   }, []);
 
@@ -157,7 +157,7 @@ export function useConversationMessages(conversationId: string | undefined, user
       // Auto-fill logic: if visual items are few, fetch older messages automatically
       while (hasMore && countVisualItems(initialMessages) < 20 && attempts < 5) {
         attempts++;
-        const oldest = initialMessages[initialMessages.length - 1];
+        const oldest = initialMessages[0];
         if (!oldest?.msg_id) break;
 
         try {
@@ -172,7 +172,7 @@ export function useConversationMessages(conversationId: string | undefined, user
             hasMore = false;
             break;
           }
-          initialMessages = normalizeMessages([...initialMessages, ...olderBatch]);
+          initialMessages = normalizeMessages([...olderBatch, ...initialMessages]);
           hasMore = olderPayload.hasMore;
         } catch (err) {
           console.error('Initial auto-fill failed:', err);
@@ -200,7 +200,7 @@ export function useConversationMessages(conversationId: string | undefined, user
           .catch(() => undefined);
       }
 
-      const newestMessage = initialMessages[0];
+      const newestMessage = initialMessages[initialMessages.length - 1];
       if (userIdForChat && newestMessage?.msg_id) {
         void ChatApi.markAsRead(conversationId, userIdForChat, newestMessage.msg_id).catch(() => undefined);
       }
