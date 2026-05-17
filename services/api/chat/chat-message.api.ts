@@ -1,4 +1,5 @@
 import { chatApiClient } from '../client';
+import * as FileSystem from 'expo-file-system/legacy';
 import type {
   ChatMessage,
   ChatMessagesResponse,
@@ -11,6 +12,29 @@ import type {
   ChatPresignedUrlResponse,
   SendMessagePayload,
 } from './chat.types';
+
+const S3_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
+const sanitizeS3FileName = (fileName: string) => {
+  const baseName =
+    String(fileName || 'file')
+      .split(/[\\/]/)
+      .pop()
+      ?.normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'file';
+
+  return baseName.slice(0, 160) || 'file';
+};
+
+const resolveUploadContentDisposition = (contentType: string, fileName?: string) => {
+  const disposition = /^(image|video|audio)\//i.test(contentType)
+    ? 'inline'
+    : 'attachment';
+  return `${disposition}; filename="${sanitizeS3FileName(fileName || 'file')}"`;
+};
 
 export const chatMessageApi = {
   async getMessages(
@@ -33,36 +57,38 @@ export const chatMessageApi = {
     uri: string,
     contentType: string,
     onProgress?: (percent: number) => void,
+    fileName?: string,
   ): Promise<void> {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', uploadUrl);
-      xhr.setRequestHeader('Content-Type', contentType || 'application/octet-stream');
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const percent = Math.round((event.loaded / event.total) * 100);
+    const resolvedContentType = contentType || 'application/octet-stream';
+    const task = FileSystem.createUploadTask(
+      uploadUrl,
+      uri,
+      {
+        httpMethod: 'PUT',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          'Content-Type': resolvedContentType,
+          'Cache-Control': S3_CACHE_CONTROL,
+          'Content-Disposition': resolveUploadContentDisposition(resolvedContentType, fileName),
+        },
+      },
+      ({ totalBytesExpectedToSend, totalBytesSent }) => {
+        if (!totalBytesExpectedToSend) return;
+        const percent = Math.round((totalBytesSent / totalBytesExpectedToSend) * 100);
         onProgress?.(Math.max(0, Math.min(100, percent)));
-      };
+      },
+    );
 
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          onProgress?.(100);
-          resolve();
-          return;
-        }
+    const result = await task.uploadAsync();
+    if (!result) {
+      throw new Error('S3 upload failed: no response');
+    }
 
-        reject(new Error(`S3 upload failed: ${xhr.status}`));
-      };
+    if (result.status < 200 || result.status >= 300) {
+      throw new Error(`S3 upload failed: ${result.status}`);
+    }
 
-      xhr.onerror = () => reject(new Error('S3 upload failed: network error'));
-      xhr.onabort = () => reject(new Error('S3 upload aborted'));
-
-      xhr.send(blob);
-    });
+    onProgress?.(100);
   },
 
   async getOlderMessages(

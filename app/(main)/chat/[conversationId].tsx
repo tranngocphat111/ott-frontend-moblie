@@ -6,11 +6,13 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   Share,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
@@ -61,6 +63,7 @@ import { ForwardMessageModal } from "@/components/chat/modals/ForwardMessageModa
 import { ReplacePinnedModal } from "@/components/chat/modals/ReplacePinnedModal";
 import { STTRecordingModal } from "@/components/chat/modals/STTRecordingModal";
 import {
+  getAvatarFallbackLabel,
   getConversationAvatar,
   getConversationTitle,
   getMessageBodyText,
@@ -138,6 +141,66 @@ const CHAT_PANEL_HEIGHT = 260;
 const MAX_PINNED_MESSAGES = 3;
 const MAX_GROUP_CALL_PARTICIPANTS = 8;
 const MAX_GROUP_CALL_INVITEES = 7;
+
+type GroupCallMemberOption = {
+  id: string;
+  name: string;
+  avatarUrl: string;
+};
+
+const getGroupCallMemberId = (member: any) =>
+  String(member?.user_id || member?.user?.user_id || member?._id || '').trim();
+
+const getGroupCallMemberName = (member: any, fallback: string) =>
+  String(
+    member?.nickname ||
+      member?.display_name ||
+      member?.name ||
+      member?.user?.name ||
+      member?.user?.fullName ||
+      fallback,
+  ).trim();
+
+const getGroupCallMemberAvatar = (member: any) =>
+  resolveMediaUrl(
+    String(member?.avatar || member?.user?.avatar || member?.user?.avatarUrl || '').trim(),
+  );
+
+const GroupCallMemberAvatar = ({
+  name,
+  avatarUrl,
+  size = 42,
+}: {
+  name: string;
+  avatarUrl?: string;
+  size?: number;
+}) => {
+  const [broken, setBroken] = useState(false);
+  const fallback = getAvatarFallbackLabel(name || 'U');
+  const showImage = !!avatarUrl && !broken;
+
+  useEffect(() => {
+    setBroken(false);
+  }, [avatarUrl]);
+
+  return (
+    <View
+      className="items-center justify-center overflow-hidden rounded-full bg-[#ead8c7]"
+      style={{ width: size, height: size }}
+    >
+      {showImage ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          className="h-full w-full"
+          resizeMode="cover"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <Text className="font-bold text-[#694d31]">{fallback}</Text>
+      )}
+    </View>
+  );
+};
 
 const formatLastSeenLabel = (value?: Date | null) => {
   if (!value) return "Không hoạt động";
@@ -761,6 +824,13 @@ export default function ChatDetailScreen() {
   const [isForwarding, setIsForwarding] = useState(false);
   const [pollModalVisible, setPollModalVisible] = useState(false);
   const [relationship, setRelationship] = useState<any>(null);
+  const [groupCallModalVisible, setGroupCallModalVisible] = useState(false);
+  const [groupCallMembers, setGroupCallMembers] = useState<GroupCallMemberOption[]>([]);
+  const [selectedGroupCallIds, setSelectedGroupCallIds] = useState<string[]>([]);
+  const [groupCallSearch, setGroupCallSearch] = useState('');
+  const [groupCallLoading, setGroupCallLoading] = useState(false);
+  const [groupCallLimitHint, setGroupCallLimitHint] = useState(false);
+  const [pendingGroupCallConversationId, setPendingGroupCallConversationId] = useState('');
 
   // AI States
   const [smartReplies, setSmartReplies] = useState<string[]>([]);
@@ -1055,27 +1125,104 @@ export default function ChatDetailScreen() {
     }
   }, [conversationId, hasTypingUsers, loading, scrollToBottom, showScrollToBottom]);
 
-  const getGroupInviteeIds = useCallback(async (targetConversationId: string) => {
-    const fromConversation = (conversation?.participants || [])
-      .map((participant: any) => String(participant.user_id || participant._id || ''))
-      .filter((id) => id && String(id) !== String(userIdForChat))
-      .slice(0, MAX_GROUP_CALL_INVITEES);
-
-    if (fromConversation.length > 0) {
-      return fromConversation;
-    }
+  const loadGroupCallMembers = useCallback(async (targetConversationId: string) => {
+    setGroupCallLoading(true);
+    setGroupCallSearch('');
+    setGroupCallLimitHint(false);
 
     try {
       const members = await ChatApi.getConversationMembers(targetConversationId);
-      return (members || [])
-        .map((member: any) => String(member.user_id || member._id || ''))
-        .filter((id) => id && String(id) !== String(userIdForChat))
-        .slice(0, MAX_GROUP_CALL_INVITEES);
+      const uniqueMembers = new Map<string, GroupCallMemberOption>();
+
+      (members || []).forEach((member: any) => {
+        const id = getGroupCallMemberId(member);
+        const status = String(member?.status || 'joined').toLowerCase();
+        if (!id || id === String(userIdForChat || '') || status === 'invited') return;
+
+        uniqueMembers.set(id, {
+          id,
+          name: getGroupCallMemberName(member, `User ${id.slice(-4)}`),
+          avatarUrl: getGroupCallMemberAvatar(member),
+        });
+      });
+
+      const nextMembers = Array.from(uniqueMembers.values());
+      setGroupCallMembers(nextMembers);
+      setSelectedGroupCallIds(nextMembers.slice(0, MAX_GROUP_CALL_INVITEES).map((member) => member.id));
     } catch (error) {
       console.warn('Không thể tải thành viên để gọi nhóm:', error);
-      return [];
+      setGroupCallMembers([]);
+      setSelectedGroupCallIds([]);
+      Alert.alert('Không thể gọi nhóm', 'Không tải được danh sách thành viên nhóm.');
+    } finally {
+      setGroupCallLoading(false);
     }
-  }, [conversation?.participants, userIdForChat]);
+  }, [userIdForChat]);
+
+  const filteredGroupCallMembers = useMemo(() => {
+    const keyword = groupCallSearch.trim().toLowerCase();
+    if (!keyword) return groupCallMembers;
+    return groupCallMembers.filter((member) => member.name.toLowerCase().includes(keyword));
+  }, [groupCallMembers, groupCallSearch]);
+
+  const selectedGroupCallMembers = useMemo(
+    () => groupCallMembers.filter((member) => selectedGroupCallIds.includes(member.id)),
+    [groupCallMembers, selectedGroupCallIds],
+  );
+
+  const closeGroupCallModal = useCallback(() => {
+    setGroupCallModalVisible(false);
+    setGroupCallSearch('');
+    setGroupCallLimitHint(false);
+  }, []);
+
+  const toggleGroupCallMember = useCallback((memberId: string) => {
+    setSelectedGroupCallIds((current) => {
+      if (current.includes(memberId)) {
+        setGroupCallLimitHint(false);
+        return current.filter((id) => id !== memberId);
+      }
+
+      if (current.length >= MAX_GROUP_CALL_INVITEES) {
+        setGroupCallLimitHint(true);
+        return current;
+      }
+
+      setGroupCallLimitHint(false);
+      return [...current, memberId];
+    });
+  }, []);
+
+  const selectMaxGroupCallMembers = useCallback(() => {
+    setSelectedGroupCallIds(
+      filteredGroupCallMembers
+        .slice(0, MAX_GROUP_CALL_INVITEES)
+        .map((member) => member.id),
+    );
+    setGroupCallLimitHint(filteredGroupCallMembers.length > MAX_GROUP_CALL_INVITEES);
+  }, [filteredGroupCallMembers]);
+
+  const handleStartSelectedGroupCall = useCallback(() => {
+    const targetConversationId = pendingGroupCallConversationId || conversationId;
+    if (!targetConversationId || !userIdForChat || selectedGroupCallIds.length === 0) return;
+
+    closeGroupCallModal();
+    void mobileGroupCallSession.startGroupCall({
+      conversationId: targetConversationId,
+      userId: String(userIdForChat),
+      title: title || 'Cuộc gọi nhóm',
+      avatar: avatar || '',
+      invitedUserIds: selectedGroupCallIds,
+    });
+  }, [
+    avatar,
+    closeGroupCallModal,
+    conversationId,
+    pendingGroupCallConversationId,
+    selectedGroupCallIds,
+    title,
+    userIdForChat,
+  ]);
 
   const openMobileCall = useCallback(async (type: 'voice' | 'video') => {
     if (!conversationId || !userIdForChat) return;
@@ -1116,20 +1263,9 @@ export default function ChatDetailScreen() {
         return;
       }
 
-      const inviteeIds = await getGroupInviteeIds(targetConversationId);
-
-      if (inviteeIds.length === 0) {
-        Alert.alert('Không thể gọi nhóm', 'Không tìm thấy thành viên nào để mời vào cuộc gọi.');
-        return;
-      }
-
-      void mobileGroupCallSession.startGroupCall({
-        conversationId: targetConversationId,
-        userId: String(userIdForChat),
-        title: title || 'Cuộc gọi nhóm',
-        avatar: avatar || '',
-        invitedUserIds: inviteeIds,
-      });
+      setPendingGroupCallConversationId(targetConversationId);
+      setGroupCallModalVisible(true);
+      void loadGroupCallMembers(targetConversationId);
       return;
     }
 
@@ -1151,7 +1287,7 @@ export default function ChatDetailScreen() {
     conversation,
     conversationId,
     ensureConversation,
-    getGroupInviteeIds,
+    loadGroupCallMembers,
     isChatLocked,
     isMyDocuments,
     router,
@@ -1657,13 +1793,19 @@ export default function ChatDetailScreen() {
         label: params.progressLabel || 'Đang tải tệp...',
         percent: 0,
       });
-      await ChatApi.uploadFileToS3(uploadUrl, params.uri, mimeType, (percent) => {
-        setUploadProgress((current) => ({
-          label: current?.label || params.progressLabel || 'Đang tải tệp...',
-          percent,
-        }));
-      });
-      await ChatApi.sendMessage({
+      await ChatApi.uploadFileToS3(
+        uploadUrl,
+        params.uri,
+        mimeType,
+        (percent) => {
+          setUploadProgress((current) => ({
+            label: current?.label || params.progressLabel || 'Đang tải tệp...',
+            percent,
+          }));
+        },
+        params.fileName,
+      );
+      const createdMessage = await ChatApi.sendMessage({
         conversationId: targetId,
         senderId: userIdForChat,
         content: key,
@@ -1672,11 +1814,14 @@ export default function ChatDetailScreen() {
         fileName: params.fileName,
         replyToMsgId: replyToMessage?.msg_id,
       });
+      setMessages((current) =>
+        patchMessageById(current, createdMessage, undefined, normalizeMessages),
+      );
       setReplyToMessage(null);
       setPendingScrollToBottom();
       setUploadProgress(null);
     },
-    [conversationId, ensureConversation, replyToMessage?.msg_id, setPendingScrollToBottom, userIdForChat],
+    [conversationId, ensureConversation, normalizeMessages, replyToMessage?.msg_id, setMessages, setPendingScrollToBottom, userIdForChat],
   );
 
   const uploadAndSendImages = useCallback(
@@ -1774,23 +1919,29 @@ export default function ChatDetailScreen() {
             throw new Error("Không lấy được thông tin upload ảnh.");
           }
 
-          await ChatApi.uploadFileToS3(uploadUrl, uploadUri, mimeType, (percent) => {
-            const overall = Math.round(((index + percent / 100) / validAssets.length) * 100);
-            setUploadProgress({
-              label: `Đang tải ảnh ${index + 1}/${validAssets.length}`,
-              percent: overall,
-            });
-            setMessages((current) =>
-              current.map((item) =>
-                (item._id === localTempId || item.local_temp_id === localTempId)
-                  ? {
-                    ...item,
-                    local_upload_progress: overall,
-                  }
-                  : item,
-              ),
-            );
-          });
+          await ChatApi.uploadFileToS3(
+            uploadUrl,
+            uploadUri,
+            mimeType,
+            (percent) => {
+              const overall = Math.round(((index + percent / 100) / validAssets.length) * 100);
+              setUploadProgress({
+                label: `Đang tải ảnh ${index + 1}/${validAssets.length}`,
+                percent: overall,
+              });
+              setMessages((current) =>
+                current.map((item) =>
+                  (item._id === localTempId || item.local_temp_id === localTempId)
+                    ? {
+                      ...item,
+                      local_upload_progress: overall,
+                    }
+                    : item,
+                ),
+              );
+            },
+            fileName,
+          );
           keys.push(key);
         }
 
@@ -2202,8 +2353,26 @@ export default function ChatDetailScreen() {
       return;
     }
 
+    const participantStatus = String(participant?.status || '').toLowerCase();
+    const participantSettings = (participant as any)?.settings || {};
+    const participantRemovedAt =
+      participantSettings.removed_from_group_at || (participant as any)?.removed_from_group_at;
+    const participantDissolvedAt =
+      participantSettings.group_dissolved_at || (participant as any)?.group_dissolved_at;
+
+    if (
+      conversation?.type === 'group' &&
+      participant &&
+      participantStatus !== 'invited' &&
+      !participantRemovedAt &&
+      !participantDissolvedAt
+    ) {
+      setIsChatLocked(false);
+      return;
+    }
+
     setIsChatLocked(locked);
-  }, [messages, userIdForChat, relationship?.status]);
+  }, [conversation?.type, messages, participant, relationship?.status, userIdForChat]);
 
   useEffect(() => {
     if (!isChatLocked) return;
@@ -2613,7 +2782,7 @@ export default function ChatDetailScreen() {
     }
 
     try {
-      await ChatApi.sendMessage({
+      const createdMessage = await ChatApi.sendMessage({
         conversationId: targetId,
         senderId: userIdForChat,
         content: "Khảo sát",
@@ -2623,6 +2792,9 @@ export default function ChatDetailScreen() {
         pollOptions: data.options,
         replyToMsgId: replyToMessage?.msg_id,
       });
+      setMessages((current) =>
+        patchMessageById(current, createdMessage, undefined, normalizeMessages),
+      );
       setReplyToMessage(null);
       setPendingScrollToBottom();
       setPollModalVisible(false);
@@ -2630,7 +2802,7 @@ export default function ChatDetailScreen() {
       console.error("Failed to create poll:", error);
       Alert.alert("Lỗi", "Không thể tạo khảo sát. Vui lòng thử lại.");
     }
-  }, [conversationId, userIdForChat, replyToMessage?.msg_id, setPendingScrollToBottom]);
+  }, [conversationId, ensureConversation, normalizeMessages, replyToMessage?.msg_id, setMessages, setPendingScrollToBottom, userIdForChat]);
 
 
 
@@ -2653,13 +2825,16 @@ export default function ChatDetailScreen() {
     stopTyping();
 
     try {
-      await ChatApi.sendMessage({
+      const createdMessage = await ChatApi.sendMessage({
         conversationId: targetId,
         senderId: userIdForChat,
         content: normalizedContent,
         type: isLink ? "link" : "text",
         replyToMsgId: replyToMessage?.msg_id,
       });
+      setMessages((current) =>
+        patchMessageById(current, createdMessage, undefined, normalizeMessages),
+      );
 
       setMessageText("");
       setReplyToMessage(null);
@@ -2674,7 +2849,9 @@ export default function ChatDetailScreen() {
     isChatLocked,
     userIdForChat,
     messageText,
+    normalizeMessages,
     replyToMessage?.msg_id,
+    setMessages,
     setPendingScrollToBottom,
     stopTyping,
   ]);
@@ -3206,6 +3383,181 @@ export default function ChatDetailScreen() {
           />
         )}
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={groupCallModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeGroupCallModal}
+      >
+        <View className="flex-1 justify-end bg-black/55">
+          <View className="max-h-[88%] rounded-t-[28px] border border-[#ead8c7] bg-[#fffaf6] px-5 pb-6 pt-5">
+            <View className="mb-4 flex-row items-start justify-between">
+              <View className="min-w-0 flex-1 pr-3">
+                <View className="mb-1 flex-row items-center">
+                  <Feather name="users" size={14} color="#9a6a43" />
+                  <Text className="ml-2 text-[11px] font-bold uppercase text-[#9a6a43]">
+                    Tối đa {MAX_GROUP_CALL_INVITEES} người
+                  </Text>
+                </View>
+                <Text className="text-xl font-bold text-[#231a10]">
+                  Bắt đầu cuộc gọi nhóm
+                </Text>
+              </View>
+              <Pressable
+                onPress={closeGroupCallModal}
+                className="h-10 w-10 items-center justify-center rounded-full bg-[#efe7e0]"
+              >
+                <Feather name="x" size={20} color="#694d31" />
+              </Pressable>
+            </View>
+
+            <View className="rounded-2xl border border-[#ead8c7] bg-white px-3 py-2">
+              <View className="flex-row items-center">
+                <Feather name="search" size={17} color="#a78b75" />
+                <TextInput
+                  value={groupCallSearch}
+                  onChangeText={(value) => {
+                    setGroupCallSearch(value);
+                    setGroupCallLimitHint(false);
+                  }}
+                  placeholder="Tìm kiếm thành viên..."
+                  placeholderTextColor="#a78b75"
+                  className="ml-2 flex-1 py-2 text-[14px] font-medium text-[#231a10]"
+                />
+              </View>
+            </View>
+
+            <View className="mt-4 flex-row items-center justify-between">
+              <Text className="text-sm font-medium text-[#694d31]">
+                Đã chọn{' '}
+                <Text className="font-bold text-[#9a6a43]">
+                  {selectedGroupCallIds.length}/{MAX_GROUP_CALL_INVITEES}
+                </Text>
+              </Text>
+              <Pressable
+                onPress={() => {
+                  if (selectedGroupCallIds.length > 0) {
+                    setSelectedGroupCallIds([]);
+                    setGroupCallLimitHint(false);
+                    return;
+                  }
+                  selectMaxGroupCallMembers();
+                }}
+              >
+                <Text className="text-sm font-bold text-[#9a6a43]">
+                  {selectedGroupCallIds.length > 0 ? 'Bỏ chọn tất cả' : 'Chọn tối đa'}
+                </Text>
+              </Pressable>
+            </View>
+
+            {selectedGroupCallMembers.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="mt-3"
+              >
+                {selectedGroupCallMembers.map((member) => (
+                  <Pressable
+                    key={member.id}
+                    onPress={() => toggleGroupCallMember(member.id)}
+                    className="mr-3 items-center"
+                  >
+                    <View>
+                      <GroupCallMemberAvatar
+                        name={member.name}
+                        avatarUrl={member.avatarUrl}
+                        size={38}
+                      />
+                      <View className="absolute -right-1 -top-1 h-5 w-5 items-center justify-center rounded-full bg-[#9a6a43]">
+                        <Feather name="x" size={11} color="#fff" />
+                      </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            {groupCallLimitHint && (
+              <View className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                <Text className="text-xs font-medium text-amber-800">
+                  Chỉ có thể chọn tối đa {MAX_GROUP_CALL_INVITEES} thành viên cho một cuộc gọi.
+                </Text>
+              </View>
+            )}
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              className="mt-4"
+              style={{ maxHeight: 360 }}
+            >
+              {groupCallLoading ? (
+                <View className="items-center rounded-2xl border border-[#ead8c7] bg-white px-4 py-8">
+                  <Text className="text-sm font-semibold text-[#694d31]">
+                    Đang tải thành viên...
+                  </Text>
+                </View>
+              ) : filteredGroupCallMembers.length === 0 ? (
+                <View className="items-center rounded-2xl border border-[#ead8c7] bg-white px-4 py-8">
+                  <Feather name="users" size={28} color="#b78457" />
+                  <Text className="mt-3 text-center text-sm font-semibold text-[#694d31]">
+                    Không tìm thấy thành viên nào để gọi.
+                  </Text>
+                </View>
+              ) : (
+                filteredGroupCallMembers.map((member) => {
+                  const selected = selectedGroupCallIds.includes(member.id);
+                  const disabledByLimit = !selected && selectedGroupCallIds.length >= MAX_GROUP_CALL_INVITEES;
+
+                  return (
+                    <Pressable
+                      key={member.id}
+                      onPress={() => toggleGroupCallMember(member.id)}
+                      className={`mb-2 flex-row items-center rounded-2xl border px-3 py-3 ${
+                        selected
+                          ? 'border-[#b78457] bg-[#f5e8dc]'
+                          : disabledByLimit
+                            ? 'border-[#ead8c7] bg-white opacity-60'
+                            : 'border-[#ead8c7] bg-white'
+                      }`}
+                    >
+                      <GroupCallMemberAvatar
+                        name={member.name}
+                        avatarUrl={member.avatarUrl}
+                      />
+                      <Text className="ml-3 flex-1 text-[14px] font-bold text-[#231a10]" numberOfLines={1}>
+                        {member.name}
+                      </Text>
+                      <View
+                        className={`h-7 w-7 items-center justify-center rounded-full ${
+                          selected ? 'bg-[#b78457]' : 'border border-[#d8b79a] bg-white'
+                        }`}
+                      >
+                        {selected && <Feather name="check" size={15} color="#fff" />}
+                      </View>
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            <Pressable
+              disabled={selectedGroupCallIds.length === 0 || groupCallLoading}
+              onPress={handleStartSelectedGroupCall}
+              className={`mt-4 h-12 flex-row items-center justify-center rounded-2xl ${
+                selectedGroupCallIds.length === 0 || groupCallLoading
+                  ? 'bg-[#d8c8b8]'
+                  : 'bg-[#8b6642]'
+              }`}
+            >
+              <Feather name="video" size={18} color="#fff" />
+              <Text className="ml-2 text-sm font-bold text-white">
+                Bắt đầu cuộc gọi
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <ChatImagePreviewModal
         selectedImage={selectedImage}
