@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { UserPlus, Check, X, Clock, UserMinus, UserCheck } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatApi } from '@/services/api/chat';
 import { resolveMediaUrl } from '@/utils/chat';
 import { useAuth } from '@/context/Authcontext';
@@ -29,11 +30,13 @@ interface AddFriendModalProps {
 
 export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose }) => {
   const { chatUserId } = useAuth();
+  const insets = useSafeAreaInsets();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchResult, setSearchResult] = useState<any>(null);
   const [relationship, setRelationship] = useState<any>(null);
   const [error, setError] = useState('');
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   // Socket listener for relationship updates
   useEffect(() => {
@@ -53,6 +56,26 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
       chatSocket.off('cap_nhat_quan_he', handleRelationshipUpdate);
     };
   }, [chatUserId, searchResult, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardOffset(0);
+      return;
+    }
+
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      const keyboardHeight = Math.max(0, Number(event.endCoordinates?.height || 0));
+      setKeyboardOffset(Math.max(0, keyboardHeight - insets.bottom));
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardOffset(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [insets.bottom, visible]);
 
   const handleSearch = async () => {
     if (!phoneNumber.trim()) return;
@@ -176,11 +199,18 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
       <TouchableWithoutFeedback onPress={onClose}>
         <View className="flex-1 justify-end bg-black/40">
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            className="w-full"
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            className="flex-1 justify-end"
           >
             <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
-              <View className="bg-white rounded-t-3xl p-6 pb-10 min-h-[420px]">
+              <View
+                className="bg-white rounded-t-3xl p-6 min-h-[420px]"
+                style={{
+                  marginBottom: Platform.OS === 'android' ? keyboardOffset : 0,
+                  paddingBottom: Math.max(insets.bottom + 24, 34),
+                  maxHeight: '88%',
+                }}
+              >
                 <View className="flex-row items-center justify-between mb-6">
                   <Text className="text-xl font-bold text-slate-900">Thêm bạn mới</Text>
                   <TouchableOpacity onPress={onClose} hitSlop={10}>

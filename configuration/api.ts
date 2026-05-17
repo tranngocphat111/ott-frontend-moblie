@@ -1,7 +1,7 @@
 import * as AuthSession from 'expo-auth-session';
 
 export const API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://18.142.137.171/riff/api',
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://13.215.227.27/riff/api',
   TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
   HEADERS: {
     'Content-Type': 'application/json',

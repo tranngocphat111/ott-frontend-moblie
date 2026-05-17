@@ -16,6 +16,7 @@ import {
   VideoTrack,
   type TrackReferenceOrPlaceholder,
 } from '@livekit/react-native';
+import { RTCView } from '@livekit/react-native-webrtc';
 import { Track } from 'livekit-client';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +46,11 @@ const getInitial = (value?: string | null) => {
 
 const getTrackKey = (trackRef: TrackReferenceOrPlaceholder) =>
   `${trackRef.participant.identity}:${trackRef.source}`;
+
+const getTrackStreamUrl = (trackRef?: TrackReferenceOrPlaceholder) => {
+  if (!trackRef || !isTrackReference(trackRef)) return '';
+  return String((trackRef.publication?.track as any)?.mediaStream?.toURL?.() || '');
+};
 
 const getParticipantMetadata = (participant: any): ParticipantDisplay | null => {
   const rawMetadata = String(participant?.metadata || '').trim();
@@ -186,7 +192,7 @@ const LiveKitControls = ({
   const labelBase = 'mt-1.5 text-[11px] font-semibold text-white/80';
 
   return (
-    <View className="flex-row items-start gap-4 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
+    <View className="flex-row items-start gap-4 rounded-[30px] bg-[#1c120c]/92 px-4 py-3 shadow-lg">
       <View className="items-center">
         <Pressable
           onPress={() => void toggleMic()}
@@ -245,7 +251,7 @@ const FallbackControls = ({
   const labelBase = 'mt-1.5 text-[11px] font-semibold text-white/80';
 
   return (
-    <View className="flex-row items-start gap-4 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
+    <View className="flex-row items-start gap-4 rounded-[30px] bg-[#1c120c]/92 px-4 py-3 shadow-lg">
       {onOpenInvite && (
         <View className="items-center">
           <Pressable onPress={onOpenInvite} className={`${buttonBase} bg-[#b78457]`}>
@@ -382,6 +388,7 @@ const LiveKitRoomContent = ({
     onlySubscribed: false,
   });
   const controlsBottomPadding = Math.max(insets.bottom + 12, 20);
+  const [isLocalPreviewCollapsed, setIsLocalPreviewCollapsed] = useState(false);
 
   useEffect(() => {
     const enableInitialMedia = async () => {
@@ -427,12 +434,7 @@ const LiveKitRoomContent = ({
     });
   };
 
-  const renderCallTile = (
-    item: TrackReferenceOrPlaceholder,
-    index: number,
-    options: { compact?: boolean; style: any },
-  ) => {
-    const compact = Boolean(options.compact);
+  const getTrackDisplayInfo = (item: TrackReferenceOrPlaceholder, index: number) => {
     const identity = String(item.participant.identity || '');
     const metadata = getParticipantMetadata(item.participant);
     const display =
@@ -444,18 +446,37 @@ const LiveKitRoomContent = ({
     const trackRef = isTrackReference(item) ? item : undefined;
     const hasVideo = !!trackRef && !trackRef.publication?.isMuted;
 
+    return {
+      display,
+      hasVideo,
+      identity,
+      isLocal: item.participant.isLocal,
+      label,
+      trackRef,
+    };
+  };
+
+  const renderCallTile = (
+    item: TrackReferenceOrPlaceholder,
+    index: number,
+    options: { compact?: boolean; style: any },
+  ) => {
+    const compact = Boolean(options.compact);
+    const { display, hasVideo, isLocal, label, trackRef } = getTrackDisplayInfo(item, index);
+
     return (
       <View
         key={`${item.participant.identity}:${item.source}`}
         className={compact ? '' : 'p-1.5'}
         style={options.style}
       >
-        <View className="flex-1 overflow-hidden rounded-2xl border border-[#d0a97e]/25 bg-[#2b1d13]">
+        <View className="flex-1 overflow-hidden rounded-2xl bg-[#2b1d13]">
           {hasVideo ? (
             <VideoTrack
               trackRef={trackRef}
               objectFit="cover"
-              mirror={item.participant.isLocal}
+              mirror={isLocal}
+              zOrder={isLocal ? 1 : 0}
               style={{ flex: 1 }}
             />
           ) : (
@@ -481,6 +502,71 @@ const LiveKitRoomContent = ({
       </View>
     );
   };
+
+  const renderFullscreenTrack = (item: TrackReferenceOrPlaceholder, index: number) => {
+    const { display, hasVideo, isLocal, label, trackRef } = getTrackDisplayInfo(item, index);
+
+    if (hasVideo) {
+      return (
+        <VideoTrack
+          trackRef={trackRef}
+          objectFit="cover"
+          mirror={isLocal}
+          zOrder={isLocal ? 1 : 0}
+          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+        />
+      );
+    }
+
+    return (
+      <LinearGradient
+        colors={['#3b2718', '#1d130c', '#100b07']}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <ParticipantAvatar display={display} fallback={label} size={148} />
+        <Text className="mt-5 text-center text-2xl font-bold text-white">{label}</Text>
+        <Text className="mt-2 text-center text-sm text-white/70">
+          Camera đang tắt
+        </Text>
+      </LinearGradient>
+    );
+  };
+
+  const renderFloatingPreview = (item: TrackReferenceOrPlaceholder, index: number) => {
+    const { display, hasVideo, isLocal, label, trackRef } = getTrackDisplayInfo(item, index);
+    const streamUrl = hasVideo ? getTrackStreamUrl(item) : '';
+
+    return (
+      <>
+        {hasVideo && streamUrl ? (
+          <RTCView
+            streamURL={streamUrl}
+            objectFit="cover"
+            mirror={isLocal}
+            zOrder={0}
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              borderRadius: 22,
+              overflow: 'hidden',
+              backgroundColor: 'transparent',
+            }}
+          />
+        ) : (
+          <LinearGradient
+            colors={['#4a3323', '#2b1d13']}
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <ParticipantAvatar display={display} fallback={label} size={48} />
+          </LinearGradient>
+        )}
+      </>
+    );
+  };
+
   const isTwoPersonLayout = sortedTracks.length === 2;
   const twoPersonPrimaryTrack = isTwoPersonLayout
     ? sortedTracks.find((trackRef) => !trackRef.participant.isLocal) || sortedTracks[0]
@@ -497,7 +583,10 @@ const LiveKitRoomContent = ({
         style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
       />
 
-      <View className="absolute left-5 right-5 top-12 z-10 flex-row items-center justify-between">
+      <View
+        className="absolute left-5 right-5 z-10 flex-row items-center justify-between"
+        style={{ top: Math.max(insets.top, 18) + 10 }}
+      >
         <View className="min-w-0 flex-1 flex-row items-center">
           <ParticipantAvatar
             display={{ name: title, avatar: avatarUrl }}
@@ -521,26 +610,49 @@ const LiveKitRoomContent = ({
             </Text>
           </View>
         </View>
+
+        {isTwoPersonLayout && twoPersonSecondaryTrack && (
+          <View
+            className="ml-3 flex-row items-center"
+            style={{
+              transform: [{ translateX: isLocalPreviewCollapsed ? 86 : 0 }],
+            }}
+          >
+            <Pressable
+              onPress={() => setIsLocalPreviewCollapsed((current) => !current)}
+              className="z-10 h-20 w-7 items-center justify-center"
+            >
+              <Feather
+                name={isLocalPreviewCollapsed ? 'chevron-left' : 'chevron-right'}
+                color="#fff"
+                size={20}
+              />
+            </Pressable>
+            <View
+              collapsable={false}
+              needsOffscreenAlphaCompositing
+              renderToHardwareTextureAndroid
+              className="h-28 w-24 overflow-hidden rounded-[22px]"
+              style={{
+                borderRadius: 22,
+                overflow: 'hidden',
+                backgroundColor: 'transparent',
+              }}
+            >
+              {renderFloatingPreview(twoPersonSecondaryTrack, 1)}
+            </View>
+          </View>
+        )}
       </View>
 
       {isTwoPersonLayout && twoPersonPrimaryTrack ? (
-        <View
-          className="flex-1 px-1.5 pt-28"
-          style={{ paddingBottom: controlsBottomPadding + 124 }}
-        >
-          <View className="flex-1">
-            {renderCallTile(twoPersonPrimaryTrack, 0, {
-              style: { width: '100%', height: '100%' },
-            })}
-          </View>
-          {twoPersonSecondaryTrack && (
-            <View className="absolute right-5 top-36 z-20 h-40 w-28">
-              {renderCallTile(twoPersonSecondaryTrack, 1, {
-                compact: true,
-                style: { width: '100%', height: '100%' },
-              })}
-            </View>
-          )}
+        <View className="absolute inset-0">
+          {renderFullscreenTrack(twoPersonPrimaryTrack, 0)}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(35,26,16,0.78)', 'rgba(35,26,16,0.08)', 'rgba(16,11,7,0.92)']}
+            style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+          />
         </View>
       ) : sortedTracks.length > 0 ? (
         <View

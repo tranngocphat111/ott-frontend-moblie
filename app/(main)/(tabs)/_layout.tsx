@@ -1,26 +1,64 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME_COLORS } from '@/constants/theme';
 
+type TabIconName = ComponentProps<typeof Ionicons>['name'];
+
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 14);
+  const tabBarHeight = bottomInset + 68;
+  const renderTabIcon = (name: TabIconName, focusedName: TabIconName) =>
+    ({ focused }: { focused: boolean; color: string; size: number }) => (
+      <View
+        style={{
+          width: focused ? 44 : 38,
+          height: 32,
+          borderRadius: 18,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: focused ? '#f1e5da' : 'transparent',
+        }}
+      >
+        <Ionicons
+          name={focused ? focusedName : name}
+          size={focused ? 22 : 21}
+          color={focused ? THEME_COLORS.primary[700] : THEME_COLORS.primary[400]}
+        />
+      </View>
+    );
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: THEME_COLORS.primary[600],
+        tabBarActiveTintColor: THEME_COLORS.primary[700],
         tabBarInactiveTintColor: THEME_COLORS.primary[400],
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: THEME_COLORS.surface.raised,
-          borderTopColor: THEME_COLORS.primary[100],
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
-          paddingTop: 8,
+          borderTopWidth: 0,
+          height: tabBarHeight,
+          paddingBottom: bottomInset,
+          paddingTop: 9,
+          shadowColor: '#111827',
+          shadowOffset: { width: 0, height: -6 },
+          shadowOpacity: 0.08,
+          shadowRadius: 16,
+          elevation: 16,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
+          fontSize: 11,
+          fontWeight: '800',
+          marginTop: 3,
+        },
+        tabBarItemStyle: {
+          borderRadius: 22,
+          marginHorizontal: 3,
+          paddingTop: 3,
         },
       }}
     >
@@ -28,36 +66,28 @@ export default function TabsLayout() {
         name="home"
         options={{
           title: 'Tin nhắn',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble" size={size} color={color} />
-          ),
+          tabBarIcon: renderTabIcon('chatbubble-ellipses-outline', 'chatbubble-ellipses'),
         }}
       />
       <Tabs.Screen
         name="contacts"
         options={{
-          title: 'Danh bạ',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
-          ),
+          title: 'Thông báo',
+          tabBarIcon: renderTabIcon('notifications-outline', 'notifications'),
         }}
       />
       <Tabs.Screen
         name="discover"
         options={{
           title: 'Khám phá',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="compass" size={size} color={color} />
-          ),
+          tabBarIcon: renderTabIcon('compass-outline', 'compass'),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Cá nhân',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
+          tabBarIcon: renderTabIcon('person-outline', 'person'),
         }}
       />
     </Tabs>

@@ -809,6 +809,7 @@ export default function ChatDetailScreen() {
   } | null>(null);
   const [mediaAssets, setMediaAssets] = useState<ChatPanelMediaAsset[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
+  const [androidMediaOptionsVisible, setAndroidMediaOptionsVisible] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
@@ -1360,6 +1361,17 @@ export default function ChatDetailScreen() {
   const toggleImagePanelFromComposer = useCallback(() => {
     toggleImagePanel();
   }, [toggleImagePanel]);
+
+  const openAndroidMediaOptions = useCallback(() => {
+    if (!conversationId || !userIdForChat || isSendingAttachment) return;
+    dismissKeyboard();
+    closeAllPanels({ clearMediaSelection: true });
+    setAndroidMediaOptionsVisible(true);
+  }, [closeAllPanels, conversationId, dismissKeyboard, isSendingAttachment, userIdForChat]);
+
+  const closeAndroidMediaOptions = useCallback(() => {
+    setAndroidMediaOptionsVisible(false);
+  }, []);
 
   const toggleVoicePanelFromComposer = useCallback(() => {
     toggleVoicePanel();
@@ -2156,6 +2168,11 @@ export default function ChatDetailScreen() {
     uploadAndSendSingleFile,
     userIdForChat,
   ]);
+
+  const runAndroidMediaAction = useCallback((action: () => void) => {
+    setAndroidMediaOptionsVisible(false);
+    setTimeout(action, 120);
+  }, []);
 
   const pickFileAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
@@ -3360,7 +3377,7 @@ export default function ChatDetailScreen() {
               onSend={() => void onSendMessage()}
               onToggleImagePanel={
                 Platform.OS === 'android'
-                  ? () => void pickImagesAndSend()
+                  ? openAndroidMediaOptions
                   : toggleImagePanelFromComposer
               }
               onToggleVoicePanel={toggleVoicePanelFromComposer}
@@ -3473,6 +3490,68 @@ export default function ChatDetailScreen() {
       </KeyboardAvoidingView>
 
       <Modal
+        visible={androidMediaOptionsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeAndroidMediaOptions}
+      >
+        <Pressable className="flex-1 justify-end bg-black/40" onPress={closeAndroidMediaOptions}>
+          <Pressable
+            className="rounded-t-[28px] bg-white px-5 pt-4"
+            style={{ paddingBottom: Math.max(insets.bottom + 16, 24) }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View className="mb-4 h-1.5 w-12 self-center rounded-full bg-slate-200" />
+            <Text className="text-lg font-bold text-slate-950">Gửi ảnh hoặc video</Text>
+
+            <View className="mt-5">
+              <Pressable
+                disabled={isSendingAttachment}
+                onPress={() => runAndroidMediaAction(() => void takePhotoAndSend())}
+                className="mb-3 flex-row items-center rounded-2xl bg-[#fff7ed] px-4 py-4 active:bg-[#ffedd5]"
+              >
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-[#9a6a43]">
+                  <Feather name="camera" size={21} color="#fff" />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-[15px] font-bold text-slate-950">Chụp ảnh</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="#94a3b8" />
+              </Pressable>
+
+              <Pressable
+                disabled={isSendingAttachment}
+                onPress={() => runAndroidMediaAction(() => void recordVideoAndSend())}
+                className="mb-3 flex-row items-center rounded-2xl bg-[#f8fafc] px-4 py-4 active:bg-slate-100"
+              >
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-slate-800">
+                  <Feather name="video" size={21} color="#fff" />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-[15px] font-bold text-slate-950">Quay video</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="#94a3b8" />
+              </Pressable>
+
+              <Pressable
+                disabled={isSendingAttachment}
+                onPress={() => runAndroidMediaAction(() => void pickImagesAndSend())}
+                className="flex-row items-center rounded-2xl bg-[#f8fafc] px-4 py-4 active:bg-slate-100"
+              >
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-[#e8d6c5]">
+                  <Feather name="image" size={21} color="#9a6a43" />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-[15px] font-bold text-slate-950">Thư viện</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="#94a3b8" />
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={groupCallModalVisible}
         transparent
         animationType="fade"
@@ -3543,7 +3622,7 @@ export default function ChatDetailScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                className="mt-3"
+                className="pt-3 overflow-visible "
               >
                 {selectedGroupCallMembers.map((member) => (
                   <Pressable

@@ -1095,7 +1095,6 @@ export default function HomeScreen() {
         conversationCount={filteredItems.length}
         categoryColor={firstSelectedCategory?.color || undefined}
         onOpenQrScanner={() => router.push('/qr-scan' as any)}
-        onOpenNotifications={() => router.push('/(main)/notifications' as any)}
         searchText={searchText}
         onSearchTextChange={setSearchText}
         onSearchFocus={handleSearchFocus}

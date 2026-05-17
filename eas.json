@@ -7,7 +7,7 @@
       "channel": "preview",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://18.142.137.171/riff/api",
+        "EXPO_PUBLIC_API_URL": "http://13.215.227.27/riff/api",
         "EXPO_PUBLIC_TIMEOUT": "30000",
         "EXPO_PUBLIC_LIVEKIT_URL": "wss://chat-service-wplw6oap.livekit.cloud",
         "EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT": "true",

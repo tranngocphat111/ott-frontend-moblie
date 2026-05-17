@@ -161,7 +161,7 @@ const LiveKitUnavailableView: React.FC<
           </View>
         </View>
 
-        <View className="rounded-[32px] border border-[#d8b79a]/25 bg-[#17100b]/85 px-5 py-4">
+        <View className="rounded-[30px] bg-[#17100b]/92 px-5 py-4 shadow-lg">
           <View className="flex-row items-start justify-center gap-4">
             {onOpenInvite && (
               <View className="items-center">
@@ -672,7 +672,7 @@ export const MobileGroupCallOverlay = () => {
             )}
           </View>
 
-          <View className="rounded-[32px] border border-[#d8b79a]/25 bg-[#17100b]/85 px-5 py-4">
+          <View className="rounded-[30px] bg-[#17100b]/92 px-5 py-4 shadow-lg">
             <View className="flex-row items-start justify-center gap-4">
               {!isError && (
                 <>

@@ -299,7 +299,7 @@ export const IncomingCallGate: React.FC = () => {
             </Text>
           </View>
 
-          <View className="rounded-[32px] border border-[#d0a97e]/25 bg-[#231a10]/85 px-5 py-5">
+          <View className="rounded-[30px] bg-[#231a10]/92 px-5 py-5 shadow-lg">
             <View className="flex-row items-center justify-around">
               <View className="items-center">
                 <Pressable

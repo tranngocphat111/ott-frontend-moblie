@@ -45,6 +45,7 @@ type SafeRTCViewProps = {
   streamURL?: string;
   objectFit?: 'contain' | 'cover';
   mirror?: boolean;
+  zOrder?: number;
   style?: ViewStyle;
 };
 
@@ -232,7 +233,7 @@ const LiveKitFallbackCallView: React.FC<SafeLiveKitGroupCallViewProps> = ({
               <Text className="max-w-[70%] text-xl font-bold text-white" numberOfLines={1}>
                 {title}
               </Text>
-              <View className="ml-3 rounded-lg border border-[#d0a97e]/20 bg-black/45 px-2.5 py-1">
+              <View className="ml-3 rounded-lg bg-black/50 px-2.5 py-1">
                 <Text className="text-xs font-bold text-[#7CFFB2]">{elapsedLabel}</Text>
               </View>
             </View>
@@ -249,7 +250,7 @@ const LiveKitFallbackCallView: React.FC<SafeLiveKitGroupCallViewProps> = ({
       <View className="flex-1 items-center justify-center px-8">
         <AvatarCircle name={title} avatarUrl={avatarUrl} size={148} textSize="text-5xl" />
         <Text className="mt-5 text-center text-2xl font-bold text-white">{title}</Text>
-        <View className="mt-4 flex-row items-center rounded-2xl border border-[#d0a97e]/20 bg-black/35 px-4 py-3">
+        <View className="mt-4 flex-row items-center rounded-2xl bg-black/40 px-4 py-3">
           <ActivityIndicator color={THEME_COLORS.primary[300]} size="small" />
           <Text className="ml-3 flex-1 text-center text-sm font-semibold text-white/80">
             Đang giữ kết nối cuộc gọi...
@@ -261,7 +262,7 @@ const LiveKitFallbackCallView: React.FC<SafeLiveKitGroupCallViewProps> = ({
         className="absolute bottom-0 left-0 right-0 items-center px-6"
         style={{ paddingBottom: controlsBottomPadding }}
       >
-        <View className="flex-row items-start gap-5 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
+        <View className="flex-row items-start gap-5 rounded-[30px] bg-[#1c120c]/92 px-4 py-3 shadow-lg">
           {onOpenInvite && (
             <CallControlButton icon="user-plus" label="Thêm" onPress={onOpenInvite} />
           )}
@@ -727,7 +728,7 @@ export default function CallScreen() {
           <View className="flex-1 flex-row flex-wrap bg-[#100b07] p-1">
             {localStreamUrl && (
               <View className="p-1" style={groupVideoTileStyle}>
-                <View className="flex-1 overflow-hidden rounded-2xl border border-[#d0a97e]/20 bg-[#2b1d13]">
+                <View className="flex-1 overflow-hidden rounded-2xl bg-[#2b1d13]">
                   {isCameraOff ? (
                     <View className="flex-1 items-center justify-center">
                       <AvatarCircle name={myDisplayName} avatarUrl={myAvatarUrl} size={76} textSize="text-2xl" />
@@ -743,6 +744,7 @@ export default function CallScreen() {
                       streamURL={localStreamUrl}
                       objectFit="cover"
                       mirror
+                      zOrder={1}
                       style={{ flex: 1 }}
                     />
                   )}
@@ -759,12 +761,13 @@ export default function CallScreen() {
                   className="p-1"
                   style={groupVideoTileStyle}
                 >
-                  <View className="flex-1 overflow-hidden rounded-2xl border border-[#d0a97e]/20 bg-[#2b1d13]">
+                  <View className="flex-1 overflow-hidden rounded-2xl bg-[#2b1d13]">
                     {streamUrl && !isRemoteCameraOff ? (
                       <SafeRTCView
                         streamURL={streamUrl}
                         objectFit="cover"
                         mirror={false}
+                        zOrder={0}
                         style={{ flex: 1 }}
                       />
                     ) : (
@@ -790,6 +793,7 @@ export default function CallScreen() {
             streamURL={remoteStreamUrl}
             objectFit="cover"
             mirror={false}
+            zOrder={0}
             style={{ flex: 1 }}
           />
         ) : (
@@ -838,7 +842,7 @@ export default function CallScreen() {
                 {displayName}
               </Text>
               {hasRemoteAnswered && (
-                <View className="ml-3 rounded-lg border border-white/10 bg-black/55 px-2.5 py-1">
+                <View className="ml-3 rounded-lg bg-black/60 px-2.5 py-1">
                   <Text className="text-xs font-bold text-[#00ff7f]">
                     {formatDuration(elapsedSeconds)}
                   </Text>
@@ -876,7 +880,7 @@ export default function CallScreen() {
                 size={20}
               />
             </Pressable>
-            <View className="h-28 w-24 overflow-hidden rounded-2xl border border-[#d0a97e]/30 bg-[#2b1d13] shadow-lg">
+            <View className="h-28 w-24 overflow-hidden rounded-[22px] bg-[#2b1d13] shadow-lg">
               {isCameraOff ? (
                 <View className="flex-1 items-center justify-center">
                   <AvatarCircle name={myDisplayName} avatarUrl={myAvatarUrl} size={48} textSize="text-lg" />
@@ -886,6 +890,7 @@ export default function CallScreen() {
                   streamURL={localStreamUrl}
                   objectFit="cover"
                   mirror
+                  zOrder={1}
                   style={{ flex: 1 }}
                 />
               )}
@@ -912,7 +917,7 @@ export default function CallScreen() {
         className="absolute bottom-0 left-0 right-0 items-center px-6"
         style={{ paddingBottom: controlsBottomPadding }}
       >
-        <View className="flex-row items-start gap-5 rounded-[32px] border border-[#8b6642]/40 bg-[#1c120c]/88 px-5 py-4">
+        <View className="flex-row items-start gap-5 rounded-[30px] bg-[#1c120c]/92 px-4 py-3 shadow-lg">
           <CallControlButton
             icon={isMuted ? 'mic-off' : 'mic'}
             label={isMuted ? 'Bật mic' : 'Tắt mic'}
