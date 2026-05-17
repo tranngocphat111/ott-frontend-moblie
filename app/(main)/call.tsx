@@ -23,7 +23,7 @@ import { chatSocket, type CallType } from '@/services/socket/chatSocket';
 import { getAvatarFallbackLabel, resolveMediaUrl } from '@/utils/chat';
 import { ChatApi } from '@/services/api';
 import { LIVEKIT_CONFIG } from '@/configuration/api';
-import { useSystemBackground } from '@/utils/useSystemBackground';
+import { DEFAULT_SYSTEM_BACKGROUND, useSystemBackground } from '@/utils/useSystemBackground';
 
 declare const require: any;
 
@@ -304,7 +304,7 @@ export default function CallScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const controlsBottomPadding = Math.max(insets.bottom + 12, 20);
-  useSystemBackground('#160f0a');
+  useSystemBackground('#160f0a', DEFAULT_SYSTEM_BACKGROUND, 'light');
   const params = useLocalSearchParams<{
     conversationId?: string;
     type?: string;

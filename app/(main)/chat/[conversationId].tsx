@@ -2078,6 +2078,59 @@ export default function ChatDetailScreen() {
     }
   }, [closeImagePanel, conversationId, dismissKeyboard, isSendingAttachment, uploadAndSendImages, userIdForChat]);
 
+  const recordVideoAndSend = useCallback(async () => {
+    if (!conversationId || !userIdForChat || isSendingAttachment) return;
+    setIsSendingAttachment(true);
+    dismissKeyboard();
+
+    const hasCameraPermission = await ensureCameraPermission();
+    const hasMicrophonePermission = await ensureMicrophonePermission();
+    if (!hasCameraPermission || !hasMicrophonePermission) {
+      setIsSendingAttachment(false);
+      Alert.alert(
+        "Quyền truy cập",
+        "Bạn cần cấp quyền camera và micro để quay video.",
+      );
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        quality: 0.85,
+        videoMaxDuration: 180,
+      });
+
+      if (result.canceled || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      await uploadAndSendSingleFile({
+        uri: asset.uri,
+        fileName: asset.fileName || `video_${Date.now()}.mp4`,
+        mimeType: getMimeType(asset.fileName, asset.mimeType || "video/mp4"),
+        explicitType: "video",
+        fileSize: asset.fileSize,
+        progressLabel: "Đang tải video...",
+      });
+      closeImagePanel();
+    } catch (error) {
+      console.error("Failed to send camera video:", error);
+      Alert.alert("Lỗi", "Không thể gửi video từ camera.");
+    } finally {
+      setUploadProgress(null);
+      setIsSendingAttachment(false);
+    }
+  }, [
+    closeImagePanel,
+    conversationId,
+    dismissKeyboard,
+    isSendingAttachment,
+    uploadAndSendSingleFile,
+    userIdForChat,
+  ]);
+
   const pickFileAndSend = useCallback(async () => {
     if (!conversationId || !userIdForChat || isSendingAttachment) return;
     setIsSendingAttachment(true);
@@ -2463,9 +2516,17 @@ export default function ChatDetailScreen() {
       setMessages((current) =>
         patchMessageById(current, payload, undefined, normalizeMessages),
       );
+
+      const msgId = String(payload?.msg_id || payload?._id || "").trim();
+      const senderId = String(payload?.sender_id || "").trim();
+      if (msgId && userIdForChat && senderId !== String(userIdForChat)) {
+        void ChatApi.markAsRead(String(conversationId), String(userIdForChat), msgId)
+          .catch(() => undefined);
+      }
+
       setPendingScrollToBottom();
     },
-    [conversationId, normalizeMessages],
+    [conversationId, normalizeMessages, setPendingScrollToBottom, userIdForChat],
   );
 
   const handleReactionChanged = useCallback(
@@ -3327,6 +3388,7 @@ export default function ChatDetailScreen() {
             mediaLoading={mediaLoading}
             onClose={closeImagePanel}
             onTakePhoto={() => void takePhotoAndSend()}
+            onRecordVideo={() => void recordVideoAndSend()}
             onOpenLibrary={() => void pickImagesAndSend()}
             onToggleSelectMedia={toggleSelectMedia}
             onClearSelection={clearSelectedMedia}

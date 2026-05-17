@@ -11,8 +11,7 @@ import {
 import { chatSocket } from '@/services/socket/chatSocket';
 import { LIVEKIT_CONFIG } from '@/configuration/api';
 import { getAvatarFallbackLabel, resolveMediaUrl } from '@/utils/chat';
-import { DEFAULT_SYSTEM_BACKGROUND } from '@/utils/useSystemBackground';
-import * as SystemUI from 'expo-system-ui';
+import { DEFAULT_SYSTEM_BACKGROUND, setSystemBackgroundAsync } from '@/utils/useSystemBackground';
 
 const BROWN = '#9a6a43';
 const BROWN_SOFT = '#e8d6c5';
@@ -371,9 +370,9 @@ export const MobileGroupCallOverlay = () => {
   useEffect(() => {
     if (!snapshot.visible) return;
 
-    void SystemUI.setBackgroundColorAsync('#0f0a06');
+    void setSystemBackgroundAsync('#0f0a06', 'light');
     return () => {
-      void SystemUI.setBackgroundColorAsync(DEFAULT_SYSTEM_BACKGROUND);
+      void setSystemBackgroundAsync(DEFAULT_SYSTEM_BACKGROUND, 'dark');
     };
   }, [snapshot.visible]);
 

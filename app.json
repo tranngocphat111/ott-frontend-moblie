@@ -21,8 +21,8 @@
       "bundleIdentifier": "com.piin-nhs.riff",
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Cho phép truy cập camera để gọi video.",
-        "NSMicrophoneUsageDescription": "Cho phép truy cập micro để gọi thoại và video.",
+        "NSCameraUsageDescription": "Cho phép truy cập camera để gọi video, chụp ảnh và quay video gửi trong cuộc trò chuyện.",
+        "NSMicrophoneUsageDescription": "Cho phép truy cập micro để gọi thoại, gọi video, ghi âm và quay video gửi trong cuộc trò chuyện.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSExceptionDomains": {
@@ -71,7 +71,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Cho phép truy cập thư viện ảnh để gửi hình ảnh trong cuộc trò chuyện",
-          "cameraPermission": "Cho phép truy cập camera để chụp ảnh và gửi trong cuộc trò chuyện"
+          "cameraPermission": "Cho phép truy cập camera để chụp ảnh, quay video và gửi trong cuộc trò chuyện"
         }
       ],
       [

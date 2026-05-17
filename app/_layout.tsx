@@ -1,7 +1,6 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import * as SystemUI from 'expo-system-ui';
 import * as Updates from 'expo-updates';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useState } from 'react';
@@ -17,6 +16,7 @@ import { ThemeProvider } from '@/contexts/Themecontext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { THEME_COLORS } from '@/constants/theme';
 import LoadingScreen from '@/components/common/LoadingScreen';
+import { setSystemBackgroundAsync } from '@/utils/useSystemBackground';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -75,7 +75,7 @@ export default function RootLayout() {
   const [showBootOverlay, setShowBootOverlay] = useState(true);
 
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(THEME_COLORS.surface.DEFAULT);
+    void setSystemBackgroundAsync(THEME_COLORS.surface.DEFAULT, 'dark');
     const hideSplash = () => {
       void SplashScreen.hideAsync().catch(() => undefined);
     };

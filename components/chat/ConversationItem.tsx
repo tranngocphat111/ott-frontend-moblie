@@ -67,7 +67,8 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const { conversation, participant } = item;
   const title = getConversationTitle(conversation, currentUserId);
   const avatar = getConversationAvatar(conversation, currentUserId);
-  const unreadCount = participant.unread_count || 0;
+  const unreadCount = Number(participant.unread_count || 0);
+  const hasUnreadMessage = unreadCount > 0;
   const isPinned = !!participant.settings?.is_pinned;
   const otherUserIds = (conversation.participants || [])
     .map((member) => String(member.user_id || (member as any)._id || ''))
@@ -211,12 +212,15 @@ React.useEffect(() => {
 
           <View className="flex-1">
             <View className="mb-1 flex-row items-center justify-between gap-2">
-              <Text className="flex-1 text-[16px] font-semibold text-slate-900" numberOfLines={1}>
+              <Text
+                className={`flex-1 text-[16px] text-slate-900 ${hasUnreadMessage ? 'font-black' : 'font-semibold'}`}
+                numberOfLines={1}
+              >
                 {title}
               </Text>
               <View className="flex-row items-center gap-2">
                 {isPinned && <Pin size={13} color={THEME_COLORS.primary[600]} />}
-                <Text className="text-xs font-medium text-slate-400">
+                <Text className={`text-xs ${hasUnreadMessage ? 'font-bold text-brand-600' : 'font-medium text-slate-400'}`}>
                   {formatConversationTime(conversation.last_message?.createdAt)}
                 </Text>
               </View>
@@ -235,7 +239,10 @@ React.useEffect(() => {
             )}
 
             <View className="flex-row items-center justify-between gap-3">
-              <Text className="flex-1 text-[13px] leading-5 text-slate-500" numberOfLines={1}>
+              <Text
+                className={`flex-1 text-[13px] leading-5 ${hasUnreadMessage ? 'font-bold text-slate-900' : 'text-slate-500'}`}
+                numberOfLines={1}
+              >
                 {(() => {
                   if (!conversation.last_message) return previewText;
                   if (isSystemLastMessage) return previewText;
@@ -250,7 +257,7 @@ React.useEffect(() => {
                   return previewText;
                 })()}
               </Text>
-              {unreadCount > 0 && (
+              {hasUnreadMessage && (
                 <View className="min-w-[22px] rounded-full bg-brand-600 px-2 py-1">
                   <Text className="text-center text-[11px] font-bold text-white">
                     {unreadCount > 99 ? '99+' : unreadCount}

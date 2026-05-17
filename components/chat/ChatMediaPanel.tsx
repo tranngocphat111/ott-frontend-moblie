@@ -16,6 +16,7 @@ export type ChatPanelMediaAsset = {
 
 type ChatMediaGridItem =
   | { id: '__camera__'; kind: 'camera' }
+  | { id: '__video_camera__'; kind: 'video_camera' }
   | { id: '__library__'; kind: 'library' }
   | { id: string; kind: 'asset'; asset: ChatPanelMediaAsset };
 
@@ -27,6 +28,7 @@ type Props = {
   mediaLoading: boolean;
   onClose: () => void;
   onTakePhoto: () => void;
+  onRecordVideo: () => void;
   onOpenLibrary?: () => void;
   onToggleSelectMedia: (assetId: string) => void;
   onClearSelection: () => void;
@@ -42,6 +44,7 @@ export const ChatMediaPanel: React.FC<Props> = ({
   mediaLoading,
   onClose,
   onTakePhoto,
+  onRecordVideo,
   onOpenLibrary,
   onToggleSelectMedia,
   onClearSelection,
@@ -54,6 +57,7 @@ export const ChatMediaPanel: React.FC<Props> = ({
   const mediaTileSize = Math.floor((windowWidth - mediaHorizontalPadding * 2 - mediaGap * 2) / 3);
   const gridData: ChatMediaGridItem[] = [
     { id: '__camera__', kind: 'camera' },
+    { id: '__video_camera__', kind: 'video_camera' },
     { id: '__library__', kind: 'library' },
     ...mediaAssets.map((asset) => ({ id: asset.id, kind: 'asset' as const, asset })),
   ];
@@ -97,6 +101,28 @@ export const ChatMediaPanel: React.FC<Props> = ({
               >
                 <Feather name="camera" size={22} color="#334155" />
                 <Text className="mt-2 text-[13px] text-slate-700">Chụp ảnh</Text>
+              </Pressable>
+            );
+          }
+
+          if (item.kind === 'video_camera') {
+            return (
+              <Pressable
+                onPress={onRecordVideo}
+                style={{
+                  width: mediaTileSize,
+                  height: mediaTileSize,
+                  marginBottom: mediaGap,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  backgroundColor: '#f8fafc',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="video" size={22} color="#334155" />
+                <Text className="mt-2 text-[13px] text-slate-700">Quay video</Text>
               </Pressable>
             );
           }

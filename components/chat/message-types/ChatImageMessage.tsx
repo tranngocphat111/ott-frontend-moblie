@@ -24,6 +24,7 @@ const calculateAspectRatio = (width?: number | string, height?: number | string)
 
 const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPress, onMediaReady }) => {
   const readyRef = useRef(false);
+  const messageId = String(message.msg_id || message._id || '');
 
   // Trích xuất width và height từ message để cố định layout ngay từ mili-giây đầu tiên
   const initialAspectRatio = useMemo(() => {
@@ -56,30 +57,35 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
   const markReady = useCallback(() => {
     if (readyRef.current) return;
     readyRef.current = true;
-    onMediaReady?.(String(message.msg_id || message._id));
-  }, [onMediaReady, message]);
-
-  if (!imageUrls.length) return null;
+    onMediaReady?.(messageId);
+  }, [messageId, onMediaReady]);
 
   const count = imageUrls.length;
   const GAP = 2;
   const localStatus = message.local_status;
   const localProgress = Number(message.local_upload_progress || 0);
 
-  const RenderItem = ({ index, className, style }: { index: number; className?: string; style?: any }) => {
+  const renderImageTile = useCallback((
+    index: number,
+    className?: string,
+    style?: any,
+  ) => {
+    const uri = optimizedUrls[index] || imageUrls[index];
+
     return (
       <Pressable
         onPress={() => onImagePress?.(index)}
         onLongPress={onLongPress}
-        className={`relative overflow-hidden ${className}`}
+        className={`relative overflow-hidden ${className || ''}`}
         style={style}
       >
         <Image
-          source={{ uri: optimizedUrls[index] || imageUrls[index] }}
+          source={{ uri }}
+          recyclingKey={uri}
           style={{ width: '100%', height: '100%', backgroundColor: '#eee' }}
           contentFit="cover"
           cachePolicy={isLocalFile ? "none" : "memory-disk"}
-          transition={120}
+          transition={0}
           placeholder={BLUR_HASH_PLACEHOLDER}
           onLoad={index === 0 ? markReady : undefined}
           onError={index === 0 ? markReady : undefined}
@@ -91,7 +97,17 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
         )}
       </Pressable>
     );
-  };
+  }, [
+    count,
+    imageUrls,
+    isLocalFile,
+    markReady,
+    onImagePress,
+    onLongPress,
+    optimizedUrls,
+  ]);
+
+  if (!imageUrls.length) return null;
 
   return (
     <View style={{ width: CLUSTER_WIDTH }} className="overflow-hidden rounded-2xl border border-black/5 bg-white/95">
@@ -99,6 +115,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
         <Pressable onPress={() => onImagePress?.(0)} onLongPress={onLongPress}>
           <Image
             source={{ uri: optimizedUrls[0] || imageUrls[0] }}
+            recyclingKey={optimizedUrls[0] || imageUrls[0]}
             style={{
               width: CLUSTER_WIDTH,
               aspectRatio: aspectRatio, // Đã có fallback an toàn, không dùng height tĩnh nữa
@@ -107,7 +124,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
             }}
             contentFit="cover"
             cachePolicy={isLocalFile ? "none" : "memory-disk"}
-            transition={120}
+            transition={0}
             placeholder={BLUR_HASH_PLACEHOLDER}
             onLoad={(e) => {
               // Nếu ban đầu server/app không có truyền width/height vào message, cập nhật lại sau khi load xong
@@ -125,57 +142,57 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
       )}
       {count === 2 && (
         <View className="flex-row h-[180px]" style={{ gap: GAP }}>
-          <RenderItem index={0} className="flex-1" />
-          <RenderItem index={1} className="flex-1" />
+          {renderImageTile(0, "flex-1")}
+          {renderImageTile(1, "flex-1")}
         </View>
       )}
       {count === 3 && (
         <View className="flex-row h-[210px]" style={{ gap: GAP }}>
-          <RenderItem index={0} className="flex-[1.4]" />
+          {renderImageTile(0, "flex-[1.4]")}
           <View className="flex-1" style={{ gap: GAP }}>
-            <RenderItem index={1} className="flex-1" />
-            <RenderItem index={2} className="flex-1" />
+            {renderImageTile(1, "flex-1")}
+            {renderImageTile(2, "flex-1")}
           </View>
         </View>
       )}
       {count === 4 && (
         <View className="h-[260px]" style={{ gap: GAP }}>
           <View className="flex-row flex-1" style={{ gap: GAP }}>
-            <RenderItem index={0} className="flex-1" />
-            <RenderItem index={1} className="flex-1" />
+            {renderImageTile(0, "flex-1")}
+            {renderImageTile(1, "flex-1")}
           </View>
           <View className="flex-row flex-1" style={{ gap: GAP }}>
-            <RenderItem index={2} className="flex-1" />
-            <RenderItem index={3} className="flex-1" />
+            {renderImageTile(2, "flex-1")}
+            {renderImageTile(3, "flex-1")}
           </View>
         </View>
       )}
       {count === 5 && (
         <View style={{ gap: GAP }}>
           <View className="flex-row h-[160px]" style={{ gap: GAP }}>
-            <RenderItem index={0} className="flex-1" />
-            <RenderItem index={1} className="flex-1" />
+            {renderImageTile(0, "flex-1")}
+            {renderImageTile(1, "flex-1")}
           </View>
           <View className="flex-row h-[102px]" style={{ gap: GAP }}>
-            <RenderItem index={2} className="flex-1" />
-            <RenderItem index={3} className="flex-1" />
-            <RenderItem index={4} className="flex-1" />
+            {renderImageTile(2, "flex-1")}
+            {renderImageTile(3, "flex-1")}
+            {renderImageTile(4, "flex-1")}
           </View>
         </View>
       )}
       {count >= 6 && (
         <View className="h-[260px]" style={{ gap: GAP }}>
           <View className="flex-row flex-1" style={{ gap: GAP }}>
-            <RenderItem index={0} className="flex-1" />
-            <RenderItem index={1} className="flex-1" />
+            {renderImageTile(0, "flex-1")}
+            {renderImageTile(1, "flex-1")}
           </View>
           <View className="flex-row flex-1" style={{ gap: GAP }}>
-            <RenderItem index={2} className="flex-1" />
-            <RenderItem index={3} className="flex-1" />
+            {renderImageTile(2, "flex-1")}
+            {renderImageTile(3, "flex-1")}
           </View>
           <View className="flex-row flex-1" style={{ gap: GAP }}>
-            <RenderItem index={4} className="flex-1" />
-            <RenderItem index={5} className="flex-1" />
+            {renderImageTile(4, "flex-1")}
+            {renderImageTile(5, "flex-1")}
           </View>
         </View>
       )}

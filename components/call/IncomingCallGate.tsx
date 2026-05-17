@@ -9,8 +9,7 @@ import { mobileGroupCallSession } from '@/services/call/mobileGroupCallSession';
 import { chatSocket, type CallType } from '@/services/socket/chatSocket';
 import { ChatApi } from '@/services/api';
 import { getAvatarFallbackLabel, getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
-import { DEFAULT_SYSTEM_BACKGROUND } from '@/utils/useSystemBackground';
-import * as SystemUI from 'expo-system-ui';
+import { DEFAULT_SYSTEM_BACKGROUND, setSystemBackgroundAsync } from '@/utils/useSystemBackground';
 
 type IncomingCallPayload = {
   conversationId: string;
@@ -263,9 +262,9 @@ export const IncomingCallGate: React.FC = () => {
   useEffect(() => {
     if (!incomingCall) return;
 
-    void SystemUI.setBackgroundColorAsync('#100b07');
+    void setSystemBackgroundAsync('#100b07', 'light');
     return () => {
-      void SystemUI.setBackgroundColorAsync(DEFAULT_SYSTEM_BACKGROUND);
+      void setSystemBackgroundAsync(DEFAULT_SYSTEM_BACKGROUND, 'dark');
     };
   }, [incomingCall]);
 
