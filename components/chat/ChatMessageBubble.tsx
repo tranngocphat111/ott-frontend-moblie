@@ -288,6 +288,33 @@ const getCallDisplayCopy = (message: ChatMessage, isGroupCall = false) => {
   };
 };
 
+const getSystemDisplayText = (
+  message: ChatMessage,
+  fallbackText: string,
+  isMine: boolean,
+) => {
+  const normalizedType = String(message.type || "").toLowerCase();
+  const text = String(fallbackText || "").trim();
+  const senderName = String(message.sender_name || "").trim();
+
+  if (normalizedType === "system_friend_request") {
+    const requesterName = String((message.system_meta as any)?.requester_name || senderName).trim();
+    const displayName = isMine ? "Bạn" : requesterName;
+
+    if (!text || text === "Đã gửi lời mời kết bạn" || text === "Đã gửi lời mời kết bạn.") {
+      return displayName
+        ? `${displayName} đã gửi lời mời kết bạn`
+        : "Có lời mời kết bạn mới";
+    }
+  }
+
+  if (isMine && senderName && text.startsWith(senderName)) {
+    return `Bạn${text.slice(senderName.length)}`;
+  }
+
+  return text;
+};
+
 const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   message,
   isMine,
@@ -316,6 +343,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   if (isSystemMessageType(message.type)) {
     const systemUi = getSystemNotificationUi(message.type);
     const SystemIcon = systemUi.icon;
+    const displayText = getSystemDisplayText(message, contentText, isMine);
 
     return (
       <View className="my-2 items-center px-4">
@@ -326,7 +354,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
           <Text
             className={`ml-1.5 text-center text-[12px] ${systemUi.textClassName}`}
           >
-            {contentText}
+            {displayText}
           </Text>
         </View>
       </View>

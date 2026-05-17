@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSystemBackground } from '@/utils/useSystemBackground';
+import { DEFAULT_SYSTEM_BACKGROUND, useSystemBackground } from '@/utils/useSystemBackground';
 
 export default function LandingScreen() {
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function LandingScreen() {
   const intro = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const actionBottomPadding = Math.max(insets.bottom + 10, isCompact ? 16 : 28);
-  useSystemBackground('#120c08');
+  useSystemBackground('#120c08', DEFAULT_SYSTEM_BACKGROUND, 'light');
 
   useEffect(() => {
     Animated.parallel([

@@ -581,7 +581,7 @@ export default function ChatInfoScreen() {
         throw new Error("Không lấy được upload url");
       }
 
-      await ChatApi.uploadFileToS3(uploadUrl, optimized.uri, mimeType);
+      await ChatApi.uploadFileToS3(uploadUrl, optimized.uri, mimeType, undefined, fileName);
       await ChatApi.updateConversation(conversationId, {
         avatar: key,
         requesterId: userIdForChat,

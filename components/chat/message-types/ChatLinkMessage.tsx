@@ -97,22 +97,47 @@ export const ChatLinkMessage: React.FC<Props> = ({ message, isMine, onLongPress 
       return;
     }
 
-    if (isGroupInviteLink && groupInfo) {
-      if (groupInfo.isMember) {
+    if (isGroupInviteLink) {
+      if (!inviteToken) {
+        Alert.alert('Link mời không hợp lệ', 'Không tìm thấy mã mời tham gia nhóm.');
+        return;
+      }
+
+      if (!chatUserId) {
+        Alert.alert('Cần đăng nhập', 'Bạn cần đăng nhập để tham gia nhóm.');
+        return;
+      }
+
+      let resolvedGroupInfo = groupInfo;
+      if (!resolvedGroupInfo) {
+        try {
+          setLoadingGroup(true);
+          resolvedGroupInfo = await ChatApi.getInviteLinkInfo(inviteToken, chatUserId);
+          setGroupInfo(resolvedGroupInfo);
+        } catch (err: any) {
+          const errorMessage = String(err?.message || err?.details?.error || err?.details?.message || "");
+          Alert.alert('Không thể mở lời mời', errorMessage || 'Link mời không hợp lệ hoặc đã hết hạn.');
+          setLoadingGroup(false);
+          return;
+        } finally {
+          setLoadingGroup(false);
+        }
+      }
+
+      if (resolvedGroupInfo.isMember) {
         // Chuyển hướng thẳng tới chat
-        router.push(`/(main)/chat/${groupInfo.conversation._id}`);
+        router.push(`/(main)/chat/${resolvedGroupInfo.conversation._id}`);
       } else {
         // Hiện thông báo xác nhận tham gia
         Alert.alert(
           'Tham gia nhóm',
-          `Bạn có muốn tham gia nhóm "${groupInfo.conversation.name}" không?`,
+          `Bạn có muốn tham gia nhóm "${resolvedGroupInfo.conversation.name}" không?`,
           [
             { text: 'Hủy', style: 'cancel' },
             {
               text: 'Tham gia',
               onPress: async () => {
                 try {
-                  if (!inviteToken || !chatUserId) return;
                   const result = await ChatApi.joinByInviteLink(inviteToken, chatUserId);
                   Alert.alert('Thành công', 'Bạn đã tham gia nhóm.');
                   router.push(`/(main)/chat/${result.conversation._id}`);

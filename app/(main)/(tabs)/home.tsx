@@ -249,7 +249,7 @@ export default function HomeScreen() {
     } finally {
       setLoadingUsers(false);
     }
-  }, [chatUserId]);
+  }, [chatUserId, isFocused]);
 
   useEffect(() => {
     void loadChatUsers();
@@ -334,8 +334,17 @@ export default function HomeScreen() {
       }
       void loadConversationsRef.current();
     };
+    const refreshMyReadState = (payload: any) => {
+      const changedUserId = String(
+        payload?.userId || payload?.changedUserId || payload?.participant?.user_id || '',
+      );
+      if (changedUserId && changedUserId !== String(chatUserId)) return;
+      refreshInbox();
+    };
 
     chatSocket.on('tin_nhan', refreshInbox);
+    chatSocket.on('conversation_read_synced', refreshMyReadState);
+    chatSocket.on('participant_cursor_changed', refreshMyReadState);
     chatSocket.on('tao_phong_moi', refreshInbox);
     chatSocket.on('cap_nhat_nhom', refreshInbox);
     chatSocket.on('cap_nhat_phan_loai', refreshInbox);
@@ -349,6 +358,8 @@ export default function HomeScreen() {
 
     return () => {
       chatSocket.off('tin_nhan', refreshInbox);
+      chatSocket.off('conversation_read_synced', refreshMyReadState);
+      chatSocket.off('participant_cursor_changed', refreshMyReadState);
       chatSocket.off('tao_phong_moi', refreshInbox);
       chatSocket.off('cap_nhat_nhom', refreshInbox);
       chatSocket.off('cap_nhat_phan_loai', refreshInbox);
