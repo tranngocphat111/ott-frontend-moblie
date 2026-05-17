@@ -14,6 +14,16 @@ export const CHAT_API_CONFIG = {
   HEADERS: API_CONFIG.HEADERS,
 };
 
+export const MEDIA_API_CONFIG = {
+  BASE_URL: `${API_CONFIG.BASE_URL.replace(/\/$/, '')}/media`,
+  TIMEOUT: API_CONFIG.TIMEOUT,
+  HEADERS: API_CONFIG.HEADERS,
+};
+
+export const MEDIA_SOCKET_CONFIG = {
+  URL: process.env.EXPO_PUBLIC_MEDIA_SOCKET_URL || '',
+};
+
 export const LIVEKIT_CONFIG = {
   URL: process.env.EXPO_PUBLIC_LIVEKIT_URL || 'wss://chat-service-wplw6oap.livekit.cloud',
   ENABLE_NATIVE: process.env.EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT !== 'false',
