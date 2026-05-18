@@ -1,6 +1,5 @@
 import React from 'react';
-import { Animated, Image, Pressable, Text, View } from 'react-native';
-import { Easing } from 'react-native';
+import { Animated, Easing, Image, Pressable, Text, View } from 'react-native';
 import type { ChatConversationWithParticipant } from '@/types';
 import {
   formatConversationTime,
@@ -70,16 +69,20 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const unreadCount = Number(participant.unread_count || 0);
   const hasUnreadMessage = unreadCount > 0;
   const isPinned = !!participant.settings?.is_pinned;
+  const relationshipStatus = String(relationship?.status || '').toUpperCase();
+  const canShowPresence = conversation.type === 'private' && relationshipStatus === 'ACCEPTED';
   const otherUserIds = (conversation.participants || [])
     .map((member) => String(member.user_id || (member as any)._id || ''))
     .filter((id) => id && String(id) !== String(currentUserId || ''));
-  const isOnline = conversation.type === 'private' && isUserOnline(otherUserIds[0]);
+  const otherUserIdsKey = otherUserIds.join(',');
+  const isOnline = canShowPresence && isUserOnline(otherUserIds[0]);
 
   React.useEffect(() => {
-    if (otherUserIds.length > 0) {
-      watchUsers(otherUserIds);
+    const ids = otherUserIdsKey ? otherUserIdsKey.split(',').filter(Boolean) : [];
+    if (canShowPresence && ids.length > 0) {
+      watchUsers(ids);
     }
-  }, [otherUserIds.join(','), watchUsers]);
+  }, [canShowPresence, otherUserIdsKey, watchUsers]);
   const previewText = conversation.last_message
     ? getMessageBodyText({
         _id: conversation.last_message.msg_id,
