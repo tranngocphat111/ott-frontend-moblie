@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
@@ -48,6 +48,103 @@ const resolveParticipantDisplayName = (
     String(participant?.name || '').trim() ||
     ''
   );
+};
+
+const isMessageCursorAtLeast = (cursor: unknown, msgId: unknown) => {
+  try {
+    return BigInt(String(cursor || "0")) >= BigInt(String(msgId || "0"));
+  } catch {
+    return false;
+  }
+};
+
+const getParticipantUserId = (participant: any) =>
+  String(participant?.user_id || participant?._id || '').trim();
+
+const getParticipantDisplayName = (participant: any) =>
+  String(
+    participant?.nickname ||
+    participant?.display_name ||
+    participant?.name ||
+    participant?.user?.name ||
+    participant?.user_id ||
+    'Người dùng',
+  ).trim();
+
+const getParticipantAvatar = (participant: any) =>
+  String(
+    participant?.avatar ||
+    participant?.avatar_url ||
+    participant?.profile_picture ||
+    participant?.user?.avatar ||
+    participant?.user?.avatar_url ||
+    '',
+  ).trim();
+
+const isHiddenCallMessageType = (type?: string | null) => {
+  const normalizedType = String(type || '').toLowerCase();
+  return normalizedType === 'call_start' || normalizedType === 'call_join';
+};
+
+const canShowDeliveryForMessage = (message?: ChatMessage | null) =>
+  Boolean(
+    message &&
+    !isSystemMessageType(message.type) &&
+    !isHiddenCallMessageType(message.type) &&
+    !message.is_deleted &&
+    !message.is_revoked,
+  );
+
+const isJoinedParticipant = (participant: any) => {
+  const status = String(
+    participant?.membership_status ||
+    participant?.participant_status ||
+    participant?.status ||
+    '',
+  ).toLowerCase();
+  return status !== 'invited' && status !== 'removed';
+};
+
+const getDeliverySummary = (
+  message: ChatMessage,
+  conversation: ChatConversation | null | undefined,
+  currentUserId: string,
+) => {
+  const currentMsgId = String(message?.msg_id || message?._id || '').trim();
+  if (!currentMsgId) {
+    if (message.local_status === 'uploading') return { label: 'Đang gửi', seen: false, seenParticipants: [] as any[] };
+    if (message.local_status === 'error') return { label: 'Gửi lỗi', seen: false, seenParticipants: [] as any[] };
+    return { label: 'Đã gửi', seen: false, seenParticipants: [] as any[] };
+  }
+
+  const recipients = ((conversation?.participants || []) as any[]).filter((participant) => {
+    const participantUserId = getParticipantUserId(participant);
+    return participantUserId && participantUserId !== currentUserId && isJoinedParticipant(participant);
+  });
+
+  const recipientCount = recipients.length;
+  const deliveredCount = recipients.filter((participant) =>
+    isMessageCursorAtLeast(participant.last_delivered_message_id, currentMsgId),
+  ).length;
+  const seenCount = recipients.filter((participant) =>
+    isMessageCursorAtLeast(participant.last_read_message_id, currentMsgId),
+  ).length;
+  const seenParticipants = recipients.filter((participant) =>
+    isMessageCursorAtLeast(participant.last_read_message_id, currentMsgId),
+  );
+
+  if (recipientCount === 0) return { label: 'Đã gửi', seen: false, seenParticipants };
+
+  const isGroupConversation = conversation?.type === 'group' || recipientCount > 1;
+  if (!isGroupConversation) {
+    if (seenCount === 1) return { label: 'Đã xem', seen: true, seenParticipants };
+    if (deliveredCount === 1) return { label: 'Đã nhận', seen: false, seenParticipants };
+    return { label: 'Đã gửi', seen: false, seenParticipants };
+  }
+
+  if (seenCount === recipientCount) return { label: 'Tất cả đã xem', seen: true, seenParticipants };
+  if (seenCount > 0) return { label: `Đã xem ${seenCount}/${recipientCount}`, seen: true, seenParticipants };
+  return { label: deliveredCount > 0 ? 'Đã gửi' : 'Đã gửi', seen: false, seenParticipants };
 };
 
 const personalizeSystemAddMessage = (
@@ -120,6 +217,95 @@ export const SenderAvatar: React.FC<{ name: string; avatarUrl?: string }> = ({ n
   );
 };
 
+const SeenAvatarBase: React.FC<{ participant: any }> = ({ participant }) => {
+  const [hasError, setHasError] = useState(false);
+  const name = getParticipantDisplayName(participant);
+  const avatarUrl = getOptimizedImageUrl(getParticipantAvatar(participant), 'avatar') || resolveMediaUrl(getParticipantAvatar(participant));
+  const showImage = !!avatarUrl && !hasError;
+
+  return (
+    <View className="-ml-1.5 h-4 w-4 overflow-hidden rounded-full border border-white bg-[#f0e2d5]">
+      {showImage ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          className="h-full w-full"
+          onError={() => setHasError(true)}
+        />
+      ) : (
+        <View className="h-full w-full items-center justify-center bg-[#f0e2d5]">
+          <Text className="text-[8px] font-bold text-[#8b5e34]">
+            {getInitials(name)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+const SeenAvatar = memo(SeenAvatarBase);
+
+type DeliverySummary = ReturnType<typeof getDeliverySummary>;
+
+const DeliveryStatusBase: React.FC<{ summary: DeliverySummary }> = ({ summary }) => {
+  const seenParticipants = summary.seenParticipants || [];
+
+  if (seenParticipants.length > 0) {
+    const visibleParticipants = seenParticipants.slice(0, 3);
+    const hiddenCount = Math.max(0, seenParticipants.length - visibleParticipants.length);
+
+    return (
+      <View className="mt-[-5px] min-h-4 flex-row items-center justify-end pr-1">
+        <Pressable
+          className="flex-row items-center justify-end pl-2 active:opacity-80"
+          accessibilityLabel={summary.label}
+        >
+          {hiddenCount > 0 && (
+            <View className="z-10 h-4 min-w-4 items-center justify-center rounded-full border border-white bg-slate-500 px-1 shadow-sm">
+              <Text className="text-[8px] font-bold leading-none text-white">
+                +{hiddenCount}
+              </Text>
+            </View>
+          )}
+          {visibleParticipants.map((participant: any, avatarIndex: number) => (
+            <SeenAvatar
+              key={`${getParticipantUserId(participant) || getParticipantDisplayName(participant)}-${avatarIndex}`}
+              participant={participant}
+            />
+          ))}
+        </Pressable>
+      </View>
+    );
+  }
+
+  const isSending = summary.label === 'Đang gửi';
+  const isError = summary.label === 'Gửi lỗi';
+
+  return (
+    <View className="mt-[-5px] min-h-4 flex-row items-center justify-end pr-1">
+      <View
+        className={`flex-row items-center rounded-full px-1.5 py-0.5 ${
+          isError ? 'bg-red-50' : 'bg-transparent'
+        }`}
+      >
+        <Feather
+          name={isSending ? 'clock' : isError ? 'alert-circle' : 'check'}
+          size={11}
+          color={isError ? '#dc2626' : '#94a3b8'}
+        />
+        <Text
+          className={`ml-1 text-[11px] font-medium ${
+            isError ? 'text-red-600' : 'text-slate-400'
+          }`}
+        >
+          {summary.label}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const DeliveryStatus = memo(DeliveryStatusBase);
+
 type Props = {
   loading: boolean;
   preparing?: boolean;
@@ -179,6 +365,18 @@ export const ChatMessagesList: React.FC<Props> = ({
   const currentUserId = String(chatUserId || user?.id || userIdForChat || '');
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const latestOwnMessageId = React.useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (
+        String(message.sender_id || '') === String(currentUserId || '') &&
+        canShowDeliveryForMessage(message)
+      ) {
+        return getMessageKey(message);
+      }
+    }
+    return '';
+  }, [currentUserId, getMessageKey, messages]);
 
   // Group messages
   const displayData = React.useMemo<any[]>(() => {
@@ -219,7 +417,12 @@ export const ChatMessagesList: React.FC<Props> = ({
         scrollEventThrottle={16}
         {...({ maintainVisibleContentPosition: { minIndexForVisible: 0 } } as any)}
         onContentSizeChange={onContentSizeChange}
-        contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
+        contentContainerStyle={{
+          paddingTop: 12,
+          paddingBottom: 8,
+          flexGrow: 1,
+          justifyContent: 'flex-end',
+        } as any}
         renderItem={({ item, index }: { item: any; index: number }) => {
           const olderItem = displayData[index - 1];
 
@@ -308,6 +511,15 @@ export const ChatMessagesList: React.FC<Props> = ({
           const senderAvatar = msg.sender_avatar || getMessageSenderAvatar(conversation, msg.sender_id, currentUserId, msg.sender_avatar);
           const senderAvatarUrl = getOptimizedImageUrl(senderAvatar, 'avatar') || resolveMediaUrl(senderAvatar);
           const isHighlighted = highlightedMessageId === getMessageKey(msg);
+          const messageKey = getMessageKey(msg);
+          const shouldShowDeliveryStatus =
+            isMine &&
+            !!messageKey &&
+            messageKey === latestOwnMessageId &&
+            canShowDeliveryForMessage(msg);
+          const deliverySummary = shouldShowDeliveryStatus
+            ? getDeliverySummary(msg, conversation, currentUserId)
+            : null;
 
           if (isSystemMessageType(msg.type)) {
             const displaySystemMessage = personalizeSystemAddMessage(msg, conversation, currentUserId);
@@ -434,6 +646,8 @@ export const ChatMessagesList: React.FC<Props> = ({
                     onTranslate={onTranslateMessage ? () => onTranslateMessage(getMessageKey(msg)) : undefined}
                     isTranslating={translatingMessageId === getMessageKey(msg)}
                   />
+
+                  {deliverySummary && <DeliveryStatus summary={deliverySummary} />}
                 </View>
               </View>
             </View>

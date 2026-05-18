@@ -90,6 +90,7 @@ export interface ChatMessage {
   poll_question?: string | null;
   poll_multiple_choice?: boolean;
   poll_options?: Array<{ id: string; name: string; voters: string[] }>;
+  poll_locked?: boolean;
   local_temp_id?: string;
   local_status?: 'uploading' | 'success' | 'error';
   local_upload_progress?: number;

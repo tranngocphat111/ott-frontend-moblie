@@ -705,6 +705,17 @@ export default function ChatDetailScreen() {
     conversation?.is_self_conversation ||
     String(conversation?.name || '').trim().toLowerCase() === 'my documents',
   );
+  const latestCursorMessage = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (!message?.msg_id) continue;
+      const type = String(message.type || '').toLowerCase();
+      if (type.startsWith('system_') || type.startsWith('call_')) continue;
+      return message;
+    }
+    return null;
+  }, [messages]);
+  const latestCursorMsgId = String(latestCursorMessage?.msg_id || '').trim();
 
   const ensureConversation = useCallback(async () => {
     if (!conversationId || !userIdForChat) return null;
@@ -1774,7 +1785,15 @@ export default function ChatDetailScreen() {
 
       setMediaAssets(resolvedAssets.filter((item) => !!item.uri));
     } catch (error) {
-      console.error("Failed to load media library:", error);
+      const message = String((error as any)?.message || error || "");
+      if (/permission/i.test(message)) {
+        if (!silent) {
+          Alert.alert("Quyền truy cập", "Bạn cần cấp quyền thư viện để hiển thị ảnh/video gần đây.");
+        }
+        console.warn("Media library permission is not available for recent media.");
+      } else {
+        console.error("Failed to load media library:", error);
+      }
       setMediaAssets([]);
     } finally {
       setMediaLoading(false);
@@ -2563,6 +2582,8 @@ export default function ChatDetailScreen() {
       const msgId = String(payload?.msg_id || payload?._id || "").trim();
       const senderId = String(payload?.sender_id || "").trim();
       if (msgId && userIdForChat && senderId !== String(userIdForChat)) {
+        chatSocket.markMessagesDeliveredUpTo(String(conversationId), String(userIdForChat), msgId);
+        chatSocket.markMessageSeenUpTo(String(conversationId), String(userIdForChat), msgId);
         void ChatApi.markAsRead(String(conversationId), String(userIdForChat), msgId)
           .catch(() => undefined);
       }
@@ -2571,6 +2592,21 @@ export default function ChatDetailScreen() {
     },
     [conversationId, normalizeMessages, setPendingScrollToBottom, userIdForChat],
   );
+
+  useEffect(() => {
+    if (!conversationId || !userIdForChat || !latestCursorMsgId) return;
+
+    chatSocket.markMessagesDeliveredUpTo(
+      String(conversationId),
+      String(userIdForChat),
+      latestCursorMsgId,
+    );
+    chatSocket.markMessageSeenUpTo(
+      String(conversationId),
+      String(userIdForChat),
+      latestCursorMsgId,
+    );
+  }, [conversationId, latestCursorMsgId, userIdForChat]);
 
   const handleReactionChanged = useCallback(
     (payload: ChatMessage) => {
@@ -2816,6 +2852,121 @@ export default function ChatDetailScreen() {
     [conversationId, setConversation],
   );
 
+  const applyParticipantCursor = useCallback(
+    (payload: any) => {
+      const payloadConvId = String(
+        payload?.conversationId || payload?.conversation_id || "",
+      );
+      if (payloadConvId !== String(conversationId || "")) return;
+
+      const participant = payload?.participant || {};
+      const userId = String(
+        payload?.userId ||
+        payload?.user_id ||
+        participant?.user_id ||
+        participant?._id ||
+        "",
+      ).trim();
+      const msgId = String(
+        payload?.msgId ||
+        payload?.msg_id ||
+        payload?.last_read_message_id ||
+        payload?.last_delivered_message_id ||
+        participant?.last_read_message_id ||
+        participant?.last_delivered_message_id ||
+        "",
+      ).trim();
+      if (!userId || !msgId) return;
+
+      const isSeen =
+        payload?.receiptType === "seen" ||
+        payload?.status === "seen" ||
+        Boolean(payload?.readAt || payload?.last_read_at || payload?.last_read_message_id);
+      const now = new Date().toISOString();
+
+      setConversation((current: any) => {
+        if (!current) return current;
+        const existingParticipants = Array.isArray(current.participants)
+          ? current.participants
+          : [];
+        let didUpdate = false;
+
+        const nextParticipants = existingParticipants.map((item: any) => {
+          const itemUserId = String(item?.user_id || item?._id || "").trim();
+          if (itemUserId !== userId) return item;
+          didUpdate = true;
+
+          return {
+            ...item,
+            ...participant,
+            user_id: item.user_id || participant.user_id || userId,
+            last_delivered_message_id:
+              participant.last_delivered_message_id ||
+              payload.last_delivered_message_id ||
+              payload.msgId ||
+              payload.msg_id ||
+              msgId,
+            last_delivered_at:
+              participant.last_delivered_at ||
+              payload.last_delivered_at ||
+              payload.deliveredAt ||
+              now,
+            ...(isSeen
+              ? {
+                  last_read_message_id:
+                    participant.last_read_message_id ||
+                    payload.last_read_message_id ||
+                    payload.msgId ||
+                    payload.msg_id ||
+                    msgId,
+                  last_read_at:
+                    participant.last_read_at ||
+                    payload.last_read_at ||
+                    payload.readAt ||
+                    now,
+                }
+              : {}),
+          };
+        });
+
+        if (!didUpdate) {
+          nextParticipants.push({
+            ...participant,
+            user_id: userId,
+            last_delivered_message_id:
+              participant.last_delivered_message_id ||
+              payload.last_delivered_message_id ||
+              msgId,
+            last_delivered_at:
+              participant.last_delivered_at ||
+              payload.last_delivered_at ||
+              payload.deliveredAt ||
+              now,
+            ...(isSeen
+              ? {
+                  last_read_message_id:
+                    participant.last_read_message_id ||
+                    payload.last_read_message_id ||
+                    msgId,
+                  last_read_at:
+                    participant.last_read_at ||
+                    payload.last_read_at ||
+                    payload.readAt ||
+                    now,
+                }
+              : {}),
+          });
+        }
+
+        return {
+          ...current,
+          participants: nextParticipants,
+        };
+      });
+    },
+    [conversationId, setConversation],
+  );
+
   // Setup socket listeners
   useMessageSocket({
     conversationId,
@@ -2834,6 +2985,8 @@ export default function ChatDetailScreen() {
     onConversationSynced: handleConversationSynced,
     onGroupUpdated: handleGroupUpdated,
     onGroupCallUpdated: handleGroupCallUpdated,
+    onParticipantCursorChanged: applyParticipantCursor,
+    onConversationReadSynced: applyParticipantCursor,
   });
 
   useEffect(() => {

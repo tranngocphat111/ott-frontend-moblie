@@ -317,6 +317,22 @@ class ChatSocketService {
 		}
 	}
 
+	markMessagesDeliveredUpTo(conversationId: string, userId: string, msgId: string) {
+		this.emitWhenConnected('messages_delivered_up_to', {
+			conversationId,
+			userId,
+			msgId,
+		});
+	}
+
+	markMessageSeenUpTo(conversationId: string, userId: string, msgId: string) {
+		this.emitWhenConnected('message_seen_up_to', {
+			conversationId,
+			userId,
+			msgId,
+		});
+	}
+
 	refreshPresence(userId?: string) {
 		const activeUserId = userId || this.userRoomId;
 		if (!activeUserId) return;
