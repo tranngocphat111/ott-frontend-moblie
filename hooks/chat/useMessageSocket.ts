@@ -19,6 +19,8 @@ interface UseMessageSocketProps {
   onConversationSynced?: (payload: any) => void;
   onGroupUpdated?: (payload: any) => void;
   onGroupCallUpdated?: (payload: any) => void;
+  onParticipantCursorChanged?: (payload: any) => void;
+  onConversationReadSynced?: (payload: any) => void;
 }
 
 export function useMessageSocket({
@@ -37,7 +39,9 @@ export function useMessageSocket({
   onGroupDissolved,
   onConversationSynced,
   onGroupUpdated,
-  onGroupCallUpdated
+  onGroupCallUpdated,
+  onParticipantCursorChanged,
+  onConversationReadSynced
 }: UseMessageSocketProps) {
   useEffect(() => {
     if (!conversationId || !userIdForChat) return;
@@ -85,6 +89,14 @@ export function useMessageSocket({
       chatSocket.on('cap_nhat_trang_thai_goi_nhom', onGroupCallUpdated as any);
     }
 
+    if (onParticipantCursorChanged) {
+      chatSocket.on('participant_cursor_changed', onParticipantCursorChanged as any);
+    }
+
+    if (onConversationReadSynced) {
+      chatSocket.on('conversation_read_synced', onConversationReadSynced as any);
+    }
+
     return () => {
       chatSocket.leaveConversation(conversationId);
 
@@ -126,6 +138,14 @@ export function useMessageSocket({
       if (onGroupCallUpdated) {
         chatSocket.off('cap_nhat_trang_thai_goi_nhom', onGroupCallUpdated as any);
       }
+
+      if (onParticipantCursorChanged) {
+        chatSocket.off('participant_cursor_changed', onParticipantCursorChanged as any);
+      }
+
+      if (onConversationReadSynced) {
+        chatSocket.off('conversation_read_synced', onConversationReadSynced as any);
+      }
     };
   }, [
     conversationId,
@@ -143,6 +163,8 @@ export function useMessageSocket({
     onGroupDissolved,
     onConversationSynced,
     onGroupUpdated,
-    onGroupCallUpdated
+    onGroupCallUpdated,
+    onParticipantCursorChanged,
+    onConversationReadSynced
   ]);
 }

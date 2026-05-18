@@ -238,6 +238,17 @@ export const chatMessageApi = {
     });
   },
 
+  async lockPoll(
+    conversationId: string,
+    msgId: string,
+    userId: string,
+  ): Promise<ChatMessage> {
+    return await chatApiClient.put(`/messages/${msgId}/poll-lock`, {
+      conversationId,
+      userId,
+    });
+  },
+
   async transcribeAudio(formData: FormData): Promise<{ text: string }> {
     return await chatApiClient.post('/ai/transcribe', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

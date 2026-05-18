@@ -499,6 +499,91 @@ export default function ChatInfoScreen() {
   const [createGroupModalVisible, setCreateGroupModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [inviteLinkModalVisible, setInviteLinkModalVisible] = useState(false);
+  const [nicknameManagementVisible, setNicknameManagementVisible] = useState(false);
+  const [nicknameSearchText, setNicknameSearchText] = useState("");
+  const [editingNicknameUserId, setEditingNicknameUserId] = useState<string | null>(null);
+  const [editingNicknameText, setEditingNicknameText] = useState("");
+  const [savingNicknameUserId, setSavingNicknameUserId] = useState<string | null>(null);
+  const [nicknameManagementError, setNicknameManagementError] = useState<string | null>(null);
+
+  const nicknameMembers = useMemo(() => {
+    const currentId = String(userIdForChat || "");
+    const query = nicknameSearchText.trim().toLowerCase();
+
+    return members
+      .filter((member) => !!String(member?.user_id || "").trim())
+      .sort((left, right) => {
+        const leftIsCurrent = String(left.user_id || "") === currentId;
+        const rightIsCurrent = String(right.user_id || "") === currentId;
+        if (leftIsCurrent !== rightIsCurrent) return leftIsCurrent ? -1 : 1;
+
+        const leftName =
+          String(left.nickname || left.user?.name || left.name || left.user_id || "")
+            .trim();
+        const rightName =
+          String(right.nickname || right.user?.name || right.name || right.user_id || "")
+            .trim();
+        return leftName.localeCompare(rightName, "vi");
+      })
+      .filter((member) => {
+        if (!query) return true;
+
+        const realName = String(member.user?.name || member.name || member.user_id || "").toLowerCase();
+        const nickname = String(member.nickname || "").toLowerCase();
+        const selfLabel = String(member.user_id || "") === currentId ? "bạn ban you" : "";
+        return realName.includes(query) || nickname.includes(query) || selfLabel.includes(query);
+      });
+  }, [members, nicknameSearchText, userIdForChat]);
+
+  const openNicknameManagement = useCallback(() => {
+    setNicknameManagementError(null);
+    setNicknameSearchText("");
+    setEditingNicknameUserId(null);
+    setEditingNicknameText("");
+    setNicknameManagementVisible(true);
+  }, []);
+
+  const closeNicknameManagement = useCallback(() => {
+    if (savingNicknameUserId) return;
+    setNicknameManagementVisible(false);
+    setNicknameManagementError(null);
+    setEditingNicknameUserId(null);
+    setEditingNicknameText("");
+  }, [savingNicknameUserId]);
+
+  const startNicknameEdit = useCallback((member: any) => {
+    setNicknameManagementError(null);
+    setEditingNicknameUserId(String(member?.user_id || ""));
+    setEditingNicknameText(String(member?.nickname || ""));
+  }, []);
+
+  const saveNicknameFromManagement = useCallback(async () => {
+    if (!conversationId || !userIdForChat || !editingNicknameUserId) return;
+
+    setSavingNicknameUserId(editingNicknameUserId);
+    setNicknameManagementError(null);
+    try {
+      await ChatApi.updateMemberNickname(
+        conversationId,
+        editingNicknameUserId,
+        userIdForChat,
+        editingNicknameText.trim(),
+      );
+      setEditingNicknameUserId(null);
+      setEditingNicknameText("");
+      await loadInfo();
+    } catch {
+      setNicknameManagementError("Không thể cập nhật biệt danh");
+    } finally {
+      setSavingNicknameUserId(null);
+    }
+  }, [
+    conversationId,
+    editingNicknameText,
+    editingNicknameUserId,
+    loadInfo,
+    userIdForChat,
+  ]);
 
   const openStorageTab = useCallback((nextTab: InfoTab) => {
     if (nextTab === "files") {
@@ -1089,6 +1174,27 @@ export default function ChatInfoScreen() {
 
                       {isGroup && (
                         <>
+                          <Pressable
+                            onPress={openNicknameManagement}
+                            className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
+                          >
+                            <View className="flex-row items-center">
+                              <Feather
+                                name="edit-2"
+                                size={20}
+                                color={THEME_COLORS.neutral.slate400}
+                              />
+                              <Text className="ml-4 text-[17px] text-slate-800">
+                                Biệt danh
+                              </Text>
+                            </View>
+                            <Feather
+                              name="chevron-right"
+                              size={18}
+                              color={THEME_COLORS.neutral.slate400}
+                            />
+                          </Pressable>
+
                           <Pressable
                             onPress={() => router.push(`/(main)/chat/bulletin/${conversationId}`)}
                             className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100"
@@ -1969,6 +2075,191 @@ export default function ChatInfoScreen() {
           setMemberModalVisible(false);
         }}
       />
+
+      <Modal
+        visible={nicknameManagementVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeNicknameManagement}
+      >
+        <View className="flex-1 bg-black/35">
+          <Pressable className="flex-1" onPress={closeNicknameManagement} />
+          <View
+            className="max-h-[88%] rounded-t-[28px] bg-white px-4 pt-4"
+            style={{ paddingBottom: Math.max(insets.bottom + 14, 22) }}
+          >
+            <View className="mb-3 h-1.5 w-12 self-center rounded-full bg-slate-200" />
+            <View className="mb-4 flex-row items-start justify-between">
+              <View className="min-w-0 flex-1 pr-3">
+                <Text className="text-[20px] font-bold text-slate-950">
+                  Biệt danh
+                </Text>
+                <Text className="mt-0.5 text-[13px] text-slate-500">
+                  {members.length} thành viên có thể đặt biệt danh
+                </Text>
+              </View>
+              <Pressable
+                onPress={closeNicknameManagement}
+                disabled={!!savingNicknameUserId}
+                className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
+              >
+                <Feather name="x" size={20} color={THEME_COLORS.neutral.slate600} />
+              </Pressable>
+            </View>
+
+            <View className="mb-3 flex-row items-center rounded-2xl border border-slate-200 bg-slate-50 px-3">
+              <Feather name="search" size={16} color={THEME_COLORS.neutral.slate500} />
+              <TextInput
+                value={nicknameSearchText}
+                onChangeText={setNicknameSearchText}
+                placeholder="Tìm thành viên hoặc biệt danh"
+                placeholderTextColor={THEME_COLORS.neutral.slate400}
+                className="ml-2 flex-1 py-3 text-[14px] text-slate-900"
+              />
+              {!!nicknameSearchText && (
+                <Pressable onPress={() => setNicknameSearchText("")}>
+                  <Feather name="x" size={16} color={THEME_COLORS.neutral.slate400} />
+                </Pressable>
+              )}
+            </View>
+
+            {!!nicknameManagementError && (
+              <Text className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-600">
+                {nicknameManagementError}
+              </Text>
+            )}
+
+            <FlatList
+              data={nicknameMembers}
+              keyExtractor={(member, index) => String(member?.user_id || member?._id || index)}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <Text className="py-12 text-center text-[14px] text-slate-500">
+                  Không tìm thấy thành viên phù hợp
+                </Text>
+              }
+              renderItem={({ item }) => {
+                const memberId = String(item?.user_id || "");
+                const realName = String(item?.user?.name || item?.name || memberId).trim();
+                const nickname = String(item?.nickname || "").trim();
+                const displayName = nickname || realName;
+                const isMe = memberId === String(userIdForChat || "");
+                const isEditing = editingNicknameUserId === memberId;
+                const isSaving = savingNicknameUserId === memberId;
+                const unchanged = editingNicknameText.trim() === nickname;
+
+                if (isEditing) {
+                  return (
+                    <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-3">
+                      <View className="flex-row items-center">
+                        <SenderAvatar name={displayName} avatarUrl={String(item?.avatar || item?.user?.avatar || "")} />
+                        <View className="ml-3 min-w-0 flex-1">
+                          <View className="flex-row items-center">
+                            <Text className="max-w-[78%] text-[15px] font-bold text-slate-950" numberOfLines={1}>
+                              {realName}
+                            </Text>
+                            {isMe && (
+                              <Text className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                                Bạn
+                              </Text>
+                            )}
+                          </View>
+                          <Text className="mt-0.5 text-[12px] text-slate-500" numberOfLines={1}>
+                            {nickname ? `Hiện tại: ${nickname}` : "Chưa có biệt danh"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <TextInput
+                          value={editingNicknameText}
+                          onChangeText={(value) => setEditingNicknameText(value.slice(0, 50))}
+                          placeholder={`Biệt danh cho ${isMe ? "bạn" : realName}`}
+                          placeholderTextColor={THEME_COLORS.neutral.slate400}
+                          editable={!isSaving}
+                          className="text-[14px] font-semibold text-slate-950"
+                        />
+                        <View className="mt-1 flex-row justify-between">
+                          <Text className="text-[11px] text-slate-400">
+                            Để trống rồi lưu để xóa biệt danh
+                          </Text>
+                          <Text className="text-[11px] text-slate-400">
+                            {editingNicknameText.length}/50
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View className="mt-3 flex-row justify-end gap-2">
+                        <Pressable
+                          onPress={() => {
+                            setEditingNicknameUserId(null);
+                            setEditingNicknameText("");
+                            setNicknameManagementError(null);
+                          }}
+                          disabled={isSaving}
+                          className="rounded-xl bg-slate-100 px-4 py-2.5"
+                        >
+                          <Text className="text-[13px] font-semibold text-slate-700">Hủy</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => void saveNicknameFromManagement()}
+                          disabled={isSaving || unchanged}
+                          className={`min-w-20 items-center rounded-xl px-4 py-2.5 ${
+                            isSaving || unchanged ? "bg-slate-200" : "bg-primary-600"
+                          }`}
+                        >
+                          {isSaving ? (
+                            <ActivityIndicator size="small" color={THEME_COLORS.neutral.slate500} />
+                          ) : (
+                            <Text className={`text-[13px] font-semibold ${
+                              unchanged ? "text-slate-500" : "text-white"
+                            }`}>
+                              Lưu
+                            </Text>
+                          )}
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                }
+
+                return (
+                  <View className="mb-2 flex-row items-center rounded-2xl border border-slate-100 bg-white px-3 py-3">
+                    <SenderAvatar name={displayName} avatarUrl={String(item?.avatar || item?.user?.avatar || "")} />
+                    <View className="ml-3 min-w-0 flex-1">
+                      <View className="flex-row items-center">
+                        <Text className="max-w-[76%] text-[15px] font-bold text-slate-950" numberOfLines={1}>
+                          {displayName}
+                        </Text>
+                        {isMe && (
+                          <Text className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                            Bạn
+                          </Text>
+                        )}
+                        {!!nickname && (
+                          <Text className="ml-2 rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-semibold text-primary-700">
+                            Biệt danh
+                          </Text>
+                        )}
+                      </View>
+                      <Text className="mt-0.5 text-[12px] text-slate-500" numberOfLines={1}>
+                        {nickname ? `Tên thật: ${realName}` : "Chưa có biệt danh"}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => startNicknameEdit(item)}
+                      disabled={!!savingNicknameUserId}
+                      className="h-10 w-10 items-center justify-center rounded-full bg-slate-50"
+                    >
+                      <Feather name="edit-2" size={17} color={THEME_COLORS.primary[600]} />
+                    </Pressable>
+                  </View>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={nicknameModalVisible}

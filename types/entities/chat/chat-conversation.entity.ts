@@ -8,6 +8,12 @@ export interface ChatConversationParticipant {
   status?: 'online' | 'offline' | 'away' | 'busy';
   role?: 'admin' | 'member' | 'owner';
   joined_at?: string;
+  last_delivered_message_id?: string;
+  last_delivered_at?: string | null;
+  last_read_message_id?: string;
+  last_read_at?: string | null;
+  membership_status?: string;
+  participant_status?: string;
 }
 
 export interface ChatConversation {

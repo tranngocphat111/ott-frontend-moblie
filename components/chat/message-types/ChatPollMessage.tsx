@@ -16,6 +16,10 @@ export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMin
   const { chatUserId, user } = useAuth();
   const currentUserId = String(chatUserId || user?.id || '');
   const [voterModalVisible, setVoterModalVisible] = useState(false);
+  const [locallyLocked, setLocallyLocked] = useState(false);
+  const [isLocking, setIsLocking] = useState(false);
+  const isLocked = locallyLocked || Boolean(message.poll_locked);
+  const canLockPoll = isMine && !isLocked && !!message.conversation_id && !!message.msg_id && !!currentUserId;
 
   const totalVoters = useMemo(() => {
     const voters = new Set<string>();
@@ -26,7 +30,7 @@ export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMin
   }, [message.poll_options]);
 
   const handleVote = async (optionId: string) => {
-    if (!message.conversation_id || !message.msg_id) return;
+    if (isLocked || !message.conversation_id || !message.msg_id) return;
 
     try {
       const currentVotedOptions = message.poll_options
@@ -60,6 +64,34 @@ export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMin
     }
   };
 
+  const handleLockPoll = () => {
+    if (!canLockPoll || isLocking || !message.conversation_id || !message.msg_id) return;
+
+    Alert.alert(
+      'Khóa bình chọn',
+      'Sau khi khóa, thành viên sẽ không thể tiếp tục bình chọn. Bạn muốn khóa bình chọn này?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Khóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsLocking(true);
+              await chatMessageApi.lockPoll(message.conversation_id!, message.msg_id!, currentUserId);
+              setLocallyLocked(true);
+            } catch (error) {
+              console.error('Failed to lock poll:', error);
+              Alert.alert('Lỗi', 'Không thể khóa bình chọn. Vui lòng thử lại.');
+            } finally {
+              setIsLocking(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const CHAT_BROWN = '#d2a177';
   const CHAT_BROWN_LIGHT = '#fdf8f4';
   const CHAT_BROWN_BORDER = '#f5e8dc';
@@ -79,12 +111,28 @@ export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMin
             <Text className="text-[17px] font-bold text-slate-800" numberOfLines={3}>
               {message.poll_question}
             </Text>
-            {message.poll_multiple_choice && (
-              <Text className="text-[11px]   tracking-wider text-slate-400 mt-0.5">
-                Chọn nhiều đáp án
+            <View className="mt-0.5 flex-row flex-wrap items-center gap-1.5">
+              <Text className="text-[11px] tracking-wider text-slate-400">
+                {message.poll_multiple_choice ? 'Chọn nhiều đáp án' : 'Chọn một đáp án'}
               </Text>
-            )}
+              {isLocked && (
+                <View className="rounded-full bg-slate-900 px-2 py-0.5">
+                  <Text className="text-[10px] font-bold text-white">Đã khóa</Text>
+                </View>
+              )}
+            </View>
           </View>
+          {canLockPoll && (
+            <Pressable
+              onPress={handleLockPoll}
+              disabled={isLocking}
+              className="h-9 min-w-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 active:opacity-70"
+            >
+              <Text className="text-[12px] font-bold text-slate-700">
+                {isLocking ? '...' : 'Khóa'}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {/* Poll Options */}
@@ -98,7 +146,8 @@ export const ChatPollMessage: React.FC<ChatPollMessageProps> = ({ message, isMin
               <Pressable
                 key={option.id}
                 onPress={() => handleVote(option.id)}
-                className="relative h-14 w-full overflow-hidden rounded-[18px] bg-white border border-slate-100 shadow-sm"
+                disabled={isLocked}
+                className={`relative h-14 w-full overflow-hidden rounded-[18px] bg-white border border-slate-100 shadow-sm ${isLocked ? 'opacity-75' : ''}`}
               >
                 {/* Progress Bar Background */}
                 <View
