@@ -998,20 +998,24 @@ export default function ChatDetailScreen() {
         .map((participant) => String(participant.user_id || participant._id || ""))
         .filter((id) => id && id !== String(userIdForChat || ""))
     : [];
-  const isOtherOnline = otherUserId ? isUserOnline(otherUserId) : false;
+  const groupMemberIdsKey = groupMemberIds.join(",");
+  const relationshipStatus = String(relationship?.status || "").toUpperCase();
+  const canShowPrivatePresence = conversation?.type === "private" && relationshipStatus === "ACCEPTED";
+  const isOtherOnline = canShowPrivatePresence && otherUserId ? isUserOnline(otherUserId) : false;
   const activeCallConversation = conversation as any;
   const hasActiveCall = !!activeCallConversation?.is_calling;
 
   useEffect(() => {
-    if (otherUserId) {
+    if (canShowPrivatePresence && otherUserId) {
       watchUsers([otherUserId]);
       return;
     }
 
-    if (groupMemberIds.length > 0) {
-      watchUsers(groupMemberIds);
+    const ids = groupMemberIdsKey ? groupMemberIdsKey.split(",").filter(Boolean) : [];
+    if (ids.length > 0) {
+      watchUsers(ids);
     }
-  }, [groupMemberIds.join(","), otherUserId, watchUsers]);
+  }, [canShowPrivatePresence, groupMemberIdsKey, otherUserId, watchUsers]);
 
   const typingUserIdList = Object.keys(typingUserIds).filter(
     (id) => id && String(id) !== String(userIdForChat || ""),
@@ -1057,9 +1061,11 @@ export default function ChatDetailScreen() {
   const headerSubtitle = conversation?.is_self_conversation
     ? "Cloud của bạn"
     : conversation?.type === "private"
-      ? isOtherOnline
-        ? "Đang hoạt động"
-        : formatLastSeenLabel(getLastSeen(otherUserId))
+      ? canShowPrivatePresence
+        ? isOtherOnline
+          ? "Đang hoạt động"
+          : formatLastSeenLabel(getLastSeen(otherUserId))
+        : ""
       : `${conversation?.participants?.length || 0} thành viên`;
 
   const stopTyping = useCallback(() => {
@@ -3254,7 +3260,7 @@ export default function ChatDetailScreen() {
         <ChatScreenHeader
           title={title}
           subtitle={headerSubtitle}
-          isOnline={conversation?.type === "private" && isOtherOnline}
+          isOnline={canShowPrivatePresence && isOtherOnline}
           accentStart={CHAT_BROWN_DARK}
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
