@@ -88,6 +88,15 @@ import {
 const getMessageKey = (message: ChatMessage) =>
   message.msg_id || message._id || message.local_temp_id || "";
 const normalizeMessageId = (value?: string | null) => String(value || "").trim();
+const normalizeRelationshipPayload = (payload: any) => ({
+  ...payload,
+  _id: payload?._id || payload?.id || payload?.relationship_id || payload?.relationshipId,
+  requester_id: payload?.requester_id || payload?.requesterId,
+  receiver_id: payload?.receiver_id || payload?.receiverId,
+  requesterId: payload?.requesterId || payload?.requester_id,
+  receiverId: payload?.receiverId || payload?.receiver_id,
+  status: payload?.status ? String(payload.status).toUpperCase() : payload?.status,
+});
 const URL_PATTERN =
   /((https?:\/\/|www\.)[^\s]+|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\/[^\s]*)?)/i;
 
@@ -889,12 +898,13 @@ export default function ChatDetailScreen() {
     if (!chatSocket || !userIdForChat) return;
 
     const handleRelationshipUpdate = (data: any) => {
+      const normalizedData = normalizeRelationshipPayload(data);
       // Check if the update is relevant to the current conversation
       const otherParticipant = conversation?.participants?.find(p => String(p.user_id || p._id) !== String(userIdForChat));
       if (!otherParticipant) return;
 
       const otherId = String(otherParticipant.user_id || otherParticipant._id);
-      if (String(data.requester_id) === otherId || String(data.receiver_id) === otherId) {
+      if (String(normalizedData.requester_id) === otherId || String(normalizedData.receiver_id) === otherId) {
         void fetchRelationship();
       }
     };
@@ -2997,14 +3007,15 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     const handleRelationshipUpdate = (payload: any) => {
+      const normalizedPayload = normalizeRelationshipPayload(payload);
       // If this is a private chat, check if the update is relevant
       if (conversation?.type === 'private') {
         const otherParticipantId = conversation.participants?.find(p => String((p as any).user_id) !== String(userIdForChat))?.user_id;
         if (otherParticipantId &&
-          (String(payload.requester_id) === String(otherParticipantId) ||
-            String(payload.receiver_id) === String(otherParticipantId))) {
-          console.log('[ChatScreen] Relationship status updated via socket:', payload.status);
-          setRelationship(payload);
+          (String(normalizedPayload.requester_id) === String(otherParticipantId) ||
+            String(normalizedPayload.receiver_id) === String(otherParticipantId))) {
+          console.log('[ChatScreen] Relationship status updated via socket:', normalizedPayload.status);
+          setRelationship(normalizedPayload);
         }
       }
     };

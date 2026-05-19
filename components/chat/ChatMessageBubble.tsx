@@ -299,7 +299,8 @@ const getSystemDisplayText = (
 
   if (normalizedType === "system_friend_request") {
     const requesterName = String((message.system_meta as any)?.requester_name || senderName).trim();
-    const displayName = isMine ? "Bạn" : requesterName;
+    if (isMine) return "Tôi đã gửi lời mời kết bạn";
+    const displayName = requesterName;
 
     if (!text || text === "Đã gửi lời mời kết bạn" || text === "Đã gửi lời mời kết bạn.") {
       return displayName

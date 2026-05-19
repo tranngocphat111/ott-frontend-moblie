@@ -11,6 +11,9 @@ interface FriendRequestBarProps {
   onStatusChange: () => void;
 }
 
+const relationshipIdOf = (relationship: any) =>
+  String(relationship?._id || relationship?.id || relationship?.relationship_id || relationship?.relationshipId || '');
+
 export const FriendRequestBar: React.FC<FriendRequestBarProps> = ({ 
   relationship, 
   conversation,
@@ -20,9 +23,10 @@ export const FriendRequestBar: React.FC<FriendRequestBarProps> = ({
   const [loading, setLoading] = useState(false);
 
   const handleAccept = async () => {
-    if (!relationship?._id) return;
+    const relationshipId = relationshipIdOf(relationship);
+    if (!relationshipId) return;
     setLoading(true);
-    const success = await ChatApi.acceptFriendRequest(relationship._id);
+    const success = await ChatApi.acceptFriendRequest(relationshipId);
     if (success) {
       onStatusChange();
     } else {
@@ -32,9 +36,10 @@ export const FriendRequestBar: React.FC<FriendRequestBarProps> = ({
   };
 
   const handleReject = async () => {
-    if (!relationship?._id) return;
+    const relationshipId = relationshipIdOf(relationship);
+    if (!relationshipId) return;
     setLoading(true);
-    const success = await ChatApi.rejectFriendRequest(relationship._id);
+    const success = await ChatApi.rejectFriendRequest(relationshipId);
     if (success) {
       onStatusChange();
     } else {
@@ -44,9 +49,10 @@ export const FriendRequestBar: React.FC<FriendRequestBarProps> = ({
   };
 
   const handleCancel = async () => {
-    if (!relationship?._id) return;
+    const relationshipId = relationshipIdOf(relationship);
+    if (!relationshipId) return;
     setLoading(true);
-    const success = await ChatApi.cancelFriendRequest(relationship._id);
+    const success = await ChatApi.cancelFriendRequest(relationshipId);
     if (success) {
       onStatusChange();
     } else {

@@ -1003,6 +1003,20 @@ const isRelationshipStatus = (relationship: ChatRelationshipLike | null, expecte
   return expectedStatuses.some((status) => status.toUpperCase() === normalized);
 };
 
+const hasRelationshipId = (
+  relationship: ChatRelationshipLike | null | undefined,
+  relationshipId?: string,
+) => {
+  if (!relationshipId) return true;
+  const expectedId = String(relationshipId);
+  return [
+    (relationship as any)?._id,
+    (relationship as any)?.id,
+    (relationship as any)?.relationship_id,
+    (relationship as any)?.relationshipId,
+  ].some((value) => value && String(value) === expectedId);
+};
+
 export const fetchRelationshipStatusViaChat = async (userId1: string, userId2: string): Promise<any | null> => {
   try {
     return await (chatApiClient.get as any)('/relationships/status', {
@@ -1024,10 +1038,8 @@ const verifyRelationshipMutation = async (
 
   const latest = await fetchRelationshipStatusViaChat(requesterId, receiverId);
   if (!latest) return false;
-  const sameRelationship =
-    !relationshipId || String(latest._id || latest.relationship_id || '') === String(relationshipId);
 
-  return sameRelationship && isRelationshipStatus(latest, expectedStatuses);
+  return hasRelationshipId(latest, relationshipId) && isRelationshipStatus(latest, expectedStatuses);
 };
 
 const verifySentFriendRequest = async (requesterId: string, receiverId: string) => {

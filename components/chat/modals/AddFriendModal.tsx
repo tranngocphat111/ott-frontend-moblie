@@ -28,6 +28,19 @@ interface AddFriendModalProps {
   onClose: () => void;
 }
 
+const normalizeRelationshipPayload = (payload: any) => ({
+  ...payload,
+  _id: payload?._id || payload?.id || payload?.relationship_id || payload?.relationshipId,
+  requester_id: payload?.requester_id || payload?.requesterId,
+  receiver_id: payload?.receiver_id || payload?.receiverId,
+  requesterId: payload?.requesterId || payload?.requester_id,
+  receiverId: payload?.receiverId || payload?.receiver_id,
+  status: payload?.status ? String(payload.status).toUpperCase() : payload?.status,
+});
+
+const relationshipIdOf = (relationship: any) =>
+  String(relationship?._id || relationship?.id || relationship?.relationship_id || relationship?.relationshipId || '');
+
 export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose }) => {
   const { chatUserId } = useAuth();
   const insets = useSafeAreaInsets();
@@ -43,11 +56,12 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
     if (!chatUserId || !visible) return;
 
     const handleRelationshipUpdate = (updatedRel: any) => {
+      const normalizedRel = normalizeRelationshipPayload(updatedRel);
       // If the update is for the user currently being viewed in searchResult
       if (searchResult && 
-          (updatedRel.requester_id === searchResult.user_id || 
-           updatedRel.receiver_id === searchResult.user_id)) {
-        setRelationship(updatedRel);
+          (normalizedRel.requester_id === searchResult.user_id || 
+           normalizedRel.receiver_id === searchResult.user_id)) {
+        setRelationship(normalizedRel);
       }
     };
 
@@ -121,10 +135,11 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
   };
 
   const handleAcceptRequest = async () => {
-    if (!relationship?._id) return;
+    const relationshipId = relationshipIdOf(relationship);
+    if (!relationshipId) return;
     setLoading(true);
     try {
-      const success = await ChatApi.acceptFriendRequest(relationship._id);
+      const success = await ChatApi.acceptFriendRequest(relationshipId);
       if (success) {
         const rel = await ChatApi.fetchRelationshipStatus(chatUserId!, searchResult.user_id);
         setRelationship(rel);
@@ -137,10 +152,11 @@ export const AddFriendModal: React.FC<AddFriendModalProps> = ({ visible, onClose
   };
 
   const handleCancelRequest = async () => {
-    if (!relationship?._id) return;
+    const relationshipId = relationshipIdOf(relationship);
+    if (!relationshipId) return;
     setLoading(true);
     try {
-      const success = await ChatApi.cancelFriendRequest(relationship._id);
+      const success = await ChatApi.cancelFriendRequest(relationshipId);
       if (success) {
         const rel = await ChatApi.fetchRelationshipStatus(chatUserId!, searchResult.user_id);
         setRelationship(rel);
