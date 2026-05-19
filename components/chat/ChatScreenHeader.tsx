@@ -21,7 +21,7 @@ type ChatScreenHeaderProps = {
 
 export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
   title,
-  subtitle = 'Hoạt động gần đây',
+  subtitle,
   accentStart,
   accentEnd,
   topInset = 0,
@@ -32,6 +32,9 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
   onSummarize,
   isOnline = false,
 }) => {
+  const subtitleText = subtitle?.trim() || '';
+  const hasSubtitle = subtitleText.length > 0;
+
   return (
     <LinearGradient
         colors={[THEME_COLORS.primary[600], THEME_COLORS.primary[500]]}
@@ -48,17 +51,19 @@ export const ChatScreenHeader: React.FC<ChatScreenHeaderProps> = ({
           <Feather name="chevron-left" size={26} color="#fff" />
         </Pressable>
 
-        <View className="mx-1 flex-1 flex-row items-center gap-3">
-          <View className="flex-1">
+        <View className="mx-1 flex-1 flex-row items-center gap-3 self-stretch">
+          <View className="flex-1 justify-center">
             <Text className="text-[16px] font-bold text-white" numberOfLines={1}>
               {title}
             </Text>
-            <View className="mt-0.5 flex-row items-center">
-              {isOnline && <View className="mr-1.5 h-2 w-2 rounded-full bg-emerald-300" />}
-              <Text className="text-[12px] text-white/85" numberOfLines={1}>
-                {subtitle}
-              </Text>
-            </View>
+            {hasSubtitle && (
+              <View className="mt-0.5 flex-row items-center">
+                {isOnline && <View className="mr-1.5 h-2 w-2 rounded-full bg-emerald-300" />}
+                <Text className="text-[12px] text-white/85" numberOfLines={1}>
+                  {subtitleText}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
