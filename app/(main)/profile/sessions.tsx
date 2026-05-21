@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -17,48 +16,13 @@ export default function SessionsScreen() {
   const router = useRouter();
   const {
     sessions,
-    total,
     isLoading,
     fetchSessions,
-    revokeSession,
-    revokeAllOtherSessions,
-    revokeAllSessions,
   } = useSessions();
 
   useEffect(() => {
     fetchSessions();
   }, []);
-
-  const handleRevokeSession = (sessionId: string) => {
-    Alert.alert(
-      'Xác nhận',
-      'Bạn có chắc chắn muốn đăng xuất phiên này?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Đăng xuất',
-          style: 'destructive',
-          onPress: () => revokeSession(sessionId),
-        },
-      ]
-    );
-  };
-
-  
-  const handleRevokeAll = () => {
-    Alert.alert(
-      'Xác nhận',
-      'Bạn có chắc chắn muốn đăng xuất khỏi tất cả thiết bị, kể cả thiết bị này?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Đăng xuất tất cả',
-          style: 'destructive',
-          onPress: () => revokeAllSessions(),
-        },
-      ]
-    );
-  };
 
   const getDeviceIcon = (deviceType?: string) => {
     switch (deviceType?.toUpperCase()) {
@@ -94,8 +58,6 @@ export default function SessionsScreen() {
     return map[method.toLowerCase()] || method.toLowerCase();
   };
 
-  const otherSessions = sessions.filter(s => !s.isCurrent);
-
   return (
     <SafeAreaView className="flex-1 bg-brand-50">
       <StatusBar style="dark" />
@@ -105,13 +67,7 @@ export default function SessionsScreen() {
           <Feather name="arrow-left" size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-brand-900">Thiết bị đã đăng nhập</Text>
-        {otherSessions.length > 0 ? (
-          <TouchableOpacity onPress={handleRevokeAll}>
-            <Text className="text-sm text-red-600 font-medium">Đăng xuất tất cả</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 70 }} />
-        )}
+        <View style={{ width: 70 }} />
       </View>
 
       {isLoading ? (
@@ -123,6 +79,9 @@ export default function SessionsScreen() {
           <View className="px-4 pt-4 pb-6">
             <Text className="text-sm text-brand-500 mb-4 px-2">
               Bạn đang đăng nhập trên {sessions.length} thiết bị
+            </Text>
+            <Text className="text-xs text-brand-400 mb-4 px-2 leading-5">
+              Riff tự thay phiên cũ khi bạn đăng nhập trên thiết bị cùng loại. Trang này chỉ dùng để xem thiết bị đang hoạt động.
             </Text>
 
             {sessions.map((session) => {
@@ -193,17 +152,6 @@ export default function SessionsScreen() {
                         </Text>
                       )}
                     </View>
-
-                    {/* Revoke button */}
-                    {!isCurrent && (
-                      <TouchableOpacity
-                        onPress={() => handleRevokeSession(session.id)}
-                        className="w-8 h-8 rounded-full justify-center items-center ml-2"
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Feather name="x" size={18} color="#9ca3af" />
-                      </TouchableOpacity>
-                    )}
                   </View>
                 </View>
               );

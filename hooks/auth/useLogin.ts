@@ -16,6 +16,9 @@ interface LoginResult {
   tempToken?: string;
 }
 
+const LOGIN_CREDENTIAL_ERROR_MESSAGE = 'Tài khoản hoặc mật khẩu không chính xác';
+const LOGIN_CREDENTIAL_ERROR_CODES = new Set([1002, 1100, 1200, 2001, 5001, 5002]);
+
 export function useLogin() {
   const router = useRouter();
   const { setTokens } = useAuth();
@@ -61,11 +64,14 @@ export function useLogin() {
       }
 
       // Lỗi từ server
-      const msg = getErrorMessage(response.code, response.message);
+      const msg = getLoginCredentialErrorMessage(response.code, response.message);
       setErrors({ general: msg });
     } catch (error: any) {
       setErrors({
-        general: getErrorMessage(error?.code, error?.message || 'Đã xảy ra lỗi khi đăng nhập'),
+        general: getLoginCredentialErrorMessage(
+          error?.details?.code ?? error?.code,
+          (error?.details?.message ?? error?.message) || 'Đã xảy ra lỗi khi đăng nhập'
+        ),
       });
     } finally {
       setIsLoading(false);
@@ -112,6 +118,18 @@ export function useLogin() {
   };
 
   return { login, verify2FA, request2FAOtp, isLoading, errors };
+}
+
+function getLoginCredentialErrorMessage(code?: number, fallback?: string): string {
+  if (code && LOGIN_CREDENTIAL_ERROR_CODES.has(code)) {
+    return LOGIN_CREDENTIAL_ERROR_MESSAGE;
+  }
+
+  if (fallback && /phone|email|identifier|mật khẩu|password|không chính xác|format|định dạng/i.test(fallback)) {
+    return LOGIN_CREDENTIAL_ERROR_MESSAGE;
+  }
+
+  return getErrorMessage(code, fallback);
 }
 
 function getErrorMessage(code?: number, fallback?: string): string {

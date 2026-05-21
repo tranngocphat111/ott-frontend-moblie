@@ -11,21 +11,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const InfoRow = ({
   label,
   value,
-  verified,
 }: {
   label: string;
   value?: string;
-  verified?: boolean;
 }) => (
   <View className="flex-row items-center justify-between py-3 border-b border-brand-100">
     <Text className="text-sm font-medium text-brand-500 w-36">{label}</Text>
     <View className="flex-1 flex-row items-center justify-end gap-2">
       <Text className="text-sm text-brand-900 text-right flex-shrink">{value || 'Chưa cập nhật'}</Text>
-      {verified && (
-        <View className="bg-green-100 px-2 py-0.5 rounded ml-2">
-          <Text className="text-green-700 text-xs font-medium">Đã xác thực</Text>
-        </View>
-      )}
     </View>
   </View>
 );
@@ -48,8 +41,6 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const hasPhone = !!user?.phone;
-  const hasEmail = !!user?.email;
   const hasPassword = user?.hasPassword;
   const isGoogleUser = !!user?.googleId;
 
@@ -60,23 +51,13 @@ export default function ProfileScreen() {
       onPress: () => router.push(hasPassword ? '/profile/change-password' : '/profile/set-password'),
     },
     {
-      icon: 'phone',
-      title: hasPhone ? 'Đổi số điện thoại' : 'Liên kết số điện thoại',
-      onPress: () => router.push(hasPhone ? '/profile/change-phone' : '/profile/link-phone'),
-    },
-    {
-      icon: 'mail',
-      title: hasEmail ? 'Đổi email' : 'Liên kết email',
-      onPress: () => router.push(hasEmail ? '/profile/change-email' : '/profile/link-email'),
-    },
-    {
       icon: 'shield',
       title: user?.is2FAEnabled ? 'Tắt xác thực 2 bước' : 'Bật xác thực 2 bước',
       onPress: () => router.push('/profile/two-factor'),
     },
     {
       icon: 'smartphone',
-      title: 'Quản lý phiên đăng nhập',
+      title: 'Thiết bị đã đăng nhập',
       onPress: () => router.push('/profile/sessions'),
     },
     {
@@ -182,8 +163,8 @@ export default function ProfileScreen() {
           </View>
           <View className="px-4 pb-2">
             <InfoRow label="Họ và tên" value={user?.fullName} />
-            <InfoRow label="Số điện thoại" value={user?.phone} verified={user?.isPhoneVerified} />
-            <InfoRow label="Email" value={user?.email} verified={user?.isEmailVerified} />
+            <InfoRow label="Số điện thoại" value={user?.phone} />
+            <InfoRow label="Email" value={user?.email} />
             <InfoRow label="Giới thiệu" value={user?.bio} />
             <InfoRow label="Công việc" value={user?.work} />
             <InfoRow label="Địa điểm" value={user?.location} />

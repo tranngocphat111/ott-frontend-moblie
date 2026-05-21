@@ -12,7 +12,10 @@
         "EXPO_PUBLIC_LIVEKIT_URL": "wss://chat-service-wplw6oap.livekit.cloud",
         "EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT": "true",
         "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "379121421305-4t49t44oqt1qj07ug35n298983ga93ua.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "379121421305-u90k6dmp7mt0cba2e247plj1jvrl6ffu.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_REDIRECT_URI": "http://localhost:5173/auth/google/callback",
+        "EXPO_PUBLIC_GOOGLE_REDIRECT_URI_FALLBACK": "https://riff-iuh.vercel.app/auth/google/callback",
+        "EXPO_PUBLIC_APP_SCHEME": "riff",
         "EXPO_PUBLIC_APP_NAME": "Riff",
         "EXPO_PUBLIC_APP_VERSION": "1.0.0"
       },
@@ -23,6 +26,19 @@
     "production": {
       "channel": "production",
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://13.215.227.27/riff/api",
+        "EXPO_PUBLIC_TIMEOUT": "30000",
+        "EXPO_PUBLIC_LIVEKIT_URL": "wss://chat-service-wplw6oap.livekit.cloud",
+        "EXPO_PUBLIC_ENABLE_NATIVE_LIVEKIT": "true",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "379121421305-4t49t44oqt1qj07ug35n298983ga93ua.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "379121421305-u90k6dmp7mt0cba2e247plj1jvrl6ffu.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_REDIRECT_URI": "https://riff-iuh.vercel.app/auth/google/callback",
+        "EXPO_PUBLIC_GOOGLE_REDIRECT_URI_FALLBACK": "http://localhost:5173/auth/google/callback",
+        "EXPO_PUBLIC_APP_SCHEME": "riff",
+        "EXPO_PUBLIC_APP_NAME": "Riff",
+        "EXPO_PUBLIC_APP_VERSION": "1.0.0"
+      },
       "android": {
         "buildType": "app-bundle"
       }

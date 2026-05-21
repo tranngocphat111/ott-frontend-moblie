@@ -1,4 +1,6 @@
 import { Stack } from 'expo-router';
+import { router } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
@@ -110,6 +112,26 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
       clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const openNotifications = () => {
+      router.push('/(main)/(tabs)/contacts' as any);
+    };
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(() => {
+      openNotifications();
+    });
+
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) openNotifications();
+      })
+      .catch(() => undefined);
+
+    return () => {
+      subscription.remove();
     };
   }, []);
 

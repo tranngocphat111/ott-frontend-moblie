@@ -1,17 +1,10 @@
 import { GOOGLE_CONFIG } from '@/configuration/api';
 import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
-import * as AuthSession from 'expo-auth-session';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-
-WebBrowser.maybeCompleteAuthSession();
-
-const discovery = {
-  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-};
+import { Platform } from 'react-native';
 
 export const useGoogleLogin = () => {
   const router = useRouter();
@@ -19,49 +12,24 @@ export const useGoogleLogin = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>();
 
-  // Build redirect URI - let Expo handle it automatically
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'riff',
-    path: 'auth/google',
-  });
-
-  console.log('🔗 Google OAuth redirectUri:', redirectUri);
-  console.log('🔑 Google OAuth clientId:', GOOGLE_CONFIG.CLIENT_ID ? 'configured' : 'MISSING');
-
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CONFIG.CLIENT_ID,
-      scopes: ['profile', 'email', 'openid'],
-      responseType: AuthSession.ResponseType.Token, // Implicit flow for mobile
-      redirectUri,
-    },
-    discovery
-  );
-
   useEffect(() => {
-    console.log('📡 Google Auth Response:', JSON.stringify(response, null, 2));
-    if (response?.type === 'success') {
-      const accessToken = response.params?.access_token;
-      console.log('✅ Google accessToken received:', accessToken ? 'yes' : 'no');
-      if (accessToken) {
-        handleGoogleAuth(accessToken);
-      } else {
-        setError('Không lấy được token từ Google');
-      }
-    } else if (response?.type === 'error') {
-      console.log('❌ Google Auth Error:', JSON.stringify(response.error));
-      setError(response.error?.message || 'Đăng nhập Google thất bại');
-    } else if (response?.type === 'dismiss') {
-      console.log('🚫 Google Auth dismissed by user');
-    }
-  }, [response]);
+    GoogleSignin.configure({
+      webClientId: GOOGLE_CONFIG.CLIENT_ID,
+      iosClientId: GOOGLE_CONFIG.IOS_CLIENT_ID || undefined,
+      scopes: ['openid', 'profile', 'email'],
+      offlineAccess: false,
+    });
 
-  const handleGoogleAuth = async (accessToken: string) => {
+    console.log('🔑 Google Web clientId:', GOOGLE_CONFIG.CLIENT_ID ? 'configured' : 'MISSING');
+    console.log('🔑 Google Android clientId:', GOOGLE_CONFIG.ANDROID_CLIENT_ID ? 'configured' : 'MISSING');
+  }, []);
+
+  const handleGoogleAuth = async (tokens: { accessToken?: string; idToken?: string }) => {
     setIsLoading(true);
     setError(undefined);
     try {
       console.log('📤 Sending Google access token to backend...');
-      const res = await authApi.googleAuthWithToken({ accessToken });
+      const res = await authApi.googleAuthWithToken(tokens);
 
       console.log('📥 Backend response code:', res.code);
 
@@ -94,13 +62,63 @@ export const useGoogleLogin = () => {
 
   const loginWithGoogle = async () => {
     setError(undefined);
+    setIsLoading(true);
+
     try {
-      console.log('🚀 Opening Google login prompt...');
-      console.log('🔗 Using redirectUri:', redirectUri);
-      await promptAsync();
+      if (!GOOGLE_CONFIG.CLIENT_ID) {
+        setError('Thiếu Google Web Client ID');
+        return;
+      }
+
+      if (Platform.OS === 'android' && !GOOGLE_CONFIG.ANDROID_CLIENT_ID) {
+        setError('Thiếu Google Android Client ID cho bản build Android');
+        return;
+      }
+
+      console.log('🚀 Opening native Google sign-in...');
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      }
+
+      const signInResult = await GoogleSignin.signIn();
+      if (signInResult.type === 'cancelled') {
+        console.log('🚫 Google native sign-in cancelled by user');
+        return;
+      }
+
+      const tokens = await GoogleSignin.getTokens();
+      const accessToken = tokens.accessToken;
+      const idToken = tokens.idToken || signInResult.data.idToken || undefined;
+
+      console.log('✅ Google native accessToken received:', accessToken ? 'yes' : 'no');
+      console.log('✅ Google native idToken received:', idToken ? 'yes' : 'no');
+
+      if (!accessToken && !idToken) {
+        setError('Không lấy được token từ Google');
+        return;
+      }
+
+      await handleGoogleAuth({ accessToken, idToken });
     } catch (err: any) {
       console.error('❌ Cannot open Google login:', err);
-      setError('Không thể mở đăng nhập Google');
+
+      if (err?.code === statusCodes.SIGN_IN_CANCELLED) {
+        return;
+      }
+
+      if (err?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        setError('Google Play Services chưa sẵn sàng trên thiết bị này');
+        return;
+      }
+
+      if (err?.code === 'DEVELOPER_ERROR' || err?.message?.includes('DEVELOPER_ERROR')) {
+        setError('Google Android Client ID chưa khớp package name hoặc SHA-1 của bản build');
+        return;
+      }
+
+      setError(err?.message || 'Không thể mở đăng nhập Google');
+    } finally {
+      setIsLoading(false);
     }
   };
 

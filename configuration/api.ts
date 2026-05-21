@@ -1,5 +1,11 @@
 import * as AuthSession from 'expo-auth-session';
 
+const APP_SCHEME = process.env.EXPO_PUBLIC_APP_SCHEME || 'riff';
+const GOOGLE_MOBILE_REDIRECT_URI = AuthSession.makeRedirectUri({
+  scheme: APP_SCHEME,
+  path: 'auth/google',
+});
+
 export const API_CONFIG = {
   BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://13.215.227.27/riff/api',
   TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
@@ -46,10 +52,9 @@ export const GOOGLE_CONFIG = {
   IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
   ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '',
   SCOPE: 'profile email openid',
-  REDIRECT_URI: AuthSession.makeRedirectUri({
-    scheme: process.env.EXPO_PUBLIC_APP_SCHEME || 'riff',
-    path: 'auth/google',
-  }),
+  REDIRECT_URI: process.env.EXPO_PUBLIC_GOOGLE_MOBILE_REDIRECT_URI || GOOGLE_MOBILE_REDIRECT_URI,
+  WEB_REDIRECT_URI: process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI || '',
+  REDIRECT_URI_FALLBACK: process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI_FALLBACK || '',
 };
 
 export const APP_CONFIG = {

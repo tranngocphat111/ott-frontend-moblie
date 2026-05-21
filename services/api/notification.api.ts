@@ -28,6 +28,36 @@ notificationApiClient.interceptors.request.use(async (config) => {
 });
 
 export const NotificationApi = {
+  registerPushToken: async (data: {
+    userId: string;
+    token: string;
+    platform?: string;
+    deviceId?: string | null;
+  }): Promise<boolean> => {
+    try {
+      await notificationApiClient.post('/notifications/push-tokens', data);
+      return true;
+    } catch (error) {
+      console.error('Error registering push token:', error);
+      return false;
+    }
+  },
+
+  unregisterPushToken: async (data: {
+    userId: string;
+    token: string;
+    platform?: string;
+    deviceId?: string | null;
+  }): Promise<boolean> => {
+    try {
+      await notificationApiClient.post('/notifications/push-tokens/unregister', data);
+      return true;
+    } catch (error) {
+      console.error('Error unregistering push token:', error);
+      return false;
+    }
+  },
+
   getNotifications: async (userId: string): Promise<InAppNotification[]> => {
     try {
       const response = await notificationApiClient.get(`/notifications/inapp/${userId}`);

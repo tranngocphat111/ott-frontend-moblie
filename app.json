@@ -44,6 +44,7 @@
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
@@ -64,6 +65,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       "@livekit/react-native-expo-plugin",
       "@config-plugins/react-native-webrtc",
       "expo-web-browser",

@@ -5,6 +5,11 @@ import { authApi, profileApi, userApi } from '../services/api';
 import { setLogoutHandler } from '../utils/logoutHandler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { UserProfileResponse } from '../types';
+import { AppState } from 'react-native';
+import {
+  registerNativePushNotifications,
+  unregisterNativePushNotifications,
+} from '@/services/notifications/nativeNotifications';
 
 interface AuthContextType {
   user: UserProfileResponse | null;
@@ -55,8 +60,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   };
 
+  const forceLocalLogout = async () => {
+    const logoutUserId = user?.id || null;
+    try {
+      const { chatSocket } = await import('../services/socket/chatSocket');
+      chatSocket.disconnect();
+    } catch (error) {
+      console.error('AuthContext: socket cleanup on forced logout failed:', error);
+    }
+
+    await unregisterNativePushNotifications(logoutUserId);
+    await clearLocalSession();
+    router.replace('/(auth)/login');
+  };
+
+  const refreshStoredSession = async () => {
+    const refreshToken = await SecureStore.getItemAsync('refreshToken');
+    if (!refreshToken) {
+      throw new Error('No refresh token');
+    }
+
+    const response = await authApi.refresh({
+      token: refreshToken,
+      deviceId: (await AsyncStorage.getItem('deviceId')) ?? undefined,
+    });
+
+    const nextToken = response.result?.token;
+    const nextRefreshToken = response.result?.refreshToken;
+
+    if (!nextToken || !nextRefreshToken) {
+      throw new Error('Invalid refresh response');
+    }
+
+    await SecureStore.setItemAsync('accessToken', nextToken);
+    await SecureStore.setItemAsync('refreshToken', nextRefreshToken);
+
+    return nextToken;
+  };
+
+  const ensureCurrentTokenActive = async () => {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) {
+      await refreshStoredSession();
+      return;
+    }
+
+    const response = await authApi.introspect({ token });
+    if (response.result?.valid) return;
+
+    await refreshStoredSession();
+  };
+
   const loadCurrentUser = async () => {
     console.log('AuthContext: Fetching user profile...');
+    await ensureCurrentTokenActive();
     const response = await profileApi.getCurrentProfile();
     if (response.result) {
       console.log('AuthContext: User profile fetched:', response.result);
@@ -85,12 +142,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const token = await SecureStore.getItemAsync('accessToken');
       if (token) {
-        await authApi.logout({ token });
+        await authApi.logout({
+          token,
+          deviceId: (await AsyncStorage.getItem('deviceId')) ?? undefined,
+        });
         console.log('AuthContext: Logout API call successful');
       }
     } catch (error) {
       console.error('AuthContext: Logout API error:', error);
     } finally {
+      await unregisterNativePushNotifications(logoutUserId);
       await socketCleanupPromise;
       await clearLocalSession();
 
@@ -110,12 +171,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!token && !refreshToken) return;
 
       console.log('AuthContext: Found token in SecureStore, fetching user...');
-      void loadCurrentUser().catch(async (error) => {
-        console.error('AuthContext: checkAuth error:', error);
-        // Don't clear session here - the interceptor handles 401 with refresh
-      });
+      await loadCurrentUser();
     } catch (error) {
       console.error('AuthContext: checkAuth error:', error);
+      await forceLocalLogout();
     } finally {
       setIsLoading(false);
     }
@@ -170,14 +229,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const myDeviceId = await AsyncStorage.getItem('deviceId');
 
       if (action === 'ALL') {
-        await logout();
+        await forceLocalLogout();
       } else if (action === 'SPECIFIC' && payload.deviceId && myDeviceId === payload.deviceId) {
-        await logout();
+        await forceLocalLogout();
       } else if (action === 'OTHERS' && myDeviceId && payload.revokedDeviceIds?.includes(myDeviceId)) {
-        await logout();
+        await forceLocalLogout();
       } else if (action === 'SPECIFIC' || action === 'OTHERS') {
         fetchUser().catch(() => {
-          logout();
+          forceLocalLogout();
         });
       }
     };
@@ -198,7 +257,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isAuthenticated, user?.id]);
 
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    void registerNativePushNotifications(user.id).catch((error) => {
+      console.warn('AuthContext: register push notification failed:', error);
+    });
+  }, [isAuthenticated, user?.id]);
+
   // Removed aggressive 15s polling - the interceptor handles token refresh on 401
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let lastTokenCheckAt = 0;
+    const checkCurrentSession = () => {
+      const now = Date.now();
+      if (now - lastTokenCheckAt < 15000) return;
+      lastTokenCheckAt = now;
+
+      ensureCurrentTokenActive().catch(() => {
+        forceLocalLogout();
+      });
+    };
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkCurrentSession();
+      }
+    });
+
+    const timer = setInterval(checkCurrentSession, 30000);
+
+    return () => {
+      subscription.remove();
+      clearInterval(timer);
+    };
+  }, [isAuthenticated]);
 
   const login = async (identifier: string, password: string, otpCode?: string) => {
     const response = await authApi.localLogin({ identifier, password, otpCode });
