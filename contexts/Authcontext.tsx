@@ -100,28 +100,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const fetchUser = async () => {
-    try {
-      return await loadCurrentUser();
-    } catch (error) {
-      console.error('AuthContext: Failed to fetch user:', error);
-      await logout();
-      throw error;
-    }
+    return await loadCurrentUser();
   };
 
   const checkAuth = async () => {
     try {
       const token = await SecureStore.getItemAsync('accessToken');
-      if (!token) return;
+      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      if (!token && !refreshToken) return;
 
       console.log('AuthContext: Found token in SecureStore, fetching user...');
       void loadCurrentUser().catch(async (error) => {
         console.error('AuthContext: checkAuth error:', error);
-        await clearLocalSession();
+        // Don't clear session here - the interceptor handles 401 with refresh
       });
     } catch (error) {
       console.error('AuthContext: checkAuth error:', error);
-      await clearLocalSession();
     } finally {
       setIsLoading(false);
     }
@@ -204,19 +198,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isAuthenticated, user?.id]);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const poll = setInterval(async () => {
-      try {
-        await profileApi.getCurrentProfile();
-      } catch {
-        // Interceptor handles logout
-      }
-    }, 15000);
-
-    return () => clearInterval(poll);
-  }, [isAuthenticated]);
+  // Removed aggressive 15s polling - the interceptor handles token refresh on 401
 
   const login = async (identifier: string, password: string, otpCode?: string) => {
     const response = await authApi.localLogin({ identifier, password, otpCode });

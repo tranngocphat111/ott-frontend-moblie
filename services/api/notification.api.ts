@@ -46,5 +46,16 @@ export const NotificationApi = {
       console.error('Error marking notification as read:', error);
       return false;
     }
+  },
+
+  deleteNotification: async (notificationId: string): Promise<boolean> => {
+    try {
+      await notificationApiClient.delete(`/notifications/inapp/${notificationId}`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      return false;
+    }
   }
 };
+

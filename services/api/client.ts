@@ -184,6 +184,69 @@ chatApiClient.interceptors.response.use(
     return response.data;
   },
   async (error: AxiosError<ApiResponse | Record<string, unknown>>) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // Handle 401 with refresh token logic (same as apiClient)
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+
+      if (!refreshToken) {
+        await triggerLogout();
+        return Promise.reject({
+          code: 401,
+          message: 'Session expired',
+        } as ApiError);
+      }
+
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          addRefreshSubscriber((newToken) => {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            resolve(chatApiClient.request(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const deviceId = await AsyncStorage.getItem('deviceId') ?? undefined;
+
+        const response = await axios.post<ApiResponse<{ token: string; refreshToken: string }>>(
+          `${API_CONFIG.BASE_URL}/auth/refresh`,
+          { token: refreshToken, deviceId },
+          { headers: API_CONFIG.HEADERS }
+        );
+
+        const newToken = response.data.result?.token;
+        const newRefreshToken = response.data.result?.refreshToken;
+
+        if (!newToken || !newRefreshToken) {
+          throw new Error('Invalid refresh response');
+        }
+
+        await SecureStore.setItemAsync('accessToken', newToken);
+        await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+
+        onRefreshed(newToken);
+
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return chatApiClient.request(originalRequest);
+      } catch {
+        await SecureStore.deleteItemAsync('accessToken');
+        await SecureStore.deleteItemAsync('refreshToken');
+        refreshSubscribers = [];
+        await triggerLogout();
+        return Promise.reject({
+          code: 401,
+          message: 'Session expired',
+        } as ApiError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
     const errorPayload = String(error.response?.data?.message || error.response?.data?.message || '');
     const isPinLimitError =
       error.config?.url?.includes('/pin') &&

@@ -91,6 +91,16 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
     }
   }, []);
 
+  const deleteNotification = useCallback(async (id: string) => {
+    const originalNotifications = [...notifications];
+    setNotifications((current) => current.filter((item) => item.id !== id));
+
+    const success = await NotificationApi.deleteNotification(id);
+    if (!success) {
+      setNotifications(originalNotifications);
+    }
+  }, [notifications]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     void loadNotifications(true);
@@ -134,10 +144,20 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
             {formatTime(item.createdAt)}
           </Text>
         </View>
-        {unread && <View className="ml-2 mt-1 h-2.5 w-2.5 rounded-full bg-[#9a6a43]" />}
+        <View className="ml-2 flex-row items-center gap-3">
+          {unread && <View className="h-2.5 w-2.5 rounded-full bg-[#9a6a43]" />}
+          <Pressable
+            onPress={() => void deleteNotification(item.id)}
+            hitSlop={8}
+            className="p-1 rounded-full active:bg-slate-100"
+          >
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+          </Pressable>
+        </View>
       </Pressable>
     );
   };
+
 
   return (
     <View
