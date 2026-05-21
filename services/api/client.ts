@@ -69,15 +69,40 @@ chatApiClient.interceptors.request.use(
 
 // ─── Refresh queue (tránh gọi refresh nhiều lần cùng lúc) ─
 let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
+let refreshSubscribers: {
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}[] = [];
 
 const onRefreshed = (token: string) => {
-  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers.forEach(({ resolve }) => resolve(token));
   refreshSubscribers = [];
 };
 
-const addRefreshSubscriber = (cb: (token: string) => void) => {
-  refreshSubscribers.push(cb);
+const onRefreshFailed = (error: unknown) => {
+  refreshSubscribers.forEach(({ reject }) => reject(error));
+  refreshSubscribers = [];
+};
+
+const addRefreshSubscriber = (
+  resolve: (token: string) => void,
+  reject: (error: unknown) => void
+) => {
+  refreshSubscribers.push({ resolve, reject });
+};
+
+const shouldClearSessionAfterRefreshFailure = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    return error.response?.status === 401 || error.response?.status === 403;
+  }
+
+  return false;
+};
+
+const clearStoredTokensAndLogout = async () => {
+  await SecureStore.deleteItemAsync('accessToken');
+  await SecureStore.deleteItemAsync('refreshToken');
+  await triggerLogout();
 };
 
 // ─── Response interceptor ────────────────────────────────
@@ -129,11 +154,11 @@ apiClient.interceptors.response.use(
 
       // Nếu đang refresh rồi → queue lại, chờ token mới
       if (isRefreshing) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           addRefreshSubscriber((newToken) => {
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             resolve(apiClient.request(originalRequest));
-          });
+          }, reject);
         });
       }
 
@@ -163,11 +188,11 @@ apiClient.interceptors.response.use(
 
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return apiClient.request(originalRequest);
-      } catch {
-        await SecureStore.deleteItemAsync('accessToken');
-        await SecureStore.deleteItemAsync('refreshToken');
-        refreshSubscribers = [];
-        await triggerLogout();
+      } catch (refreshError) {
+        onRefreshFailed(apiError);
+        if (shouldClearSessionAfterRefreshFailure(refreshError)) {
+          await clearStoredTokensAndLogout();
+        }
         return Promise.reject(apiError);
       } finally {
         isRefreshing = false;
@@ -199,11 +224,11 @@ chatApiClient.interceptors.response.use(
       }
 
       if (isRefreshing) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           addRefreshSubscriber((newToken) => {
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             resolve(chatApiClient.request(originalRequest));
-          });
+          }, reject);
         });
       }
 
@@ -233,11 +258,14 @@ chatApiClient.interceptors.response.use(
 
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return chatApiClient.request(originalRequest);
-      } catch {
-        await SecureStore.deleteItemAsync('accessToken');
-        await SecureStore.deleteItemAsync('refreshToken');
-        refreshSubscribers = [];
-        await triggerLogout();
+      } catch (refreshError) {
+        onRefreshFailed({
+          code: 401,
+          message: 'Session expired',
+        } as ApiError);
+        if (shouldClearSessionAfterRefreshFailure(refreshError)) {
+          await clearStoredTokensAndLogout();
+        }
         return Promise.reject({
           code: 401,
           message: 'Session expired',

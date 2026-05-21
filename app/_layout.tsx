@@ -1,12 +1,12 @@
 import { Stack } from 'expo-router';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { AppState, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -75,6 +75,7 @@ class ErrorBoundary extends React.Component<
 
 export default function RootLayout() {
   const [showBootOverlay, setShowBootOverlay] = useState(true);
+  const pathname = usePathname();
 
   useEffect(() => {
     void setSystemBackgroundAsync(THEME_COLORS.surface.DEFAULT, 'dark');
@@ -116,17 +117,17 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    const openNotifications = () => {
-      router.push('/(main)/(tabs)/contacts' as any);
+    const openChatHome = () => {
+      router.push('/(main)/(tabs)/home' as any);
     };
 
     const subscription = Notifications.addNotificationResponseReceivedListener(() => {
-      openNotifications();
+      openChatHome();
     });
 
     void Notifications.getLastNotificationResponseAsync()
       .then((response) => {
-        if (response) openNotifications();
+        if (response) openChatHome();
       })
       .catch(() => undefined);
 
@@ -134,6 +135,18 @@ export default function RootLayout() {
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && pathname.includes('contacts')) {
+        router.replace('/(main)/(tabs)/home' as any);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [pathname]);
 
   return (
     <ErrorBoundary>

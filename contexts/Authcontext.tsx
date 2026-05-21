@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useRef, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { authApi, profileApi, userApi } from '../services/api';
@@ -45,10 +45,61 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const FORCED_LOGOUT_NOTICE_KEY = 'riff_forced_logout_notice';
+
+const FORCED_LOGOUT_NOTICE_MESSAGE =
+  'Tài khoản của bạn vừa được đăng nhập ở thiết bị khác. Phiên hiện tại đã được đăng xuất để bảo vệ tài khoản.';
+
+const CACHED_USER_PROFILE_KEY = 'riff_cached_user_profile';
+
+const getErrorCode = (error: unknown): number | undefined => {
+  const candidate = error as {
+    code?: unknown;
+    status?: unknown;
+    response?: { status?: unknown };
+    details?: { code?: unknown; status?: unknown };
+  };
+
+  const value =
+    candidate?.response?.status ??
+    candidate?.status ??
+    candidate?.code ??
+    candidate?.details?.status ??
+    candidate?.details?.code;
+
+  return typeof value === 'number' ? value : undefined;
+};
+
+const isAuthSessionError = (error: unknown) => {
+  const code = getErrorCode(error);
+  if (code === 401 || code === 403 || code === 1006 || code === 2005 || code === 2006) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : '';
+  return /no refresh token|invalid refresh response/i.test(message);
+};
+
+const readCachedUserProfile = async () => {
+  const raw = await AsyncStorage.getItem(CACHED_USER_PROFILE_KEY);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as UserProfileResponse;
+  } catch {
+    await AsyncStorage.removeItem(CACHED_USER_PROFILE_KEY);
+    return null;
+  }
+};
+
+const cacheUserProfile = async (profile: UserProfileResponse) => {
+  await AsyncStorage.setItem(CACHED_USER_PROFILE_KEY, JSON.stringify(profile));
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfileResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const logoutInProgressRef = useRef(false);
 
   const isAuthenticated = !!user;
   const chatUserId = user?.id || null;
@@ -57,21 +108,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await SecureStore.deleteItemAsync('accessToken');
     await SecureStore.deleteItemAsync('refreshToken');
     await SecureStore.deleteItemAsync('mockChatUserId');
+    await AsyncStorage.removeItem(CACHED_USER_PROFILE_KEY);
     setUser(null);
   };
 
-  const forceLocalLogout = async () => {
-    const logoutUserId = user?.id || null;
-    try {
-      const { chatSocket } = await import('../services/socket/chatSocket');
-      chatSocket.disconnect();
-    } catch (error) {
-      console.error('AuthContext: socket cleanup on forced logout failed:', error);
-    }
+  const forceLocalLogout = async (showNotice = true) => {
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
 
-    await unregisterNativePushNotifications(logoutUserId);
-    await clearLocalSession();
-    router.replace('/(auth)/login');
+    try {
+      if (showNotice) {
+        await AsyncStorage.setItem(FORCED_LOGOUT_NOTICE_KEY, FORCED_LOGOUT_NOTICE_MESSAGE);
+      }
+
+      try {
+        const { chatSocket } = await import('../services/socket/chatSocket');
+        chatSocket.disconnect();
+      } catch (error) {
+        console.error('AuthContext: socket cleanup on forced logout failed:', error);
+      }
+
+      await clearLocalSession();
+      router.replace('/(auth)/login');
+    } finally {
+      logoutInProgressRef.current = false;
+    }
   };
 
   const refreshStoredSession = async () => {
@@ -118,6 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (response.result) {
       console.log('AuthContext: User profile fetched:', response.result);
       setUser(response.result);
+      await cacheUserProfile(response.result);
       return response.result;
     }
 
@@ -127,6 +189,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Hợp nhất logic logout: Xóa token và gọi API logout
   const logout = async () => {
     console.log('AuthContext: logout called');
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
+
     const logoutUserId = user?.id || null;
     const socketCleanupPromise = import('../services/socket/chatSocket')
       .then(async ({ chatSocket }) => {
@@ -140,6 +205,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
     try {
+      await unregisterNativePushNotifications(logoutUserId);
+
       const token = await SecureStore.getItemAsync('accessToken');
       if (token) {
         await authApi.logout({
@@ -151,12 +218,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('AuthContext: Logout API error:', error);
     } finally {
-      await unregisterNativePushNotifications(logoutUserId);
       await socketCleanupPromise;
       await clearLocalSession();
 
       router.replace('/(auth)/login');
       console.log('AuthContext: Logout completed, tokens cleared');
+      logoutInProgressRef.current = false;
     }
   };
 
@@ -170,11 +237,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const refreshToken = await SecureStore.getItemAsync('refreshToken');
       if (!token && !refreshToken) return;
 
+      const cachedUser = await readCachedUserProfile();
+      if (cachedUser) {
+        setUser(cachedUser);
+      }
+
       console.log('AuthContext: Found token in SecureStore, fetching user...');
       await loadCurrentUser();
     } catch (error) {
       console.error('AuthContext: checkAuth error:', error);
-      await forceLocalLogout();
+      if (isAuthSessionError(error)) {
+        await forceLocalLogout();
+        return;
+      }
+
+      const cachedUser = await readCachedUserProfile();
+      if (cachedUser) {
+        setUser(cachedUser);
+        console.warn('AuthContext: Keeping cached mobile session after temporary auth bootstrap error');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -185,7 +266,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    setLogoutHandler(logout);
+    setLogoutHandler(() => forceLocalLogout(true));
     console.log('AuthContext: logout handler registered');
   }, []);
 
@@ -235,8 +316,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (action === 'OTHERS' && myDeviceId && payload.revokedDeviceIds?.includes(myDeviceId)) {
         await forceLocalLogout();
       } else if (action === 'SPECIFIC' || action === 'OTHERS') {
-        fetchUser().catch(() => {
-          forceLocalLogout();
+        fetchUser().catch((error) => {
+          if (isAuthSessionError(error)) {
+            forceLocalLogout();
+          }
         });
       }
     };
@@ -275,8 +358,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (now - lastTokenCheckAt < 15000) return;
       lastTokenCheckAt = now;
 
-      ensureCurrentTokenActive().catch(() => {
-        forceLocalLogout();
+      ensureCurrentTokenActive().catch((error) => {
+        if (isAuthSessionError(error)) {
+          forceLocalLogout();
+          return;
+        }
+
+        console.warn('AuthContext: Session check failed temporarily, keeping stored mobile session:', error);
       });
     };
 
@@ -346,7 +434,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateProfile = (updates: Partial<UserProfileResponse>) => {
-    if (user) setUser({ ...user, ...updates });
+    if (user) {
+      const nextUser = { ...user, ...updates };
+      setUser(nextUser);
+      void cacheUserProfile(nextUser).catch((error) => {
+        console.warn('AuthContext: cache updated profile failed:', error);
+      });
+    }
   };
 
   const refreshUser = async () => {

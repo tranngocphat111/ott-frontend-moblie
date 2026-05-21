@@ -11,6 +11,17 @@ export interface InAppNotification {
   referenceId: string;
   isRead: boolean;
   createdAt: string;
+  senderName?: string;
+  senderFullName?: string;
+  senderAvatar?: string;
+  senderAvatarUrl?: string;
+  avatar?: string;
+  avatarUrl?: string;
+  actorName?: string;
+  actorAvatar?: string;
+  actorAvatarUrl?: string;
+  metadata?: Record<string, unknown>;
+  data?: Record<string, unknown>;
 }
 
 export const notificationApiClient = axios.create({
@@ -74,6 +85,16 @@ export const NotificationApi = {
       return true;
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      return false;
+    }
+  },
+
+  markAllAsRead: async (userId: string): Promise<boolean> => {
+    try {
+      await notificationApiClient.put(`/notifications/inapp/${userId}/read-all`);
+      return true;
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
       return false;
     }
   },

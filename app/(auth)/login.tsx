@@ -3,16 +3,20 @@ import LoginOptionButton from "@/components/auth/LoginOptionButton";
 import TextInputField from "@/components/auth/TextInputField";
 import TwoFactorStep from "@/components/auth/TwoFactorStep";
 import PrimaryButton from "@/components/common/PrimaryButton";
+import { FORCED_LOGOUT_NOTICE_KEY } from "@/contexts/Authcontext";
 import { useGoogleLogin } from "@/hooks/auth/useGoogleLogin";
 import { useLogin } from "@/hooks/auth/useLogin";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -37,6 +41,27 @@ export default function LoginScreen() {
   const [tempToken, setTempToken] = useState("");
   const [otp, setOtp] = useState("");
   const [countdown, setCountdown] = useState(60);
+  const [forcedLogoutMessage, setForcedLogoutMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadForcedLogoutNotice = async () => {
+      const message = await AsyncStorage.getItem(FORCED_LOGOUT_NOTICE_KEY);
+      if (!message) return;
+
+      await AsyncStorage.removeItem(FORCED_LOGOUT_NOTICE_KEY);
+      if (mounted) {
+        setForcedLogoutMessage(message);
+      }
+    };
+
+    void loadForcedLogoutNotice();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const startCountdown = () => {
     setCountdown(60);
@@ -96,6 +121,48 @@ export default function LoginScreen() {
   return (
     <SafeAreaView className="flex-1 bg-brand-50" edges={["top", "left", "right"]}>
       <StatusBar style="dark" />
+
+      <Modal
+        visible={Boolean(forcedLogoutMessage)}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setForcedLogoutMessage(null)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: "rgba(34, 24, 16, 0.48)" }}
+          onPress={() => setForcedLogoutMessage(null)}
+        >
+          <Pressable
+            className="w-full rounded-[22px] border border-brand-200 bg-white px-5 pb-5 pt-6 shadow-soft"
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View className="items-center">
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-brand-100">
+                <Feather name="shield" size={25} color="#8a5c33" />
+              </View>
+              <Text className="mt-4 text-center text-[20px] font-bold text-brand-900">
+                Phiên đăng nhập đã kết thúc
+              </Text>
+              <Text className="mt-2 text-center text-[14px] font-medium leading-5 text-brand-600">
+                {forcedLogoutMessage}
+              </Text>
+              <Text className="mt-2 text-center text-[13px] leading-5 text-brand-500">
+                Nếu đây không phải bạn, hãy đổi mật khẩu ngay sau khi đăng nhập lại.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              className="mt-5 h-12 items-center justify-center rounded-2xl bg-brand-700"
+              activeOpacity={0.85}
+              onPress={() => setForcedLogoutMessage(null)}
+            >
+              <Text className="text-[15px] font-bold text-white">Tôi đã hiểu</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <TouchableOpacity onPress={() => router.back()} className="px-6 pt-4">
         <Feather name="x" size={28} color="#694d31" />
