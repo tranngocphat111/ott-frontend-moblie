@@ -56,7 +56,7 @@ export const NotificationApi = {
 
   unregisterPushToken: async (data: {
     userId: string;
-    token: string;
+    token?: string;
     platform?: string;
     deviceId?: string | null;
   }): Promise<boolean> => {

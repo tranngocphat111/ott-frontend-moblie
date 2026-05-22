@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   Image,
   Keyboard,
   Modal,
@@ -315,9 +316,28 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadConversationsRef.current();
+      void loadConversationsRef.current({ force: true });
     }, []),
   );
+
+  useEffect(() => {
+    lastConversationsLoadAtRef.current = 0;
+    if (!chatUserId) return;
+
+    void loadConversationsRef.current({ force: true });
+  }, [chatUserId]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && isFocused && chatUserId) {
+        void loadConversationsRef.current({ force: true });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [chatUserId, isFocused]);
 
   useEffect(() => {
     if (!chatUserId) return;
@@ -348,6 +368,7 @@ export default function HomeScreen() {
     chatSocket.on('tao_phong_moi', refreshInbox);
     chatSocket.on('cap_nhat_nhom', refreshInbox);
     chatSocket.on('cap_nhat_phan_loai', refreshInbox);
+    chatSocket.on('cap_nhat_thong_bao', refreshInbox);
     chatSocket.on('roi_nhom', refreshInbox);
     chatSocket.on('xoa_thanh_vien', refreshInbox);
     chatSocket.on('bi_xoa_khoi_nhom', refreshInbox);
@@ -363,6 +384,7 @@ export default function HomeScreen() {
       chatSocket.off('tao_phong_moi', refreshInbox);
       chatSocket.off('cap_nhat_nhom', refreshInbox);
       chatSocket.off('cap_nhat_phan_loai', refreshInbox);
+      chatSocket.off('cap_nhat_thong_bao', refreshInbox);
       chatSocket.off('roi_nhom', refreshInbox);
       chatSocket.off('xoa_thanh_vien', refreshInbox);
       chatSocket.off('bi_xoa_khoi_nhom', refreshInbox);
@@ -371,7 +393,7 @@ export default function HomeScreen() {
       chatSocket.off('giai_tan_nhom', refreshInbox);
       chatSocket.off('cap_nhat_quan_he', refreshInbox);
     };
-  }, [chatUserId]);
+  }, [chatUserId, isFocused]);
 
   useEffect(() => {
     const keyword = searchText.trim();

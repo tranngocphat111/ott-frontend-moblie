@@ -38,6 +38,7 @@ type ChatSocketEventMap = {
 	cap_nhat_role: (payload: any) => void;
 	cap_nhat_biet_danh: (payload: any) => void;
 	cap_nhat_phan_loai: (payload: any) => void;
+	cap_nhat_thong_bao: (payload: any) => void;
 	xoa_thanh_vien: (payload: any) => void;
 	bi_xoa_khoi_nhom: (payload: any) => void;
 	bi_chan_khoi_nhom: (payload: any) => void;

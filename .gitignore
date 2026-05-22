@@ -48,3 +48,11 @@ app-example
 
 .env
 
+# Google service account private keys for EAS/FCM/Play Store.
+# Keep google-services.json in the project, but never commit private keys.
+.secrets/
+service-account*.json
+*-service-account*.json
+fcm-*.json
+play-store-*.json
+

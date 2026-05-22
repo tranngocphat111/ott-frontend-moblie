@@ -45,10 +45,24 @@ export const chatApiClient: AxiosInstance = axios.create({
   headers: CHAT_API_CONFIG.HEADERS,
 });
 
+const AUTH_HEADER_SKIP_ROUTES = [
+  '/auth/login',
+  '/auth/google',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/introspect',
+  '/password/forgot',
+  '/password/forgot/otp/verify',
+  '/password/forgot/verify',
+];
+
+const shouldSkipAuthHeader = (url?: string) =>
+  AUTH_HEADER_SKIP_ROUTES.some((route) => String(url || '').includes(route));
+
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const token = await SecureStore.getItemAsync('accessToken');
-    if (token && config.headers) {
+    if (token && config.headers && !shouldSkipAuthHeader(config.url)) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -100,8 +114,6 @@ const shouldClearSessionAfterRefreshFailure = (error: unknown) => {
 };
 
 const clearStoredTokensAndLogout = async () => {
-  await SecureStore.deleteItemAsync('accessToken');
-  await SecureStore.deleteItemAsync('refreshToken');
   await triggerLogout();
 };
 
@@ -131,19 +143,7 @@ apiClient.interceptors.response.use(
       const refreshToken = await SecureStore.getItemAsync('refreshToken');
 
       // Skip refresh cho các route public
-      const publicRoutes = [
-        '/password/forgot',
-        '/password/forgot/otp/verify',
-        '/password/forgot/verify',
-        '/auth/login',
-        '/auth/register',
-      ];
-
-      const isPublicRoute = publicRoutes.some((route) =>
-        originalRequest.url?.includes(route)
-      );
-
-      if (isPublicRoute) {
+      if (shouldSkipAuthHeader(originalRequest.url)) {
         return Promise.reject(apiError);
       }
 

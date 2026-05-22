@@ -36,6 +36,7 @@
     },
     "android": {
       "package": "com.piinnhs.Riff",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.CAMERA",
@@ -65,7 +66,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#AE7F53",
+          "defaultChannel": "riff-notifications"
+        }
+      ],
       "@livekit/react-native-expo-plugin",
       "@config-plugins/react-native-webrtc",
       "expo-web-browser",

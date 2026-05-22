@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  DeviceEventEmitter,
   FlatList,
   Image,
   Pressable,
@@ -20,6 +21,8 @@ import { resolveMediaUrl } from '@/utils/chat';
 type Props = {
   includeTopInset?: boolean;
 };
+
+const NOTIFICATION_BADGE_CHANGED_EVENT = 'riff_notifications_changed';
 
 type SenderProfile = {
   name?: string;
@@ -83,6 +86,11 @@ const getNotificationKind = (type?: string) => {
   return 'Riff';
 };
 
+const isDisplayableNotification = (notification: InAppNotification) => {
+  const normalized = String(notification.type || '').toLowerCase();
+  return !normalized.includes('message') && !normalized.includes('chat');
+};
+
 const NotificationAvatar = ({
   name,
   avatar,
@@ -136,7 +144,7 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
     if (!silent) setLoading(true);
     try {
       const data = await NotificationApi.getNotifications(chatUserId);
-      const sorted = [...data].sort(
+      const sorted = data.filter(isDisplayableNotification).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
       setNotifications(sorted);
@@ -154,6 +162,7 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
 
   useEffect(() => {
     const handleNewNotification = (notification: InAppNotification) => {
+      if (!isDisplayableNotification(notification)) return;
       setNotifications((current) => [notification, ...current.filter((item) => item.id !== notification.id)]);
     };
 
@@ -235,12 +244,14 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
     setNotifications((current) =>
       current.map((item) => (item.id === id ? { ...item, isRead: true } : item)),
     );
+    DeviceEventEmitter.emit(NOTIFICATION_BADGE_CHANGED_EVENT);
 
     const success = await NotificationApi.markAsRead(id);
     if (!success) {
       setNotifications((current) =>
         current.map((item) => (item.id === id ? { ...item, isRead: false } : item)),
       );
+      DeviceEventEmitter.emit(NOTIFICATION_BADGE_CHANGED_EVENT);
     }
   }, []);
 
@@ -249,20 +260,24 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
 
     const originalNotifications = notifications;
     setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+    DeviceEventEmitter.emit(NOTIFICATION_BADGE_CHANGED_EVENT);
 
     const success = await NotificationApi.markAllAsRead(chatUserId);
     if (!success) {
       setNotifications(originalNotifications);
+      DeviceEventEmitter.emit(NOTIFICATION_BADGE_CHANGED_EVENT);
     }
   }, [chatUserId, notifications, unreadCount]);
 
   const deleteNotification = useCallback(async (id: string) => {
     const originalNotifications = [...notifications];
     setNotifications((current) => current.filter((item) => item.id !== id));
+    DeviceEventEmitter.emit(NOTIFICATION_BADGE_CHANGED_EVENT);
 
     const success = await NotificationApi.deleteNotification(id);
     if (!success) {
       setNotifications(originalNotifications);
+      DeviceEventEmitter.emit(NOTIFICATION_BADGE_CHANGED_EVENT);
     }
   }, [notifications]);
 
@@ -292,11 +307,18 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
           elevation: unread ? 3 : 1,
         }}
       >
-        <View>
+        <View className="relative h-14 w-14">
           <NotificationAvatar name={senderName} avatar={senderAvatar} unread={unread} />
           <View
-            className="absolute -bottom-1 -right-1 h-6 w-6 items-center justify-center rounded-full border-2 border-white"
-            style={{ backgroundColor: unread ? THEME_COLORS.primary[600] : THEME_COLORS.primary[100] }}
+            className="absolute bottom-0 right-0 h-6 w-6 items-center justify-center rounded-full border-2 border-white"
+            style={{
+              backgroundColor: unread ? THEME_COLORS.primary[600] : THEME_COLORS.primary[100],
+              elevation: 4,
+              shadowColor: '#463421',
+              shadowOpacity: 0.14,
+              shadowRadius: 5,
+              shadowOffset: { width: 0, height: 2 },
+            }}
           >
             <Ionicons
               name={iconName as any}

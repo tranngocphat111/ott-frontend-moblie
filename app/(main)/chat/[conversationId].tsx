@@ -425,6 +425,35 @@ const buildOptimisticImageMessage = (params: {
   } as ChatMessage;
 };
 
+const buildOptimisticTextMessage = (params: {
+  localId: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  type: 'text' | 'link';
+  replyToMsgId?: string | null;
+  senderName?: string | null;
+  senderAvatar?: string | null;
+}) => {
+  const now = new Date().toISOString();
+
+  return {
+    _id: params.localId,
+    local_temp_id: params.localId,
+    local_status: 'uploading' as const,
+    content: [params.content],
+    type: params.type,
+    created_at: now,
+    createdAt: now,
+    sender_id: params.senderId,
+    sender_name: params.senderName || '',
+    sender_avatar: params.senderAvatar || '',
+    conversation_id: params.conversationId,
+    reply_to_msg_id: params.replyToMsgId || null,
+    reactions: [],
+  } as ChatMessage;
+};
+
 const patchMessageById = (
   source: ChatMessage[],
   incoming: ChatMessage,
@@ -3095,26 +3124,55 @@ export default function ChatDetailScreen() {
 
     const isLink = isStandaloneLink(trimmed);
     const normalizedContent = isLink ? normalizeLink(trimmed) || trimmed : trimmed;
+    const messageType = isLink ? "link" : "text";
+    const localTempId = `local-text-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMessage = buildOptimisticTextMessage({
+      localId: localTempId,
+      conversationId: targetId,
+      senderId: userIdForChat,
+      content: normalizedContent,
+      type: messageType,
+      replyToMsgId: replyToMessage?.msg_id,
+      senderName: user?.fullName,
+      senderAvatar: user?.avatarUrl,
+    });
 
     stopTyping();
+    setMessageText("");
+    setReplyToMessage(null);
+    setMessages((current) => normalizeMessages([...current, optimisticMessage]));
+    setPendingScrollToBottom();
 
     try {
       const createdMessage = await ChatApi.sendMessage({
         conversationId: targetId,
         senderId: userIdForChat,
         content: normalizedContent,
-        type: isLink ? "link" : "text",
+        type: messageType,
         replyToMsgId: replyToMessage?.msg_id,
       });
       setMessages((current) =>
-        patchMessageById(current, createdMessage, undefined, normalizeMessages),
+        patchMessageById(
+          current,
+          { ...createdMessage, local_temp_id: localTempId },
+          undefined,
+          normalizeMessages,
+        ),
       );
-
-      setMessageText("");
-      setReplyToMessage(null);
-      setPendingScrollToBottom();
     } catch (error) {
       console.error("Failed to send message:", error);
+      setMessages((current) =>
+        current.map((item) =>
+          item._id === localTempId || item.local_temp_id === localTempId
+            ? {
+                ...item,
+                local_status: "error",
+                local_error: "Không thể gửi tin nhắn",
+              }
+            : item,
+        ),
+      );
+      setMessageText((current) => current || trimmed);
       Alert.alert("Lỗi", "Không thể gửi tin nhắn.");
     }
   }, [
@@ -3128,6 +3186,8 @@ export default function ChatDetailScreen() {
     setMessages,
     setPendingScrollToBottom,
     stopTyping,
+    user?.avatarUrl,
+    user?.fullName,
   ]);
 
   const handleSummarizeChat = useCallback(async () => {

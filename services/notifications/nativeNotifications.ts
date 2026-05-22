@@ -7,13 +7,14 @@ import { NotificationApi } from '@/services/api/notification.api';
 
 const PUSH_TOKEN_KEY = 'expoPushToken';
 const ANDROID_CHANNEL_ID = 'riff-notifications';
+const ANDROID_CHANNEL_NAME = 'Tin nhắn và thông báo Riff';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldPlaySound: true,
+    shouldPlaySound: false,
     shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
+    shouldShowBanner: false,
+    shouldShowList: false,
   } as Notifications.NotificationBehavior),
 });
 
@@ -37,11 +38,13 @@ export const registerNativePushNotifications = async (userId: string) => {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-      name: 'Riff',
+      name: ANDROID_CHANNEL_NAME,
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#ae7f53',
       sound: 'default',
+      showBadge: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   }
 
@@ -65,23 +68,32 @@ export const registerNativePushNotifications = async (userId: string) => {
   const deviceId = await AsyncStorage.getItem('deviceId');
 
   await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
-  await NotificationApi.registerPushToken({
+  const registered = await NotificationApi.registerPushToken({
     userId,
     token,
     platform: Platform.OS,
     deviceId,
   });
 
-  return token;
+  if (registered) {
+    console.log('[Notifications] Registered Expo push token', token.slice(0, 24));
+  } else {
+    console.warn('[Notifications] Failed to register Expo push token with backend');
+  }
+
+  return registered ? token : null;
 };
 
 export const unregisterNativePushNotifications = async (userId?: string | null) => {
   const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
-  if (!token || !userId) return;
+  if (!userId) {
+    await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
+    return;
+  }
 
   await NotificationApi.unregisterPushToken({
     userId,
-    token,
+    token: token || undefined,
     platform: Platform.OS,
     deviceId: await AsyncStorage.getItem('deviceId'),
   });

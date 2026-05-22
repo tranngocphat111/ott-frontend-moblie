@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { router, usePathname } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
+import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import * as WebBrowser from 'expo-web-browser';
@@ -21,6 +22,14 @@ import LoadingScreen from '@/components/common/LoadingScreen';
 import { setSystemBackgroundAsync } from '@/utils/useSystemBackground';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const hasStoredAuthSession = async () => {
+  const [accessToken, refreshToken] = await Promise.all([
+    SecureStore.getItemAsync('accessToken'),
+    SecureStore.getItemAsync('refreshToken'),
+  ]);
+  return Boolean(accessToken || refreshToken);
+};
 
 function RootLayoutNav() {
   return (
@@ -117,17 +126,30 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    const openChatHome = () => {
+    const openNotificationTarget = async (response?: Notifications.NotificationResponse | null) => {
+      if (!(await hasStoredAuthSession())) return;
+
+      const data = response?.notification.request.content.data || {};
+      const type = String(data.type || '').toLowerCase();
+      const referenceId = String(
+        data.referenceId || data.reference_id || data.conversationId || '',
+      ).trim();
+
+      if ((type.includes('message') || type.includes('chat')) && referenceId) {
+        router.push(`/(main)/chat/${referenceId}` as any);
+        return;
+      }
+
       router.push('/(main)/(tabs)/home' as any);
     };
 
-    const subscription = Notifications.addNotificationResponseReceivedListener(() => {
-      openChatHome();
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      void openNotificationTarget(response);
     });
 
     void Notifications.getLastNotificationResponseAsync()
       .then((response) => {
-        if (response) openChatHome();
+        if (response) void openNotificationTarget(response);
       })
       .catch(() => undefined);
 
@@ -139,7 +161,11 @@ export default function RootLayout() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active' && pathname.includes('contacts')) {
-        router.replace('/(main)/(tabs)/home' as any);
+        void hasStoredAuthSession().then((hasSession) => {
+          if (hasSession) {
+            router.replace('/(main)/(tabs)/home' as any);
+          }
+        });
       }
     });
 

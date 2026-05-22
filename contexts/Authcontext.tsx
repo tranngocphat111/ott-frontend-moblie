@@ -128,6 +128,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.error('AuthContext: socket cleanup on forced logout failed:', error);
       }
 
+      const currentUserId = user?.id || (await readCachedUserProfile())?.id || null;
+      if (currentUserId) {
+        await unregisterNativePushNotifications(currentUserId).catch((error) => {
+          console.error('AuthContext: push unregister on forced logout failed:', error);
+        });
+      }
+
       await clearLocalSession();
       router.replace('/(auth)/login');
     } finally {
@@ -219,6 +226,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('AuthContext: Logout API error:', error);
     } finally {
       await socketCleanupPromise;
+      await AsyncStorage.removeItem(FORCED_LOGOUT_NOTICE_KEY);
       await clearLocalSession();
 
       router.replace('/(auth)/login');
@@ -247,7 +255,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('AuthContext: checkAuth error:', error);
       if (isAuthSessionError(error)) {
-        await forceLocalLogout();
+        await forceLocalLogout(false);
         return;
       }
 
@@ -266,7 +274,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    setLogoutHandler(() => forceLocalLogout(true));
+    setLogoutHandler((showNotice = false) => forceLocalLogout(showNotice));
     console.log('AuthContext: logout handler registered');
   }, []);
 
@@ -318,7 +326,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (action === 'SPECIFIC' || action === 'OTHERS') {
         fetchUser().catch((error) => {
           if (isAuthSessionError(error)) {
-            forceLocalLogout();
+            forceLocalLogout(false);
           }
         });
       }
@@ -343,9 +351,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
 
-    void registerNativePushNotifications(user.id).catch((error) => {
-      console.warn('AuthContext: register push notification failed:', error);
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attemptCount = 0;
+
+    const clearRetryTimer = () => {
+      if (!retryTimer) return;
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    };
+
+    const registerPushToken = async (retry = true) => {
+      if (cancelled || !user?.id) return;
+
+      attemptCount += 1;
+      try {
+        const token = await registerNativePushNotifications(user.id);
+        if (token || cancelled || !retry) return;
+
+        if (attemptCount < 5) {
+          clearRetryTimer();
+          retryTimer = setTimeout(() => {
+            void registerPushToken(true);
+          }, 15000);
+        }
+      } catch (error) {
+        console.warn('AuthContext: register push notification failed:', error);
+        if (!cancelled && retry && attemptCount < 5) {
+          clearRetryTimer();
+          retryTimer = setTimeout(() => {
+            void registerPushToken(true);
+          }, 15000);
+        }
+      }
+    };
+
+    void registerPushToken(true);
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        attemptCount = 0;
+        clearRetryTimer();
+        void registerPushToken(true);
+      }
     });
+
+    return () => {
+      cancelled = true;
+      clearRetryTimer();
+      subscription.remove();
+    };
   }, [isAuthenticated, user?.id]);
 
   // Removed aggressive 15s polling - the interceptor handles token refresh on 401
@@ -360,7 +415,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       ensureCurrentTokenActive().catch((error) => {
         if (isAuthSessionError(error)) {
-          forceLocalLogout();
+          forceLocalLogout(false);
           return;
         }
 

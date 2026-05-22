@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "228734595617",
+    "project_id": "riff-app-78cfd",
+    "storage_bucket": "riff-app-78cfd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:228734595617:android:253dce9498fa041e586960",
+        "android_client_info": {
+          "package_name": "com.piinnhs.Riff"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDkWvvNw2oo_sgPaDFNqus6Om-m-xt3nAI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
