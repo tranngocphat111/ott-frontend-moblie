@@ -1,0 +1,138 @@
+{
+  "expo": {
+    "name": "Riff",
+    "slug": "Riff",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo_tach_nen.png",
+    "scheme": "riff",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/85627970-866c-453c-a0c2-981b3703f388",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "owner": "piin-nhs",
+    "ios": {
+      "bundleIdentifier": "com.piin-nhs.riff",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Cho phép truy cập camera để gọi video, chụp ảnh và quay video gửi trong cuộc trò chuyện.",
+        "NSMicrophoneUsageDescription": "Cho phép truy cập micro để gọi thoại, gọi video, ghi âm và quay video gửi trong cuộc trò chuyện.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSExceptionDomains": {
+            "192.168.1.73": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": true
+            }
+          }
+        }
+      }
+    },
+    "android": {
+      "package": "com.piinnhs.Riff",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/logo_tach_nen.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/logo.jpg"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#AE7F53",
+          "defaultChannel": "riff-notifications"
+        }
+      ],
+      "@livekit/react-native-expo-plugin",
+      "@config-plugins/react-native-webrtc",
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép truy cập thư viện ảnh để gửi hình ảnh trong cuộc trò chuyện",
+          "cameraPermission": "Cho phép truy cập camera để chụp ảnh, quay video và gửi trong cuộc trò chuyện"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Cho phép truy cập micro để ghi âm và gửi tin nhắn thoại"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Cho phép truy cập thư viện để hiển thị ảnh/video gần đây và gửi trong cuộc trò chuyện",
+          "granularPermissions": [
+            "photo",
+            "video"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo_tach_nen.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "85627970-866c-453c-a0c2-981b3703f388"
+      }
+    }
+  }
+}
