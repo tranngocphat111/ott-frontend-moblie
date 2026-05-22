@@ -175,6 +175,28 @@ function CreatePostEntry({
   );
 }
 
+function HeaderAction({
+  icon,
+  onPress,
+  primary = false,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  onPress?: () => void;
+  primary?: boolean;
+}) {
+  if (!onPress) return null;
+  return (
+    <TouchableOpacity
+      className="h-9 w-9 items-center justify-center rounded-full"
+      style={{ backgroundColor: primary ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.chip }}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
+      <Feather name={icon} size={primary ? 20 : 17} color={primary ? '#fff' : SOCIAL_COLORS.primaryDark} />
+    </TouchableOpacity>
+  );
+}
+
 export function DiscoverHeader({
   userName,
   avatarUrl,
@@ -186,6 +208,10 @@ export function DiscoverHeader({
   onOpenStory,
   onAddFriend,
   onOpenCurrentProfile,
+  onOpenSearch,
+  onOpenSaved,
+  onOpenHistory,
+  onOpenRelationships,
 }: {
   userName?: string;
   avatarUrl?: string;
@@ -197,6 +223,10 @@ export function DiscoverHeader({
   onOpenStory: (group: StoryUserGroup) => void;
   onAddFriend: (user: StorySuggestedUser) => void;
   onOpenCurrentProfile?: () => void;
+  onOpenSearch?: () => void;
+  onOpenSaved?: () => void;
+  onOpenHistory?: () => void;
+  onOpenRelationships?: () => void;
 }) {
   return (
     <View style={{ backgroundColor: SOCIAL_COLORS.page }}>
@@ -205,13 +235,17 @@ export function DiscoverHeader({
         style={{ paddingTop: topInset + 12, backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}
       >
         <View className="flex-row items-center justify-between">
-          <View>
+          <View className="flex-1 pr-3">
             <Text className="text-[25px] font-black" style={{ color: SOCIAL_COLORS.text }}>Khám phá</Text>
             <Text className="mt-0.5 text-sm" style={{ color: SOCIAL_COLORS.textMuted }}>Bảng tin, story và media</Text>
           </View>
-          <TouchableOpacity className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_COLORS.primaryDark }} onPress={onCreatePost}>
-            <Feather name="plus" size={22} color="#fff" />
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            <HeaderAction icon="search" onPress={onOpenSearch} />
+            <HeaderAction icon="bookmark" onPress={onOpenSaved} />
+            <HeaderAction icon="clock" onPress={onOpenHistory} />
+            <HeaderAction icon="users" onPress={onOpenRelationships} />
+            <HeaderAction icon="plus" onPress={onCreatePost} primary />
+          </View>
         </View>
       </View>
       <StoryRail

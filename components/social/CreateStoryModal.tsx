@@ -1,4 +1,4 @@
-import { MediaApi, type AccessControl, type FriendOption, type Visibility } from '@/services/api/media.api';
+import { MediaApi, type AccessControl, type FriendOption, type StoryItem, type Visibility } from '@/services/api/media.api';
 import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,11 +11,13 @@ import { draftFromPickerAsset, SOCIAL_COLORS, STORY_BACKGROUNDS, type DraftMedia
 export function CreateStoryModal({
   visible,
   userId,
+  initialStory,
   onClose,
   onCreated,
 }: {
   visible: boolean;
   userId?: string;
+  initialStory?: StoryItem | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -33,13 +35,42 @@ export function CreateStoryModal({
 
   useEffect(() => {
     if (!visible) return;
-    setText('');
-    setBackground(STORY_BACKGROUNDS[0]);
-    setMedia(null);
-    setVisibility('FRIENDS');
+    if (initialStory) {
+      const textItem = initialStory.items?.find((item) => item.type === 'TEXT');
+      const mediaItem = initialStory.items?.find((item) => item.type === 'IMAGE' || item.type === 'VIDEO');
+      const mediaUrl = mediaItem?.url || initialStory.imageUrl || initialStory.videoUrl;
+      const normalizedVisibility = String(initialStory.visibility || 'FRIENDS').toUpperCase();
+      setText(textItem?.textContent || initialStory.textContent || '');
+      setBackground(textItem?.textBackgroundColor || initialStory.textBackgroundColor || STORY_BACKGROUNDS[0]);
+      setMedia(
+        mediaUrl
+          ? {
+              draftId: `story-${initialStory.id}`,
+              id: mediaItem?.id,
+              type: mediaItem?.type === 'VIDEO' || initialStory.videoUrl ? 'video' : 'image',
+              url: mediaUrl,
+              caption: '',
+              isExisting: true,
+            }
+          : null,
+      );
+      setVisibility(
+        normalizedVisibility === 'PUBLIC' || normalizedVisibility === 'PRIVATE' || normalizedVisibility === 'CUSTOM'
+          ? normalizedVisibility
+          : 'FRIENDS',
+      );
+      setSelectedFriendIds((initialStory.accessControls || []).map((item) => item.accountId));
+      setCustomRuleType(initialStory.accessControls?.[0]?.ruleType || 'INCLUDE');
+    } else {
+      setText('');
+      setBackground(STORY_BACKGROUNDS[0]);
+      setMedia(null);
+      setVisibility('FRIENDS');
+      setSelectedFriendIds([]);
+      setCustomRuleType('INCLUDE');
+    }
     setFriendSearch('');
-    setSelectedFriendIds([]);
-  }, [visible]);
+  }, [initialStory, visible]);
 
   useEffect(() => {
     if (!visible || visibility !== 'CUSTOM' || !userId || friends.length > 0) return;
@@ -159,17 +190,21 @@ export function CreateStoryModal({
             },
           ];
 
-      const story = await MediaApi.createStory({
+      const request = {
         userId,
         visibility,
         accessControls,
         isHighlight: false,
-        expireAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        expireAt: initialStory?.expireAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         storyItems,
-      });
+      };
+
+      const story = initialStory
+        ? await MediaApi.updateStory(initialStory.id, request)
+        : await MediaApi.createStory(request);
 
       if (!story) {
-        Alert.alert('Không tạo được tin', 'Vui lòng thử lại sau.');
+        Alert.alert(initialStory ? 'Không cập nhật được tin' : 'Không tạo được tin', 'Vui lòng thử lại sau.');
         return;
       }
       onCreated();
@@ -186,7 +221,7 @@ export function CreateStoryModal({
           <TouchableOpacity className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_COLORS.chip }} onPress={onClose}>
             <Feather name="x" size={21} color={SOCIAL_COLORS.primaryDark} />
           </TouchableOpacity>
-          <Text className="text-lg font-bold" style={{ color: SOCIAL_COLORS.text }}>Tạo tin</Text>
+          <Text className="text-lg font-bold" style={{ color: SOCIAL_COLORS.text }}>{initialStory ? 'Chỉnh sửa tin' : 'Tạo tin'}</Text>
           {(() => {
             const canShare =
               Boolean(text.trim() || media) &&
@@ -202,7 +237,7 @@ export function CreateStoryModal({
             {submitting ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text className="font-bold" style={{ color: canShare ? '#fff' : SOCIAL_COLORS.textSoft }}>Đăng</Text>
+              <Text className="font-bold" style={{ color: canShare ? '#fff' : SOCIAL_COLORS.textSoft }}>{initialStory ? 'Lưu' : 'Đăng'}</Text>
             )}
           </TouchableOpacity>
             );

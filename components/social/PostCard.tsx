@@ -1,9 +1,9 @@
-import type { Post, PostMediaItem } from '@/services/api/media.api';
+import { MediaApi, type Post, type PostMediaItem } from '@/services/api/media.api';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
-import React, { useState } from 'react';
-import { Pressable, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar } from './SocialAvatar';
 import { PostMediaViewer } from './PostMediaViewer';
 import { SocialConfirmModal } from './SocialConfirmModal';
@@ -182,6 +182,67 @@ function PostEngagementSummary({
   );
 }
 
+function SharedPostPreview({ post }: { post: Post }) {
+  const router = useRouter();
+  const firstMedia = post.media[0];
+  const imageUri = firstMedia?.type === 'video' ? firstMedia.thumbnailUrl : firstMedia?.thumbnailUrl || firstMedia?.url;
+
+  return (
+    <Pressable
+      className="mx-4 mt-3 overflow-hidden rounded-2xl border"
+      style={{ backgroundColor: SOCIAL_COLORS.chipLight, borderColor: SOCIAL_COLORS.border }}
+      onPress={() =>
+        router.push({
+          pathname: '/(main)/social/profile/[userId]',
+          params: { userId: post.author.id },
+        })
+      }
+    >
+      <View className="flex-row items-center px-3 py-3">
+        <Avatar uri={post.author.avatar} name={post.author.name} color={post.author.color} size={34} />
+        <View className="ml-2 flex-1">
+          <Text className="text-[13px] font-black" style={{ color: SOCIAL_COLORS.text }} numberOfLines={1}>
+            {post.author.name}
+          </Text>
+          <Text className="text-[11px]" style={{ color: SOCIAL_COLORS.textMuted }}>
+            {post.time}
+          </Text>
+        </View>
+      </View>
+      {post.content.trim() ? (
+        <Text className="px-3 pb-3 text-[13px] leading-5" style={{ color: SOCIAL_COLORS.text }} numberOfLines={3}>
+          {post.content}
+        </Text>
+      ) : null}
+      {firstMedia ? (
+        <View className="h-40" style={{ backgroundColor: SOCIAL_COLORS.primaryDark }}>
+          {imageUri && firstMedia.type === 'image' ? (
+            <ExpoImage source={{ uri: imageUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+          ) : imageUri && firstMedia.type === 'video' ? (
+            <>
+              <ExpoImage source={{ uri: imageUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+              <View className="absolute inset-0 items-center justify-center bg-black/20">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-black/45">
+                  <Feather name="play" size={20} color="#fff" />
+                </View>
+              </View>
+            </>
+          ) : (
+            <View className="flex-1 items-center justify-center">
+              <Feather name={firstMedia.type === 'video' ? 'video' : 'image'} size={28} color="#fff" />
+            </View>
+          )}
+          {post.media.length > 1 ? (
+            <View className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-1">
+              <Text className="text-[11px] font-black text-white">+{post.media.length - 1}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 export function PostCard({
   post,
   currentUserId,
@@ -195,6 +256,7 @@ export function PostCard({
   onEdit,
   onDelete,
   onShare,
+  onSaveChange,
 }: {
   post: Post;
   currentUserId?: string;
@@ -208,6 +270,7 @@ export function PostCard({
   onEdit: (post: Post) => void;
   onDelete: (post: Post) => void;
   onShare: (post: Post) => void;
+  onSaveChange?: (postId: string, isSaved: boolean) => void;
 }) {
   const router = useRouter();
   const isMine = post.author.id === currentUserId;
@@ -215,6 +278,8 @@ export function PostCard({
   const hasEngagement = post.likes > 0 || post.comments > 0 || post.shares > 0;
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
   const visibilityIcon =
     String(post.visibility || '').toUpperCase() === 'PRIVATE'
       ? 'lock-closed'
@@ -223,6 +288,31 @@ export function PostCard({
         : String(post.visibility || '').toUpperCase() === 'CUSTOM'
           ? 'options'
           : 'earth';
+
+  useEffect(() => {
+    let mounted = true;
+    MediaApi.checkIsSaved(post.id).then((saved) => {
+      if (mounted) setIsSaved(saved);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [post.id]);
+
+  const handleToggleSave = async () => {
+    if (saveBusy) return;
+    const nextSaved = !isSaved;
+    setIsSaved(nextSaved);
+    onSaveChange?.(post.id, nextSaved);
+    setSaveBusy(true);
+    const ok = await MediaApi.toggleSaveContent(post.id, nextSaved);
+    setSaveBusy(false);
+    if (!ok) {
+      setIsSaved(!nextSaved);
+      onSaveChange?.(post.id, !nextSaved);
+      Alert.alert('Không lưu được', 'Vui lòng thử lại sau.');
+    }
+  };
 
   return (
     <View className="relative mb-2 border-y py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
@@ -263,6 +353,8 @@ export function PostCard({
 
       <PostMediaGrid media={post.media} onOpenMedia={setViewerIndex} />
 
+      {post.sharedPost ? <SharedPostPreview post={post.sharedPost} /> : null}
+
       <PostEngagementSummary
         post={post}
         reaction={reaction}
@@ -291,6 +383,24 @@ export function PostCard({
             style={{ color: reaction ? meta.color : SOCIAL_COLORS.textMuted }}
           >
             {reactionLabel(reaction)}
+          </Text>
+        </Pressable>
+        <Pressable
+          className="h-10 flex-1 flex-row items-center justify-center"
+          style={{ backgroundColor: 'transparent' }}
+          onPress={handleToggleSave}
+          disabled={saveBusy}
+        >
+          <Ionicons
+            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={18}
+            color={isSaved ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.primary}
+          />
+          <Text
+            className="ml-2 text-sm font-semibold"
+            style={{ color: isSaved ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.textMuted }}
+          >
+            {isSaved ? 'Đã lưu' : 'Lưu'}
           </Text>
         </Pressable>
         <Pressable

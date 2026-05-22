@@ -1,13 +1,13 @@
 import { THEME_COLORS } from '@/constants/theme';
 import { useAuth } from '@/contexts/Authcontext';
-import { MediaApi, type Post, type StorySuggestedUser, type StoryUserGroup } from '@/services/api/media.api';
+import { MediaApi, type Post, type StoryItem, type StorySuggestedUser, type StoryUserGroup } from '@/services/api/media.api';
 import { mediaSocket, type MediaRealtimePayload, type PostActivityPayload } from '@/services/socket/mediaSocket';
-import { CommentsModal, CreatePostModal, CreateStoryModal, DiscoverHeader, PostCard, ReactionsListModal, SOCIAL_COLORS, SocialConfirmModal, StoryViewerModal } from '@/components/social';
+import { CommentsModal, CreatePostModal, CreateStoryModal, DiscoverHeader, PostCard, ReactionsListModal, SharePostModal, SOCIAL_COLORS, SocialConfirmModal, StoryViewerModal } from '@/components/social';
 import { Feather } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, Share, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, RefreshControl, Text, View, type ViewToken } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PAGE_SIZE = 8;
@@ -34,7 +34,10 @@ export default function DiscoverScreen() {
   const [reactionsListPost, setReactionsListPost] = useState<Post | null>(null);
   const [commentPost, setCommentPost] = useState<Post | null>(null);
   const [storyGroup, setStoryGroup] = useState<StoryUserGroup | null>(null);
+  const [sharePost, setSharePost] = useState<Post | null>(null);
+  const [editingStory, setEditingStory] = useState<StoryItem | null>(null);
   const [pendingDeletePost, setPendingDeletePost] = useState<Post | null>(null);
+  const recordedViewIdsRef = useRef(new Set<string>());
 
   const avatarUrl = user?.avatarUrl;
   const displayName = user?.fullName || 'Người dùng';
@@ -214,15 +217,18 @@ export default function DiscoverScreen() {
     );
   };
 
-  const handleSharePost = async (post: Post) => {
-    try {
-      await Share.share({
-        title: post.author.name,
-        message: `${post.author.name}: ${post.content || 'Bài viết trên Riff'}`,
-      });
-    } catch {
-      Alert.alert('Không chia sẻ được', 'Vui lòng thử lại sau.');
-    }
+  const handleSharePost = (post: Post) => {
+    setSharePost(post);
+  };
+
+  const handleSharedPost = (post: Post) => {
+    setPosts((prev) => [
+      post,
+      ...prev
+        .filter((item) => item.id !== post.id)
+        .map((item) => (item.id === sharePost?.id ? { ...item, shares: item.shares + 1 } : item)),
+    ]);
+    void refreshReactionCounts([post]);
   };
 
   const handleReact = async (post: Post, reactionType: string) => {
@@ -284,6 +290,16 @@ export default function DiscoverScreen() {
     }
   };
 
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<Post>[] }) => {
+    viewableItems.forEach(({ item }) => {
+      if (!item?.id || recordedViewIdsRef.current.has(item.id)) return;
+      recordedViewIdsRef.current.add(item.id);
+      void MediaApi.recordViewHistory(item.id);
+    });
+  }).current;
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 45, minimumViewTime: 600 }).current;
+
   const header = useMemo(
     () => (
       <DiscoverHeader
@@ -296,7 +312,10 @@ export default function DiscoverScreen() {
           setEditingPost(null);
           setCreatePostVisible(true);
         }}
-        onCreateStory={() => setCreateStoryVisible(true)}
+        onCreateStory={() => {
+          setEditingStory(null);
+          setCreateStoryVisible(true);
+        }}
         onOpenStory={setStoryGroup}
         onAddFriend={handleAddFriend}
         onOpenCurrentProfile={() => {
@@ -306,6 +325,10 @@ export default function DiscoverScreen() {
             params: { userId: currentUserId },
           });
         }}
+        onOpenSearch={() => router.push('/(main)/social/search' as any)}
+        onOpenSaved={() => router.push('/(main)/social/saved' as any)}
+        onOpenHistory={() => router.push('/(main)/social/history' as any)}
+        onOpenRelationships={() => router.push('/(main)/social/relationships' as any)}
       />
     ),
     [avatarUrl, currentUserId, displayName, handleAddFriend, insets.top, router, storyGroups, suggestedUsers],
@@ -331,6 +354,8 @@ export default function DiscoverScreen() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           onScrollBeginDrag={() => setReactionPickerPost(null)}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           ListEmptyComponent={
             <View className="mx-4 mt-6 items-center rounded-[28px] border px-6 py-10" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
               <Feather name="coffee" size={34} color={SOCIAL_COLORS.textSoft} />
@@ -379,9 +404,13 @@ export default function DiscoverScreen() {
       />
 
       <CreateStoryModal
-        visible={createStoryVisible}
+        visible={createStoryVisible || Boolean(editingStory)}
         userId={currentUserId}
-        onClose={() => setCreateStoryVisible(false)}
+        initialStory={editingStory}
+        onClose={() => {
+          setCreateStoryVisible(false);
+          setEditingStory(null);
+        }}
         onCreated={refreshStories}
       />
 
@@ -411,11 +440,27 @@ export default function DiscoverScreen() {
         ]}
       />
 
+      <SharePostModal
+        visible={!!sharePost}
+        post={sharePost}
+        currentUserId={currentUserId}
+        currentUserName={displayName}
+        currentUserAvatar={avatarUrl}
+        onClose={() => setSharePost(null)}
+        onShared={handleSharedPost}
+      />
+
       <StoryViewerModal
         group={storyGroup}
         groups={storyGroups}
         currentUserId={currentUserId}
         onGroupChange={setStoryGroup}
+        onEditStory={(story) => {
+          setStoryGroup(null);
+          setEditingStory(story);
+          setCreateStoryVisible(true);
+        }}
+        onDeleted={refreshStories}
         onClose={() => setStoryGroup(null)}
       />
     </SafeAreaView>
