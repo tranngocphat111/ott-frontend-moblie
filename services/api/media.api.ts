@@ -50,6 +50,7 @@ export interface Post {
   relationship?: 'self' | 'friend' | 'friend-of-friend' | 'stranger';
   relationshipLabel?: string;
   accessControls?: AccessControl[];
+  sharedPost?: Post;
 }
 
 export interface StoryContentItem {
@@ -131,6 +132,7 @@ export interface ApiPost {
   visibility: string;
   hashTags: string[] | null;
   accessControls?: AccessControl[];
+  sharedPost?: ApiPost | null;
 }
 
 export interface PostsPage {
@@ -239,7 +241,7 @@ export interface FriendRequestOption {
 }
 
 export interface ApiStoryItemResponse {
-  id?: string;
+  id: string;
   type: 'TEXT_ITEM' | 'IMAGE_ITEM' | 'VIDEO_ITEM';
   imageItem?: { url?: string | null } | null;
   videoItem?: { url?: string | null; thumbnailUrl?: string | null } | null;
@@ -266,6 +268,7 @@ export interface ApiStory {
   musics?: any[];
   expireAt?: string;
   visibility?: string;
+  accessControls?: AccessControl[];
 }
 
 export interface ApiStoryGroup {
@@ -314,6 +317,10 @@ export interface StoryUploadResponse {
   storyItemId?: string | null;
   fileKey: string;
 }
+
+export type SocialContentItem =
+  | { id: string; kind: 'post'; post: Post; story?: never; raw: unknown }
+  | { id: string; kind: 'story'; post?: never; story: StoryItem; raw: unknown };
 
 interface SpringPage<T> {
   content: T[];
@@ -430,7 +437,7 @@ export const mapMedia = (medias: ApiMedia[] | null): PostMediaItem[] => {
     }));
 };
 
-export const mapPost = (post: ApiPost, colorIndex: number, currentUserId?: string): Post => {
+export const mapPost = (post: ApiPost, colorIndex: number, currentUserId?: string, depth = 0): Post => {
   const author: SocialUser = {
     id: post.accountId,
     name: post.accountDisplayName || post.accountUsername || 'Người dùng',
@@ -451,6 +458,7 @@ export const mapPost = (post: ApiPost, colorIndex: number, currentUserId?: strin
     visibility: post.visibility,
     relationship: post.accountId === currentUserId ? 'self' : undefined,
     accessControls: post.accessControls,
+    sharedPost: post.sharedPost && depth < 3 ? mapPost(post.sharedPost, colorIndex + 1, currentUserId, depth + 1) : undefined,
   };
 };
 
@@ -610,6 +618,36 @@ export const fetchPostById = async (postId: string, currentUserId?: string): Pro
   }
 };
 
+export const searchPosts = async (
+  query: string,
+  currentUserId: string,
+  page = 0,
+  size = 10,
+): Promise<PostsPage | null> => {
+  if (!query.trim() || !currentUserId) {
+    return { posts: [], totalElements: 0, totalPages: 0, page, hasMore: false };
+  }
+
+  try {
+    const payload = await (apiClient.get as any)(mediaPath('/posts/search'), {
+      params: { q: query.trim(), viewerId: currentUserId, page, size, sort: 'createdAt,desc' },
+    });
+    const data = unwrapApiResult<SpringPage<ApiPost>>(payload);
+    const content = data ? unwrapList<ApiPost>(data.content ?? []) : unwrapList<ApiPost>(payload);
+    const posts = content.map((post, index) => mapPost(post, index, currentUserId));
+
+    return {
+      posts,
+      totalPages: data?.totalPages ?? 1,
+      totalElements: data?.totalElements ?? posts.length,
+      page: data?.number ?? page,
+      hasMore: data?.last === false,
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const createPost = async (
   accountId: string,
   caption: string,
@@ -692,6 +730,28 @@ export const deletePost = async (postId: string): Promise<boolean> => {
   }
 };
 
+export const sharePost = async (
+  postId: string,
+  accountId: string,
+  caption?: string,
+  visibility: Visibility | string = 'PUBLIC',
+): Promise<{ post: Post | null; error?: string }> => {
+  try {
+    const payload = await (apiClient.post as any)(mediaPath(`/posts/${postId}/share`), null, {
+      params: {
+        accountId,
+        caption: caption?.trim() || undefined,
+        visibility: visibility.toUpperCase(),
+      },
+    });
+    const post = unwrapApiResult<ApiPost>(payload);
+    if (!post) return { post: null, error: 'Dữ liệu trả về không hợp lệ' };
+    return { post: mapPost(post, 0, accountId) };
+  } catch (error) {
+    return { post: null, error: getErrorMessage(error, 'Chia sẻ bài viết thất bại. Vui lòng thử lại.') };
+  }
+};
+
 export const toggleLike = async (
   postId: string,
   accountId: string,
@@ -703,10 +763,23 @@ export const toggleLike = async (
     });
     const data = unwrapApiResult<any>(payload);
     if (!data) return null;
+    const rawLiked = data.liked;
+    const reaction = unwrapApiResult<any>(data.reaction) ?? data.reaction;
+    const likedText = String(rawLiked).trim().toLowerCase();
+    const normalizedLiked =
+      rawLiked === true ||
+      likedText === 'true' ||
+      rawLiked === 1 ||
+      likedText === '1' ||
+      (!['false', '0'].includes(likedText) && Boolean(reaction?.reactionType || reaction?.id));
+    const normalizedReactionType = normalizedLiked
+      ? String(reaction?.reactionType || data.reactionType || reactionType).toUpperCase()
+      : undefined;
+
     return {
-      liked: Boolean(data.liked),
+      liked: normalizedLiked,
       totalReactions: Number(data.totalReactions ?? 0),
-      reactionType: data.reaction?.reactionType,
+      reactionType: normalizedReactionType,
     };
   } catch {
     return null;
@@ -1123,7 +1196,7 @@ export const unblockUserViaChat = async (userId: string, targetId: string): Prom
   }
 };
 
-const mapStory = (story: ApiStory): StoryItem => {
+export const mapStory = (story: ApiStory): StoryItem => {
   const firstRenderable = story.storyItems?.find(
     (item) => item.type === 'TEXT_ITEM' || item.type === 'IMAGE_ITEM' || item.type === 'VIDEO_ITEM',
   );
@@ -1154,7 +1227,7 @@ const mapStory = (story: ApiStory): StoryItem => {
     imageUrl,
     videoUrl,
     items: (story.storyItems || []).map((item) => ({
-      id: item.id || Math.random().toString(36).slice(2, 9),
+      id: item.id,
       type: item.type === 'TEXT_ITEM' ? 'TEXT' : item.type === 'IMAGE_ITEM' ? 'IMAGE' : 'VIDEO',
       url: resolveMediaUrl(item.imageItem?.url || item.videoItem?.url),
       textContent: item.textItem?.content || undefined,
@@ -1167,6 +1240,7 @@ const mapStory = (story: ApiStory): StoryItem => {
     })),
     expireAt: story.expireAt,
     visibility: story.visibility,
+    accessControls: story.accessControls,
     lastUpdated: Date.now(),
   };
 };
@@ -1228,6 +1302,7 @@ export const fetchStoryGroups = async (accountId: string): Promise<StoryUserGrou
       const groups = unwrapList<ApiStoryGroup>(reel.storyGroups);
       if (groups.length) return mapStoryGroups(groups);
       if (Array.isArray(reel.stories) && reel.stories.length) return groupStories(reel.stories);
+      return [];
     }
   } catch {
     // fall through to legacy endpoint
@@ -1321,9 +1396,17 @@ export const updateStory = async (
   captions?: string[],
 ): Promise<ApiStory | null> => {
   try {
+    if (!files?.length) {
+      const payload = await (apiClient.put as any)(mediaPath(`/stories/${storyId}`), request, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000,
+      });
+      return unwrapApiResult<ApiStory>(payload);
+    }
+
     const form = new FormData();
     form.append('request', JSON.stringify(request) as any);
-    if (files?.length) appendUploadFiles(form, 'files', files, captions);
+    appendUploadFiles(form, 'files', files, captions);
 
     const payload = await (apiClient.put as any)(mediaPath(`/stories/${storyId}`), form, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -1335,6 +1418,120 @@ export const updateStory = async (
   }
 };
 
+const isPostPayload = (item: any): item is ApiPost =>
+  Boolean(item?.id) &&
+  ('caption' in item || 'medias' in item || 'totalComments' in item || 'totalShares' in item);
+
+const isStoryPayload = (item: any): item is ApiStory =>
+  Boolean(item?.id) &&
+  ('storyItems' in item || 'expireAt' in item || 'totalViews' in item) &&
+  !isPostPayload(item);
+
+const mapSocialContent = (item: unknown, index: number, currentUserId?: string): SocialContentItem | null => {
+  const payload = unwrapApiResult<any>(item) ?? item;
+  if (!payload || typeof payload !== 'object') return null;
+
+  const nestedCandidates = [
+    payload.content,
+    payload.post,
+    payload.story,
+    payload.item,
+    payload.data,
+    payload.result,
+  ].filter((value) => value && value !== payload);
+
+  for (const candidate of nestedCandidates) {
+    const mapped = mapSocialContent(candidate, index, currentUserId);
+    if (mapped) return mapped;
+  }
+
+  if (isPostPayload(payload)) {
+    const post = mapPost(payload, index, currentUserId);
+    return { id: post.id, kind: 'post', post, raw: payload };
+  }
+
+  if (isStoryPayload(payload)) {
+    const story = mapStory(payload);
+    return { id: story.id, kind: 'story', story, raw: payload };
+  }
+
+  return null;
+};
+
+const mapContentPage = (payload: unknown, currentUserId?: string): SocialContentItem[] => {
+  const page = unwrapApiResult<SpringPage<unknown>>(payload);
+  const rawItems = page?.content ?? (Array.isArray(payload) ? payload : []);
+  return unwrapList<unknown>(rawItems)
+    .map((item, index) => mapSocialContent(item, index, currentUserId))
+    .filter((item): item is SocialContentItem => item !== null);
+};
+
+export const toggleSaveContent = async (contentId: string, isSaved: boolean): Promise<boolean> => {
+  try {
+    if (isSaved) {
+      await (apiClient.post as any)(mediaPath('/saved'), null, { params: { contentId } });
+    } else {
+      await (apiClient.delete as any)(mediaPath('/saved'), { params: { contentId } });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const checkIsSaved = async (contentId: string): Promise<boolean> => {
+  try {
+    const payload = await (apiClient.get as any)(mediaPath('/saved/check'), { params: { contentId } });
+    if (typeof payload === 'boolean') return payload;
+    return Boolean(unwrapApiResult<boolean>(payload));
+  } catch {
+    return false;
+  }
+};
+
+export const fetchSavedContents = async (
+  page = 0,
+  size = 20,
+  currentUserId?: string,
+): Promise<SocialContentItem[]> => {
+  try {
+    const payload = await (apiClient.get as any)(mediaPath('/saved'), { params: { page, size, sort: 'savedAt,desc' } });
+    return mapContentPage(payload, currentUserId);
+  } catch {
+    return [];
+  }
+};
+
+export const recordViewHistory = async (contentId: string): Promise<void> => {
+  try {
+    await (apiClient.post as any)(mediaPath('/history'), null, { params: { contentId } });
+  } catch {
+    // View history should never block rendering.
+  }
+};
+
+export const fetchViewHistory = async (
+  page = 0,
+  size = 20,
+  currentUserId?: string,
+): Promise<SocialContentItem[]> => {
+  try {
+    const payload = await (apiClient.get as any)(mediaPath('/history'), { params: { page, size, sort: 'viewedAt,desc' } });
+    return mapContentPage(payload, currentUserId);
+  } catch {
+    return [];
+  }
+};
+
+export const clearViewHistory = async (): Promise<boolean> => {
+  try {
+    await (apiClient.delete as any)(mediaPath('/history'));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const MediaApi = {
   addComment,
   acceptFriendRequest,
@@ -1343,6 +1540,8 @@ export const MediaApi = {
   blockUserViaChat,
   cancelFriendRequestViaChat,
   cancelRelationship,
+  checkIsSaved,
+  clearViewHistory,
   createPost,
   createStory,
   deleteComment,
@@ -1361,6 +1560,8 @@ export const MediaApi = {
   fetchRelationshipStatusViaChat,
   fetchReplies,
   fetchRootComments,
+  fetchSavedContents,
+  fetchSearchPosts: searchPosts,
   fetchStories,
   fetchStoryGroups,
   fetchStoryViewers,
@@ -1369,11 +1570,16 @@ export const MediaApi = {
   fetchUserByUsername,
   fetchUserReactions,
   fetchUsers,
+  fetchViewHistory,
   findPostsWithAuthorized,
+  recordViewHistory,
   rejectFriendRequest,
   rejectFriendRequestViaChat,
+  searchPosts,
   sendFriendRequest,
   sendFriendRequestViaChat,
+  sharePost,
+  toggleSaveContent,
   toggleLike,
   unblockUserViaChat,
   unfriendRelationship,
