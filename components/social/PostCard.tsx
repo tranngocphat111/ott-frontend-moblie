@@ -275,6 +275,8 @@ export function PostCard({
   const router = useRouter();
   const isMine = post.author.id === currentUserId;
   const meta = reactionMeta(reaction);
+  const normalizedReaction = String(reaction || '').toUpperCase();
+  const showReactionEmoji = Boolean(reaction && normalizedReaction !== 'LIKE');
   const hasEngagement = post.likes > 0 || post.comments > 0 || post.shares > 0;
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
@@ -315,7 +317,10 @@ export function PostCard({
   };
 
   return (
-    <View className="relative mb-2 border-y py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+    <View
+      className="relative mx-4 mb-3 overflow-visible rounded-2xl border py-3"
+      style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border, ...SOCIAL_SHADOW }}
+    >
       <View className="flex-row items-start px-4">
         <Pressable
           className="flex-1 flex-row items-start"
@@ -377,13 +382,39 @@ export function PostCard({
           onPress={() => onReact(post, reaction || 'LIKE')}
           onLongPress={() => onPickReaction(post)}
         >
-          <Text className="text-[18px]">{reaction ? meta.emoji : '♡'}</Text>
+          {showReactionEmoji ? (
+            <Text className="text-[18px]">{meta.emoji}</Text>
+          ) : (
+            <Ionicons
+              name={reaction ? 'thumbs-up' : 'thumbs-up-outline'}
+              size={18}
+              color={reaction ? meta.color : SOCIAL_COLORS.primary}
+            />
+          )}
           <Text
             className="ml-2 text-sm font-semibold"
             style={{ color: reaction ? meta.color : SOCIAL_COLORS.textMuted }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
           >
             {reactionLabel(reaction)}
           </Text>
+        </Pressable>
+        <Pressable
+          className="h-10 flex-1 flex-row items-center justify-center"
+          style={{ backgroundColor: 'transparent' }}
+          onPress={() => onComment(post)}
+        >
+          <Ionicons name="chatbubble-outline" size={18} color={SOCIAL_COLORS.primary} />
+          <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }} numberOfLines={1} adjustsFontSizeToFit>Bình luận</Text>
+        </Pressable>
+        <Pressable
+          className="h-10 flex-1 flex-row items-center justify-center"
+          style={{ backgroundColor: 'transparent' }}
+          onPress={() => onShare(post)}
+        >
+          <Ionicons name="share-social-outline" size={18} color={SOCIAL_COLORS.primary} />
+          <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }} numberOfLines={1} adjustsFontSizeToFit>Chia sẻ</Text>
         </Pressable>
         <Pressable
           className="h-10 flex-1 flex-row items-center justify-center"
@@ -399,25 +430,11 @@ export function PostCard({
           <Text
             className="ml-2 text-sm font-semibold"
             style={{ color: isSaved ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.textMuted }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
           >
             {isSaved ? 'Đã lưu' : 'Lưu'}
           </Text>
-        </Pressable>
-        <Pressable
-          className="h-10 flex-1 flex-row items-center justify-center"
-          style={{ backgroundColor: 'transparent' }}
-          onPress={() => onComment(post)}
-        >
-          <Ionicons name="chatbubble-outline" size={18} color={SOCIAL_COLORS.primary} />
-          <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Bình luận</Text>
-        </Pressable>
-        <Pressable
-          className="h-10 flex-1 flex-row items-center justify-center"
-          style={{ backgroundColor: 'transparent' }}
-          onPress={() => onShare(post)}
-        >
-          <Ionicons name="share-social-outline" size={18} color={SOCIAL_COLORS.primary} />
-          <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Chia sẻ</Text>
         </Pressable>
       </View>
 

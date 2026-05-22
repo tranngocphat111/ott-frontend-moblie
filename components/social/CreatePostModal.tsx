@@ -15,6 +15,7 @@ export function CreatePostModal({
   avatarUrl,
   userName,
   initialPost,
+  openWithFeeling = false,
   onClose,
   onCreated,
   onUpdated,
@@ -24,6 +25,7 @@ export function CreatePostModal({
   avatarUrl?: string;
   userName?: string;
   initialPost?: Post | null;
+  openWithFeeling?: boolean;
   onClose: () => void;
   onCreated: (post: Post) => void;
   onUpdated?: (post: Post) => void;
@@ -48,12 +50,12 @@ export function CreatePostModal({
     setVisibility((initialPost?.visibility?.toUpperCase() as Visibility) || 'PUBLIC');
     setMedia((initialPost?.media || []).map(draftFromPostMedia));
     setFeeling(null);
-    setShowFeelings(false);
+    setShowFeelings(!initialPost && openWithFeeling);
     setFriendSearch('');
     const initialAccess = initialPost?.accessControls || [];
     setSelectedFriendIds(initialAccess.map((item) => item.accountId));
     setCustomRuleType(initialAccess[0]?.ruleType || 'INCLUDE');
-  }, [initialPost, visible]);
+  }, [initialPost, openWithFeeling, visible]);
 
   useEffect(() => {
     if (!visible || visibility !== 'CUSTOM' || !userId || friends.length > 0) return;

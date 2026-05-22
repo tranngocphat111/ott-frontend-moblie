@@ -20,7 +20,7 @@ export type MediaRealtimePayload = {
 
 export type PostActivityPayload = {
   postId: string;
-  activityType: 'COMMENT' | 'REACTION' | 'SHARE';
+  activityType: 'COMMENT' | 'REACTION' | 'SHARE' | 'VIEW';
   action: 'CREATE' | 'UPDATE' | 'DELETE';
   data?: any;
 };

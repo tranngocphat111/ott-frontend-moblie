@@ -37,13 +37,13 @@ export const FEELING_OPTIONS = [
 export const STORY_BACKGROUNDS = ['#24180f', '#463421', '#694d31', '#8b6642', '#ae7f53', '#bc9166'];
 
 export const SOCIAL_COLORS = {
-  page: '#f4eee8',
-  card: '#fffaf5',
-  cardMuted: '#f8efe6',
-  chip: '#f3e5d8',
-  chipLight: '#fbf4ed',
-  border: '#ead8c8',
-  borderStrong: '#d8b899',
+  page: THEME_COLORS.primary[50],
+  card: '#ffffff',
+  cardMuted: '#fdfaf7',
+  chip: THEME_COLORS.primary[100],
+  chipLight: THEME_COLORS.primary[50],
+  border: THEME_COLORS.primary[100],
+  borderStrong: THEME_COLORS.primary[200],
   text: '#24180f',
   textMuted: '#7b6654',
   textSoft: '#9a8068',

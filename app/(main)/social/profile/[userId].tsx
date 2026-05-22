@@ -517,7 +517,7 @@ export default function SocialProfileScreen() {
         )}
       </View>
 
-      <View className="mt-2 border-y px-4 py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+      <View className="mx-4 mt-3 rounded-2xl border px-4 py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
         <Text className="text-[20px] font-black" style={{ color: SOCIAL_COLORS.text }}>Chi tiết</Text>
         <View className="mt-3 gap-3">
           {profileUser?.work ? (
@@ -561,7 +561,7 @@ export default function SocialProfileScreen() {
       </View>
 
       {profileMedia.length ? (
-        <View className="mt-2 border-y py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+        <View className="mx-4 mt-3 rounded-2xl border py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
           <View className="mb-3 flex-row items-center justify-between px-4">
             <Text className="text-[20px] font-black" style={{ color: SOCIAL_COLORS.text }}>Ảnh nổi bật</Text>
             <Text className="text-[14px] font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>{profileMedia.length}</Text>
@@ -581,7 +581,7 @@ export default function SocialProfileScreen() {
         </View>
       ) : null}
 
-      <View className="mt-2 border-y px-4 py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+      <View className="mx-4 mt-3 rounded-2xl border px-4 py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
         <Text className="text-[18px] font-black" style={{ color: SOCIAL_COLORS.text }}>Bài viết</Text>
       </View>
     </View>

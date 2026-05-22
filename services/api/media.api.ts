@@ -241,7 +241,7 @@ export interface FriendRequestOption {
 }
 
 export interface ApiStoryItemResponse {
-  id?: string;
+  id: string;
   type: 'TEXT_ITEM' | 'IMAGE_ITEM' | 'VIDEO_ITEM';
   imageItem?: { url?: string | null } | null;
   videoItem?: { url?: string | null; thumbnailUrl?: string | null } | null;
@@ -763,10 +763,23 @@ export const toggleLike = async (
     });
     const data = unwrapApiResult<any>(payload);
     if (!data) return null;
+    const rawLiked = data.liked;
+    const reaction = unwrapApiResult<any>(data.reaction) ?? data.reaction;
+    const likedText = String(rawLiked).trim().toLowerCase();
+    const normalizedLiked =
+      rawLiked === true ||
+      likedText === 'true' ||
+      rawLiked === 1 ||
+      likedText === '1' ||
+      (!['false', '0'].includes(likedText) && Boolean(reaction?.reactionType || reaction?.id));
+    const normalizedReactionType = normalizedLiked
+      ? String(reaction?.reactionType || data.reactionType || reactionType).toUpperCase()
+      : undefined;
+
     return {
-      liked: Boolean(data.liked),
+      liked: normalizedLiked,
       totalReactions: Number(data.totalReactions ?? 0),
-      reactionType: data.reaction?.reactionType,
+      reactionType: normalizedReactionType,
     };
   } catch {
     return null;
@@ -1214,7 +1227,7 @@ export const mapStory = (story: ApiStory): StoryItem => {
     imageUrl,
     videoUrl,
     items: (story.storyItems || []).map((item) => ({
-      id: item.id || Math.random().toString(36).slice(2, 9),
+      id: item.id,
       type: item.type === 'TEXT_ITEM' ? 'TEXT' : item.type === 'IMAGE_ITEM' ? 'IMAGE' : 'VIDEO',
       url: resolveMediaUrl(item.imageItem?.url || item.videoItem?.url),
       textContent: item.textItem?.content || undefined,
@@ -1289,6 +1302,7 @@ export const fetchStoryGroups = async (accountId: string): Promise<StoryUserGrou
       const groups = unwrapList<ApiStoryGroup>(reel.storyGroups);
       if (groups.length) return mapStoryGroups(groups);
       if (Array.isArray(reel.stories) && reel.stories.length) return groupStories(reel.stories);
+      return [];
     }
   } catch {
     // fall through to legacy endpoint
@@ -1382,9 +1396,17 @@ export const updateStory = async (
   captions?: string[],
 ): Promise<ApiStory | null> => {
   try {
+    if (!files?.length) {
+      const payload = await (apiClient.put as any)(mediaPath(`/stories/${storyId}`), request, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000,
+      });
+      return unwrapApiResult<ApiStory>(payload);
+    }
+
     const form = new FormData();
     form.append('request', JSON.stringify(request) as any);
-    if (files?.length) appendUploadFiles(form, 'files', files, captions);
+    appendUploadFiles(form, 'files', files, captions);
 
     const payload = await (apiClient.put as any)(mediaPath(`/stories/${storyId}`), form, {
       headers: { 'Content-Type': 'multipart/form-data' },

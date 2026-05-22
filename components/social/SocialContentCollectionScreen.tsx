@@ -274,7 +274,8 @@ export function SocialContentCollectionScreen({
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 45, minimumViewTime: 600 }).current;
 
   const header = (
-    <View style={{ paddingTop: insets.top + 10, backgroundColor: SOCIAL_COLORS.card, borderBottomColor: SOCIAL_COLORS.border }} className="border-b px-4 pb-4">
+    <View style={{ paddingTop: insets.top + 12, backgroundColor: SOCIAL_COLORS.page }} className="px-4 pb-4">
+      <View className="rounded-2xl border p-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
       <View className="flex-row items-center">
         <TouchableOpacity className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_COLORS.chip }} onPress={() => router.back()}>
           <Feather name="arrow-left" size={21} color={SOCIAL_COLORS.primaryDark} />
@@ -292,6 +293,7 @@ export function SocialContentCollectionScreen({
             <Feather name="trash-2" size={18} color={SOCIAL_COLORS.primaryDark} />
           </TouchableOpacity>
         ) : null}
+      </View>
       </View>
     </View>
   );
