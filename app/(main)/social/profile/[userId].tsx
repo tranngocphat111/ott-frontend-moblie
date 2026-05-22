@@ -1,5 +1,5 @@
 import { useAuth } from '@/contexts/Authcontext';
-import { CommentsModal, CreatePostModal, PostCard, ReactionsListModal, SOCIAL_COLORS, SocialConfirmModal, type SocialConfirmAction } from '@/components/social';
+import { CommentsModal, CreatePostModal, PostCard, ReactionsListModal, SharePostModal, SOCIAL_COLORS, SocialConfirmModal, type SocialConfirmAction } from '@/components/social';
 import { Avatar } from '@/components/social/SocialAvatar';
 import { MediaApi, type ApiUser, type Post } from '@/services/api/media.api';
 import { ChatApi } from '@/services/api/chat';
@@ -7,8 +7,8 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, Share, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, RefreshControl, Text, TouchableOpacity, View, type ViewToken } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const relationshipIdOf = (relationship: any) =>
@@ -41,7 +41,9 @@ export default function SocialProfileScreen() {
   const [reactionsListPost, setReactionsListPost] = useState<Post | null>(null);
   const [commentPost, setCommentPost] = useState<Post | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [sharePost, setSharePost] = useState<Post | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const recordedViewIdsRef = useRef(new Set<string>());
   const [socialConfirm, setSocialConfirm] = useState<{
     title: string;
     message?: string;
@@ -132,15 +134,17 @@ export default function SocialProfileScreen() {
     void refreshReactionCounts([post]);
   };
 
-  const handleSharePost = async (post: Post) => {
-    try {
-      await Share.share({
-        title: post.author.name,
-        message: `${post.author.name}: ${post.content || 'Bài viết trên Riff'}`,
-      });
-    } catch {
-      Alert.alert('Không chia sẻ được', 'Vui lòng thử lại sau.');
+  const handleSharePost = (post: Post) => {
+    setSharePost(post);
+  };
+
+  const handleSharedPost = (post: Post) => {
+    if (isMine) {
+      setPosts((prev) => [post, ...prev.filter((item) => item.id !== post.id)]);
+    } else {
+      setPosts((prev) => prev.map((item) => (item.id === sharePost?.id ? { ...item, shares: item.shares + 1 } : item)));
     }
+    void refreshReactionCounts([post]);
   };
 
   const handleCommentCountChange = (postId: string, delta: number) => {
@@ -371,6 +375,16 @@ export default function SocialProfileScreen() {
     [posts],
   );
 
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<Post>[] }) => {
+    viewableItems.forEach(({ item }) => {
+      if (!item?.id || recordedViewIdsRef.current.has(item.id)) return;
+      recordedViewIdsRef.current.add(item.id);
+      void MediaApi.recordViewHistory(item.id);
+    });
+  }).current;
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 45, minimumViewTime: 600 }).current;
+
   const hasProfileDetails = Boolean(
     profileUser?.work ||
       profileUser?.location ||
@@ -503,7 +517,7 @@ export default function SocialProfileScreen() {
         )}
       </View>
 
-      <View className="mt-2 border-y px-4 py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+      <View className="mx-4 mt-3 rounded-2xl border px-4 py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
         <Text className="text-[20px] font-black" style={{ color: SOCIAL_COLORS.text }}>Chi tiết</Text>
         <View className="mt-3 gap-3">
           {profileUser?.work ? (
@@ -547,7 +561,7 @@ export default function SocialProfileScreen() {
       </View>
 
       {profileMedia.length ? (
-        <View className="mt-2 border-y py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+        <View className="mx-4 mt-3 rounded-2xl border py-4" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
           <View className="mb-3 flex-row items-center justify-between px-4">
             <Text className="text-[20px] font-black" style={{ color: SOCIAL_COLORS.text }}>Ảnh nổi bật</Text>
             <Text className="text-[14px] font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>{profileMedia.length}</Text>
@@ -567,7 +581,7 @@ export default function SocialProfileScreen() {
         </View>
       ) : null}
 
-      <View className="mt-2 border-y px-4 py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+      <View className="mx-4 mt-3 rounded-2xl border px-4 py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
         <Text className="text-[18px] font-black" style={{ color: SOCIAL_COLORS.text }}>Bài viết</Text>
       </View>
     </View>
@@ -589,6 +603,8 @@ export default function SocialProfileScreen() {
           contentContainerStyle={{ paddingBottom: 32 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={SOCIAL_COLORS.primary} />}
           onScrollBeginDrag={() => setReactionPickerPost(null)}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           ListEmptyComponent={
             <View className="mx-4 mt-8 items-center rounded-xl border px-6 py-10" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
               <Feather name="edit-3" size={30} color={SOCIAL_COLORS.textSoft} />
@@ -637,6 +653,16 @@ export default function SocialProfileScreen() {
         visible={!!reactionsListPost}
         post={reactionsListPost}
         onClose={() => setReactionsListPost(null)}
+      />
+
+      <SharePostModal
+        visible={!!sharePost}
+        post={sharePost}
+        currentUserId={currentUserId}
+        currentUserName={user?.fullName || 'Người dùng'}
+        currentUserAvatar={user?.avatarUrl}
+        onClose={() => setSharePost(null)}
+        onShared={handleSharedPost}
       />
 
       <SocialConfirmModal

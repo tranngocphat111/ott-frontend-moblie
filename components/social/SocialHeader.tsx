@@ -14,6 +14,9 @@ function StoryRail({
   onOpenGroup,
   onCreateStory,
   onAddFriend,
+  onCancelFriend,
+  pendingMap,
+  hiddenIds,
 }: {
   storyGroups: StoryUserGroup[];
   suggestedUsers: StorySuggestedUser[];
@@ -22,10 +25,13 @@ function StoryRail({
   onOpenGroup: (group: StoryUserGroup) => void;
   onCreateStory: () => void;
   onAddFriend: (user: StorySuggestedUser) => void;
+  onCancelFriend?: (userId: string) => void;
+  pendingMap?: Record<string, string>;
+  hiddenIds?: Set<string>;
 }) {
   return (
-    <View className="py-3" style={{ backgroundColor: SOCIAL_COLORS.page }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
+    <View className="pb-3" style={{ backgroundColor: SOCIAL_COLORS.page }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
         <TouchableOpacity
           className="h-44 overflow-hidden rounded-[18px] border"
           style={{ width: 108, backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border, ...SOCIAL_SHADOW }}
@@ -93,43 +99,49 @@ function StoryRail({
           );
         })}
 
-        {suggestedUsers.map((user) => (
-          <View
-            key={user.id}
-            className="h-44 rounded-[18px] border px-2 pb-2 pt-3"
-            style={{ width: 116, backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border, ...SOCIAL_SHADOW }}
-          >
-            <View className="items-center">
-              <View className="h-[68px] w-[68px] items-center justify-center rounded-full p-1" style={{ backgroundColor: SOCIAL_COLORS.chip }}>
-                <Avatar uri={user.avatarUrl} name={user.name} size={60} color={SOCIAL_COLORS.primary} />
-              </View>
-            </View>
-            <View className="mt-2 flex-1 justify-between">
-              <View>
-                <Text
-                  className="text-center text-[12px] font-black leading-4"
-                  style={{ color: SOCIAL_COLORS.text }}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {user.name}
-                </Text>
-                <Text className="mt-0.5 text-center text-[10px] font-semibold" style={{ color: SOCIAL_COLORS.textSoft }} numberOfLines={1}>
-                  Gợi ý cho bạn
-                </Text>
-              </View>
+        {suggestedUsers
+          .filter((user) => !hiddenIds?.has(user.id))
+          .map((user) => {
+            const isPending = !!pendingMap?.[user.id];
+            return (
               <TouchableOpacity
-                className="h-8 flex-row items-center justify-center rounded-full"
-                style={{ backgroundColor: SOCIAL_COLORS.primaryDark }}
-                activeOpacity={0.85}
-                onPress={() => onAddFriend(user)}
+                key={user.id}
+                className="h-44 overflow-hidden rounded-[18px] border"
+                style={{ width: 108, backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border, ...SOCIAL_SHADOW }}
+                activeOpacity={0.86}
               >
-                <Feather name="user-plus" size={13} color="#fff" />
-                <Text className="ml-1 text-[11px] font-black text-white">Thêm</Text>
+                <View className="h-[68%] overflow-hidden bg-gray-100">
+                  {user.avatarUrl ? (
+                    <ExpoImage source={{ uri: user.avatarUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                  ) : (
+                    <View className="h-full w-full items-center justify-center" style={{ backgroundColor: SOCIAL_COLORS.chip }}>
+                      <Avatar name={user.name} size={46} />
+                    </View>
+                  )}
+                </View>
+                <View className="absolute bottom-0 left-0 right-0 px-2 pb-2 pt-1.5" style={{ backgroundColor: SOCIAL_COLORS.card }}>
+                  <Text
+                    className="text-center text-[11px] font-black leading-4"
+                    style={{ color: SOCIAL_COLORS.text }}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {user.name}
+                  </Text>
+                  <TouchableOpacity
+                    className="mt-1 h-6 flex-row items-center justify-center rounded-full"
+                    style={{ backgroundColor: isPending ? SOCIAL_COLORS.chip : SOCIAL_COLORS.primaryDark }}
+                    activeOpacity={0.85}
+                    onPress={() => (isPending ? onCancelFriend?.(user.id) : onAddFriend(user))}
+                  >
+                    <Text className="text-[10px] font-bold" style={{ color: isPending ? SOCIAL_COLORS.textSoft : "#fff" }}>
+                      {isPending ? "Đã gửi" : "Thêm bạn"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
-            </View>
-          </View>
-        ))}
+            );
+          })}
       </ScrollView>
     </View>
   );
@@ -139,16 +151,23 @@ function CreatePostEntry({
   avatarUrl,
   name,
   onPress,
+  onFeelingPress,
   onAvatarPress,
 }: {
   avatarUrl?: string;
   name?: string;
   onPress: () => void;
+  onFeelingPress?: () => void;
   onAvatarPress?: () => void;
 }) {
+  const lastName = String(name || '').trim().split(/\s+/).filter(Boolean).pop();
+
   return (
-    <View className="mb-2 mt-1 border-y p-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
-      <View className="flex-row items-center">
+    <View
+      className="mx-4 mb-3 mt-3 rounded-2xl border p-3"
+      style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border, ...SOCIAL_SHADOW }}
+    >
+      <View className="mb-3 flex-row items-center">
         <TouchableOpacity activeOpacity={0.85} onPress={onAvatarPress}>
           <Avatar uri={avatarUrl} name={name} size={42} />
         </TouchableOpacity>
@@ -158,20 +177,48 @@ function CreatePostEntry({
           activeOpacity={0.8}
           onPress={onPress}
         >
-          <Text className="text-[14px]" style={{ color: SOCIAL_COLORS.textMuted }}>Bạn đang nghĩ gì?</Text>
+          <Text className="text-[14px]" style={{ color: SOCIAL_COLORS.textMuted }}>
+            {lastName ? `${lastName} ơi, bạn đang nghĩ gì vậy?` : 'Bạn đang nghĩ gì vậy?'}
+          </Text>
         </TouchableOpacity>
       </View>
-      <View className="mt-3 flex-row border-t pt-3" style={{ borderColor: SOCIAL_COLORS.border }}>
-        <TouchableOpacity className="flex-1 flex-row items-center justify-center" onPress={onPress}>
+      <View className="flex-row border-t pt-2" style={{ borderColor: SOCIAL_COLORS.border }}>
+        <TouchableOpacity className="flex-1 flex-row items-center justify-center rounded-xl py-2" onPress={onPress}>
+          <Feather name="video" size={18} color={SOCIAL_COLORS.primary} />
+          <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Live</Text>
+        </TouchableOpacity>
+        <TouchableOpacity className="flex-1 flex-row items-center justify-center rounded-xl py-2" onPress={onPress}>
           <Feather name="image" size={18} color={SOCIAL_COLORS.primary} />
           <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Ảnh/video</Text>
         </TouchableOpacity>
-        <TouchableOpacity className="flex-1 flex-row items-center justify-center" onPress={onPress}>
-          <Feather name="edit-3" size={17} color={SOCIAL_COLORS.primaryDark} />
-          <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Bài viết</Text>
+        <TouchableOpacity className="flex-1 flex-row items-center justify-center rounded-xl py-2" onPress={onFeelingPress || onPress}>
+          <Feather name="smile" size={18} color={SOCIAL_COLORS.primary} />
+          <Text className="ml-2 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Cảm xúc</Text>
         </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+function HeaderAction({
+  icon,
+  onPress,
+  primary = false,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  onPress?: () => void;
+  primary?: boolean;
+}) {
+  if (!onPress) return null;
+  return (
+    <TouchableOpacity
+      className="h-9 w-9 items-center justify-center rounded-full"
+      style={{ backgroundColor: primary ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.chip }}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
+      <Feather name={icon} size={primary ? 20 : 17} color={primary ? '#fff' : SOCIAL_COLORS.primaryDark} />
+    </TouchableOpacity>
   );
 }
 
@@ -182,10 +229,18 @@ export function DiscoverHeader({
   suggestedUsers,
   topInset = 0,
   onCreatePost,
+  onCreatePostWithFeeling,
   onCreateStory,
   onOpenStory,
   onAddFriend,
   onOpenCurrentProfile,
+  onOpenSearch,
+  onOpenSaved,
+  onOpenHistory,
+  onOpenRelationships,
+  onCancelFriend,
+  pendingMap,
+  hiddenIds,
 }: {
   userName?: string;
   avatarUrl?: string;
@@ -193,27 +248,45 @@ export function DiscoverHeader({
   suggestedUsers: StorySuggestedUser[];
   topInset?: number;
   onCreatePost: () => void;
+  onCreatePostWithFeeling?: () => void;
   onCreateStory: () => void;
   onOpenStory: (group: StoryUserGroup) => void;
   onAddFriend: (user: StorySuggestedUser) => void;
+  onCancelFriend?: (userId: string) => void;
+  pendingMap?: Record<string, string>;
+  hiddenIds?: Set<string>;
   onOpenCurrentProfile?: () => void;
+  onOpenSearch?: () => void;
+  onOpenSaved?: () => void;
+  onOpenHistory?: () => void;
+  onOpenRelationships?: () => void;
 }) {
   return (
     <View style={{ backgroundColor: SOCIAL_COLORS.page }}>
       <View
-        className="mb-2 border-b px-4 pb-4"
-        style={{ paddingTop: topInset + 12, backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}
+        className="border-b px-4 pb-3"
+        style={{ paddingTop: topInset + 8, backgroundColor: SOCIAL_COLORS.page, borderColor: SOCIAL_COLORS.border }}
       >
         <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-[25px] font-black" style={{ color: SOCIAL_COLORS.text }}>Khám phá</Text>
-            <Text className="mt-0.5 text-sm" style={{ color: SOCIAL_COLORS.textMuted }}>Bảng tin, story và media</Text>
+          <View className="flex-1 pr-3">
+            <Text className="text-[24px] font-black" style={{ color: SOCIAL_COLORS.text }}>Social</Text>
           </View>
-          <TouchableOpacity className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_COLORS.primaryDark }} onPress={onCreatePost}>
-            <Feather name="plus" size={22} color="#fff" />
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            <HeaderAction icon="search" onPress={onOpenSearch} />
+            <HeaderAction icon="bookmark" onPress={onOpenSaved} />
+            <HeaderAction icon="clock" onPress={onOpenHistory} />
+            <HeaderAction icon="users" onPress={onOpenRelationships} />
+            <HeaderAction icon="plus" onPress={onCreatePost} primary />
+          </View>
         </View>
       </View>
+      <CreatePostEntry
+        avatarUrl={avatarUrl}
+        name={userName}
+        onPress={onCreatePost}
+        onFeelingPress={onCreatePostWithFeeling}
+        onAvatarPress={onOpenCurrentProfile}
+      />
       <StoryRail
         storyGroups={storyGroups}
         suggestedUsers={suggestedUsers}
@@ -222,12 +295,9 @@ export function DiscoverHeader({
         onOpenGroup={onOpenStory}
         onCreateStory={onCreateStory}
         onAddFriend={onAddFriend}
-      />
-      <CreatePostEntry
-        avatarUrl={avatarUrl}
-        name={userName}
-        onPress={onCreatePost}
-        onAvatarPress={onOpenCurrentProfile}
+        onCancelFriend={onCancelFriend}
+        pendingMap={pendingMap}
+        hiddenIds={hiddenIds}
       />
     </View>
   );
