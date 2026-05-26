@@ -8,7 +8,8 @@ import {
   View,
 } from "react-native";
 import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
-import { getMessageBodyText, isCallMessageType, isSystemMessageType, isProbablyVietnamese } from "@/utils/chat";
+import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
+import { getMessageTranslationCandidate } from "@/utils/translationDetection";
 import { THEME_COLORS } from "@/constants/theme";
 import {
   CornerUpLeft,
@@ -29,7 +30,7 @@ import {
   Settings,
   Video,
   TextAlignJustify,
-  Sparkles,
+  Languages,
 } from "lucide-react-native";
 import { ChatFileMessage } from "./message-types/ChatFileMessage";
 import { ChatImageMessage } from "./message-types/ChatImageMessage";
@@ -55,6 +56,7 @@ interface ChatMessageBubbleProps {
   translatedText?: string;
   onTranslate?: () => void;
   isTranslating?: boolean;
+  translationUnavailable?: boolean;
 }
 
 const getReactionSummary = (message: ChatMessage) => {
@@ -333,8 +335,22 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   translatedText,
   onTranslate,
   isTranslating = false,
+  translationUnavailable = false,
 }) => {
   const contentText = getMessageBodyText(message);
+  const translationCandidate = useMemo(
+    () => getMessageTranslationCandidate(contentText),
+    [contentText],
+  );
+  const visibleTranslatedText =
+    translatedText?.trim() && translatedText.trim() !== contentText.trim()
+      ? translatedText.trim()
+      : "";
+  const shouldShowTranslation =
+    !isMine &&
+    !message.is_revoked &&
+    !translationUnavailable &&
+    Boolean(visibleTranslatedText || (onTranslate && translationCandidate.shouldOffer));
   const reactions = useMemo(() => getReactionSummary(message), [message]);
   const totalReactionCount = useMemo(
     () => reactions.reduce((sum, [, count]) => sum + count, 0),
@@ -561,16 +577,16 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
                 {contentText}
               </Text>
 
-              {((translatedText || onTranslate) && !isProbablyVietnamese(contentText) && !isMine) && !message.is_revoked && (
+              {shouldShowTranslation && (
                 <View className="mt-2 border-t border-slate-100 pt-2">
-                  {translatedText ? (
+                  {visibleTranslatedText ? (
                     <View className="bg-slate-50/50 rounded-lg p-2 border border-slate-100">
                       <View className="flex-row items-center gap-1.5 mb-1">
-                        <Sparkles size={10} color={THEME_COLORS.primary[500]} />
+                        <Languages size={10} color={THEME_COLORS.primary[500]} />
                         <Text className="text-[10px] font-bold text-primary-600 uppercase tracking-wider">Dịch bởi AI</Text>
                       </View>
                       <Text className="text-[14px] leading-5 text-slate-700 italic">
-                        {translatedText}
+                        {visibleTranslatedText}
                       </Text>
                     </View>
                   ) : (
@@ -579,9 +595,9 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
                       disabled={isTranslating}
                       className="flex-row items-center gap-1.5 opacity-80 active:opacity-100"
                     >
-                      <Sparkles size={12} color={isMine ? "#b78457" : "#64748b"} />
+                      <Languages size={12} color={isMine ? "#b78457" : "#64748b"} />
                       <Text className={`text-[11px] font-semibold ${isMine ? "text-[#b78457]" : "text-slate-500"}`}>
-                        {isTranslating ? "Đang dịch..." : "Dịch tin nhắn"}
+                        {isTranslating ? "Đang dịch..." : "Dịch"}
                       </Text>
                     </Pressable>
                   )}

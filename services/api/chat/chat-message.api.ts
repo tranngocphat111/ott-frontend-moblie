@@ -13,6 +13,14 @@ import type {
   SendMessagePayload,
 } from './chat.types';
 
+export interface ChatTranslationResponse {
+  translatedText: string;
+  detectedLanguage?: string;
+  targetLanguage?: string;
+  shouldTranslate?: boolean;
+  reason?: string;
+}
+
 const S3_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 const sanitizeS3FileName = (fileName: string) => {
@@ -288,7 +296,13 @@ export const chatMessageApi = {
     };
   },
 
-  async translateText(text: string, targetLang: string = 'vi'): Promise<{ translatedText: string }> {
-    return await chatApiClient.post('/ai/translate', { text, targetLang });
+  async translateText(text: string, targetLang: string = 'vi'): Promise<ChatTranslationResponse> {
+    const response = await chatApiClient.post<ChatTranslationResponse>('/ai/translate', { text, targetLang });
+    const payload = (response as any).result || response;
+
+    return {
+      ...(payload as any),
+      translatedText: String((payload as any)?.translatedText || '').trim(),
+    };
   },
 };

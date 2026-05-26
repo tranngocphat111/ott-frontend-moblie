@@ -137,6 +137,7 @@ export default function TabsLayout() {
   );
 
   const renderTabIcon = (name: TabIconName, focusedName: TabIconName, badgeCount = 0) =>
+    // eslint-disable-next-line react/display-name
     ({ focused }: { focused: boolean; color: string; size: number }) => (
       <View
         style={{

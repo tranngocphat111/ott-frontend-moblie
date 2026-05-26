@@ -70,6 +70,7 @@ import {
   getMessageSenderAvatar,
   resolveMediaUrl,
 } from "@/utils/chat";
+import { getMessageTranslationCandidate } from "@/utils/translationDetection";
 import {
   ensureCameraPermission,
   ensureImageLibraryPermission,
@@ -893,6 +894,7 @@ export default function ChatDetailScreen() {
   const [isRecordingSTT, setIsRecordingSTT] = useState(false);
   const sttRecordingRef = useRef<Audio.Recording | null>(null);
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
+  const [translationUnavailableMessages, setTranslationUnavailableMessages] = useState<Record<string, boolean>>({});
   const [translatingMessageId, setTranslatingMessageId] = useState<string | null>(null);
   const lastSmartReplyMessageIdRef = useRef<string | null>(null);
 
@@ -901,6 +903,7 @@ export default function ChatDetailScreen() {
     setSmartReplies([]);
     setIsSmartReplyOpen(false);
     setTranslatedMessages({});
+    setTranslationUnavailableMessages({});
   }, [conversationId]);
 
   const fetchRelationship = useCallback(async () => {
@@ -3294,26 +3297,42 @@ export default function ChatDetailScreen() {
   }, []);
 
   const handleTranslateMessage = useCallback(async (msgId: string) => {
-    if (translatingMessageId === msgId) return;
+    if (translatingMessageId === msgId || translationUnavailableMessages[msgId]) return;
 
     const msg = messages.find(m => getMessageKey(m) === msgId);
     const text = msg ? getMessageBodyText(msg) : "";
     if (!text) return;
 
+    const candidate = getMessageTranslationCandidate(text);
+    if (!candidate.shouldOffer) {
+      setTranslationUnavailableMessages(prev => ({ ...prev, [msgId]: true }));
+      return;
+    }
+
     setTranslatingMessageId(msgId);
     try {
       const response = await ChatApi.translateText(text, 'vi');
-      setTranslatedMessages(prev => ({
-        ...prev,
-        [msgId]: response.translatedText
-      }));
+      const translatedText = response.translatedText?.trim() || "";
+
+      if (!translatedText || response.shouldTranslate === false || translatedText === text.trim()) {
+        setTranslationUnavailableMessages(prev => ({ ...prev, [msgId]: true }));
+        return;
+      }
+
+      setTranslatedMessages(prev => ({ ...prev, [msgId]: translatedText }));
+      setTranslationUnavailableMessages(prev => {
+        if (!prev[msgId]) return prev;
+        const next = { ...prev };
+        delete next[msgId];
+        return next;
+      });
     } catch (error) {
       console.error("Failed to translate message:", error);
-      Alert.alert("Lỗi", "Không thể dịch tin nhắn lúc này.");
+      setTranslationUnavailableMessages(prev => ({ ...prev, [msgId]: true }));
     } finally {
       setTranslatingMessageId(null);
     }
-  }, [translatingMessageId, messages]);
+  }, [translatingMessageId, translationUnavailableMessages, messages]);
   return (
     <SafeAreaView
       className="flex-1 bg-surface-sunken"
@@ -3504,6 +3523,7 @@ export default function ChatDetailScreen() {
               }
               onDeleteConversation={handleDeleteConversationForMe}
               translatedMessages={translatedMessages}
+              translationUnavailableMessages={translationUnavailableMessages}
               onTranslateMessage={handleTranslateMessage}
               translatingMessageId={translatingMessageId}
             />
