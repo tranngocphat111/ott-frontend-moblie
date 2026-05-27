@@ -325,7 +325,7 @@ export default function SocialProfileScreen() {
       if (nextStatus === "REMOVED") {
         setRelationship(null);
       } else if (nextStatus) {
-        setRelationship((prev) => {
+        setRelationship((prev: any | null) => {
           const current = prev || {};
           return {
             ...current,

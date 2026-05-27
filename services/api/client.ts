@@ -125,7 +125,7 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     const apiError: ApiError = {
-      code: getApiErrorCode(error, error.response?.status ?? 500),
+      code: getApiErrorCode(error, error.response?.status ?? 503),
       message: getApiErrorMessage(error, API_CONFIG.BASE_URL),
       details: error.response?.data,
     };
