@@ -60,6 +60,7 @@ type SearchHistoryContact = {
   name: string;
   avatar?: string;
   phone?: string;
+  source?: 'search';
 };
 
 const EMPTY_SEARCH: ChatSearchResult = {
@@ -188,16 +189,25 @@ export default function HomeScreen() {
           const parsedHistory = JSON.parse(storedHistory);
           if (Array.isArray(parsedHistory)) {
             const normalized = parsedHistory
-              .filter((item) => item && typeof item === 'object' && typeof item.user_id === 'string')
+              .filter((item) =>
+                item &&
+                typeof item === 'object' &&
+                item.source === 'search' &&
+                typeof item.user_id === 'string',
+              )
               .map((item) => ({
                 user_id: String(item.user_id),
                 conversation_id: item.conversation_id ? String(item.conversation_id) : undefined,
                 name: String(item.name || item.user_id),
                 avatar: item.avatar ? String(item.avatar) : undefined,
                 phone: item.phone ? String(item.phone) : undefined,
+                source: 'search' as const,
               }))
               .slice(0, 12);
             setRecentContactHistory(normalized);
+            if (normalized.length !== parsedHistory.length) {
+              void AsyncStorage.setItem(SEARCH_CONTACT_HISTORY_KEY, JSON.stringify(normalized));
+            }
           }
         }
 
@@ -222,6 +232,7 @@ export default function HomeScreen() {
         name: String(contact.name || contact.user_id || 'Người dùng'),
         avatar: contact.avatar,
         phone: contact.phone,
+        source: 'search' as const,
       }));
 
     setRecentContactHistory((current) => {
@@ -663,7 +674,12 @@ export default function HomeScreen() {
   const hasSearchQuery = searchText.trim().length > 0;
 
   const openConversation = useCallback(
-    async (conversationId: string, messageId?: string, contactId?: string) => {
+    async (
+      conversationId: string,
+      messageId?: string,
+      contactId?: string,
+      options?: { rememberSearchHistory?: boolean },
+    ) => {
       let targetConvId = conversationId;
       if (!targetConvId && !contactId) return;
 
@@ -781,22 +797,20 @@ export default function HomeScreen() {
         return;
       }
 
-      // Save to history
-      const historyItem = {
-        user_id: targetConv.conversation.type === 'private'
-          ? (targetConv.conversation.participants?.find(p => String(p.user_id) !== String(chatUserId))?.user_id || '')
-          : 'group',
-        name: getConversationTitle(targetConv.conversation, chatUserId),
-        avatar: getConversationAvatar(targetConv.conversation, chatUserId),
-        conversation_id: targetConvId
-      };
+      if (options?.rememberSearchHistory) {
+        const historyUserId = targetConv.conversation.type === 'private'
+          ? (targetConv.conversation.participants?.find(p => String(p.user_id) !== String(chatUserId))?.user_id || contactId || '')
+          : `conversation:${targetConvId}`;
 
-      void rememberSearchContacts([{
-        user_id: historyItem.user_id,
-        name: historyItem.name,
-        avatar: historyItem.avatar,
-        conversation_ids: [targetConvId]
-      } as any]);
+        if (historyUserId) {
+          void rememberSearchContacts([{
+            user_id: historyUserId,
+            name: getConversationTitle(targetConv.conversation, chatUserId),
+            avatar: getConversationAvatar(targetConv.conversation, chatUserId),
+            conversation_ids: [targetConvId],
+          } as any]);
+        }
+      }
 
       const params: any = {
         conversationId: targetConvId,

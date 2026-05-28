@@ -17,7 +17,12 @@ interface HomeSearchPanelProps {
   searchTab: 'all' | 'contacts' | 'conversations' | 'messages' | 'files';
   senderFilter: string;
   searchVisibleCounts: Record<string, number>;
-  onOpenConversation: (conversationId: string, messageId?: string, contactId?: string) => void;
+  onOpenConversation: (
+    conversationId: string,
+    messageId?: string,
+    contactId?: string,
+    options?: { rememberSearchHistory?: boolean },
+  ) => void;
   onLoadMore: (section: 'conversations' | 'messages' | 'files' | 'media') => void;
   searchAvatarByUserId: Record<string, string>;
   searchAvatarByConversationId: Record<string, string>;
@@ -175,7 +180,11 @@ export function HomeSearchPanel({
               {mergedConversationResults.slice(0, searchVisibleCounts.conversations).map((item, index) => (
                 <Pressable
                   key={item.key}
-                  onPress={() => onOpenConversation(item.conversationId || '', undefined, item.contactId)}
+                  onPress={() =>
+                    onOpenConversation(item.conversationId || '', undefined, item.contactId, {
+                      rememberSearchHistory: true,
+                    })
+                  }
                   className={`flex-row items-center px-3 py-3 ${index < Math.min(mergedConversationResults.length, searchVisibleCounts.conversations) - 1 ? 'border-b border-slate-50' : ''}`}
                 >
                   <SearchAvatar label={item.label} avatar={item.avatar} icon={item.icon} />
@@ -202,7 +211,11 @@ export function HomeSearchPanel({
                 .map((item, index) => (
                   <Pressable
                     key={item._id}
-                    onPress={() => onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''))}
+                    onPress={() =>
+                      onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''), undefined, {
+                        rememberSearchHistory: true,
+                      })
+                    }
                     className={`flex-row items-start px-3 py-3 ${index < Math.min((searchResults.messages || []).length, searchVisibleCounts.messages) - 1 ? 'border-b border-slate-50' : ''}`}
                   >
                     <SearchAvatar 
@@ -231,7 +244,11 @@ export function HomeSearchPanel({
               {(searchResults.files || []).slice(0, searchVisibleCounts.files).map((item, index) => (
                 <Pressable
                   key={item._id}
-                  onPress={() => onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''))}
+                  onPress={() =>
+                    onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''), undefined, {
+                      rememberSearchHistory: true,
+                    })
+                  }
                   className="flex-row items-center px-3 py-3 border-b border-slate-50"
                 >
                   <SearchAvatar label="File" icon="file" />
