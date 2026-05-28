@@ -3,6 +3,7 @@ import {
   Alert,
   AppState,
   Image,
+  InteractionManager,
   Keyboard,
   Modal,
   Pressable,
@@ -22,6 +23,7 @@ import { useAuth } from '@/context/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
 import { THEME_COLORS } from '@/constants/theme';
 import { getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
+import { setConversationInfoSnapshot } from '@/utils/conversationInfoCache';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type {
   ChatCategory,
@@ -174,6 +176,7 @@ export default function HomeScreen() {
   const lastConversationsLoadAtRef = useRef(0);
   const loadConversationsRef = useRef<(options?: { force?: boolean }) => Promise<void>>(async () => undefined);
   const suppressSocketRefreshUntilRef = useRef(0);
+  const socketRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
 
@@ -321,9 +324,107 @@ export default function HomeScreen() {
     loadConversationsRef.current = loadConversations;
   }, [loadConversations]);
 
+  const patchMyParticipantCursor = useCallback(
+    (payload: any) => {
+      const changedUserId = String(
+        payload?.userId ||
+        payload?.changedUserId ||
+        payload?.user_id ||
+        payload?.participant?.user_id ||
+        '',
+      ).trim();
+      if (changedUserId && changedUserId !== String(chatUserId)) return true;
+
+      const conversationId = String(
+        payload?.conversationId ||
+        payload?.conversation_id ||
+        payload?.participant?.conversation_id ||
+        '',
+      ).trim();
+      if (!conversationId || !chatUserId) return false;
+
+      const participantPatch =
+        payload?.participant && typeof payload.participant === 'object'
+          ? payload.participant
+          : {};
+      const msgId = String(
+        payload?.msgId ||
+        payload?.msg_id ||
+        payload?.last_read_message_id ||
+        participantPatch?.last_read_message_id ||
+        '',
+      ).trim();
+      const unreadCount = Number(
+        payload?.unreadCount ??
+        payload?.unread_count ??
+        participantPatch?.unread_count,
+      );
+      const shouldClearUnread =
+        payload?.receiptType === 'seen' ||
+        payload?.status === 'seen' ||
+        Boolean(
+          payload?.readAt ||
+          payload?.last_read_at ||
+          payload?.last_read_message_id ||
+          participantPatch?.last_read_at ||
+          participantPatch?.last_read_message_id,
+        );
+
+      let didPatch = false;
+      setItems((current) => {
+        let didChange = false;
+        const next = current.map((item) => {
+          if (String(item.conversation._id || '') !== conversationId) return item;
+
+          didPatch = true;
+          didChange = true;
+          const currentParticipant = item.participant || ({} as any);
+          const nextParticipant: any = {
+            ...currentParticipant,
+            ...participantPatch,
+            settings: {
+              ...(currentParticipant as any).settings,
+              ...(participantPatch as any).settings,
+            },
+          };
+
+          if (msgId && shouldClearUnread) {
+            nextParticipant.last_read_message_id = msgId;
+            nextParticipant.last_read_at =
+              participantPatch?.last_read_at ||
+              payload?.last_read_at ||
+              payload?.readAt ||
+              new Date().toISOString();
+          }
+
+          if (Number.isFinite(unreadCount)) {
+            nextParticipant.unread_count = Math.max(0, unreadCount);
+          } else if (shouldClearUnread) {
+            nextParticipant.unread_count = 0;
+          }
+
+          return {
+            ...item,
+            participant: nextParticipant,
+          };
+        });
+
+        return didChange ? next : current;
+      });
+
+      return didPatch;
+    },
+    [chatUserId],
+  );
+
   useFocusEffect(
     useCallback(() => {
-      void loadConversationsRef.current({ force: true });
+      suppressSocketRefreshUntilRef.current = Date.now() + 1800;
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadConversationsRef.current({ force: true });
+      });
+
+      return () => task.cancel();
     }, []),
   );
 
@@ -353,19 +454,21 @@ export default function HomeScreen() {
     chatSocket.joinUserRoom(chatUserId);
 
     const refreshInbox = () => {
-      // Only refresh if the home screen is active
       if (!isFocused) return;
-
       if (Date.now() < suppressSocketRefreshUntilRef.current) {
         return;
       }
-      void loadConversationsRef.current();
+      if (socketRefreshTimerRef.current) return;
+
+      socketRefreshTimerRef.current = setTimeout(() => {
+        socketRefreshTimerRef.current = null;
+        void loadConversationsRef.current();
+      }, 350);
     };
     const refreshMyReadState = (payload: any) => {
-      const changedUserId = String(
-        payload?.userId || payload?.changedUserId || payload?.participant?.user_id || '',
-      );
-      if (changedUserId && changedUserId !== String(chatUserId)) return;
+      const patched = patchMyParticipantCursor(payload);
+      if (patched) return;
+
       refreshInbox();
     };
 
@@ -385,6 +488,11 @@ export default function HomeScreen() {
     chatSocket.on('cap_nhat_quan_he', refreshInbox);
 
     return () => {
+      if (socketRefreshTimerRef.current) {
+        clearTimeout(socketRefreshTimerRef.current);
+        socketRefreshTimerRef.current = null;
+      }
+
       chatSocket.off('tin_nhan', refreshInbox);
       chatSocket.off('conversation_read_synced', refreshMyReadState);
       chatSocket.off('participant_cursor_changed', refreshMyReadState);
@@ -400,7 +508,7 @@ export default function HomeScreen() {
       chatSocket.off('giai_tan_nhom', refreshInbox);
       chatSocket.off('cap_nhat_quan_he', refreshInbox);
     };
-  }, [chatUserId, isFocused]);
+  }, [chatUserId, isFocused, patchMyParticipantCursor]);
 
   useEffect(() => {
     const keyword = searchText.trim();
@@ -818,6 +926,12 @@ export default function HomeScreen() {
         avatar: getConversationAvatar(targetConv.conversation, chatUserId)
       };
       if (messageId) params.highlightedMessageId = messageId;
+
+      setConversationInfoSnapshot(targetConvId, {
+        conversation: targetConv.conversation,
+        participant: targetConv.participant,
+        members: targetConv.conversation.participants,
+      });
 
       router.push({
         pathname: '/chat/[conversationId]',

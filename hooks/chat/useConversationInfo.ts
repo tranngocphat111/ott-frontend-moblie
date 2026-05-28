@@ -1,14 +1,32 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { ChatApi } from '@/services/api';
 import type { ChatConversationWithParticipant, ChatMessage } from '@/types/entities/chat';
 import type { ChatCategory, ChatLinkMessage } from '@/services/api/chat';
+import {
+  getConversationInfoSnapshot,
+  setConversationInfoSnapshot,
+  type ConversationInfoSnapshot,
+} from '@/utils/conversationInfoCache';
+
+const getSnapshotMembers = (snapshot: ConversationInfoSnapshot | null) => {
+  if (Array.isArray(snapshot?.members)) return snapshot.members;
+  if (Array.isArray(snapshot?.conversation?.participants)) {
+    return snapshot.conversation.participants;
+  }
+  return [];
+};
 
 export function useConversationInfo(conversationId: string | undefined, userIdForChat: string | undefined) {
-  const [loading, setLoading] = useState(true);
-  const [conversation, setConversation] = useState<ChatConversationWithParticipant['conversation'] | null>(null);
-  const [participant, setParticipant] = useState<ChatConversationWithParticipant['participant'] | null>(null);
-  const [members, setMembers] = useState<any[]>([]);
+  const initialSnapshotRef = useRef(getConversationInfoSnapshot(conversationId));
+  const [loading, setLoading] = useState(() => !initialSnapshotRef.current?.conversation);
+  const [conversation, setConversation] = useState<ChatConversationWithParticipant['conversation'] | null>(
+    () => initialSnapshotRef.current?.conversation ?? null,
+  );
+  const [participant, setParticipant] = useState<ChatConversationWithParticipant['participant'] | null>(
+    () => initialSnapshotRef.current?.participant ?? null,
+  );
+  const [members, setMembers] = useState<any[]>(() => getSnapshotMembers(initialSnapshotRef.current));
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [categories, setCategories] = useState<ChatCategory[]>([]);
   const [pinnedMessages, setPinnedMessages] = useState<ChatMessage[]>([]);
@@ -17,6 +35,29 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
   const [linkMessages, setLinkMessages] = useState<ChatLinkMessage[]>([]);
   const [voiceMessages, setVoiceMessages] = useState<ChatMessage[]>([]);
   const [isDissolved, setIsDissolved] = useState(false);
+
+  useEffect(() => {
+    const snapshot = getConversationInfoSnapshot(conversationId);
+    if (!snapshot) {
+      setConversation(null);
+      setParticipant(null);
+      setMembers([]);
+      setLoading(true);
+      return;
+    }
+
+    setConversation(snapshot.conversation ?? null);
+    setParticipant(snapshot.participant ?? null);
+
+    const snapshotMembers = getSnapshotMembers(snapshot);
+    if (snapshotMembers.length > 0) {
+      setMembers(snapshotMembers);
+    }
+
+    if (snapshot.conversation) {
+      setLoading(false);
+    }
+  }, [conversationId]);
 
   const loadInfo = useCallback(async () => {
     if (!conversationId || !userIdForChat) return;
@@ -38,10 +79,16 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
       const selected = (conversations || []).find(
         (item) => item.conversation._id === conversationId,
       );
+      const cachedSnapshot = getConversationInfoSnapshot(conversationId);
+      const nextConversation = selected?.conversation || cachedSnapshot?.conversation || null;
+      const nextParticipant = selected?.participant || cachedSnapshot?.participant || null;
+      const nextMembers = Array.isArray(membersData)
+        ? membersData
+        : getSnapshotMembers(cachedSnapshot);
 
-      setConversation(selected?.conversation || null);
-      setParticipant(selected?.participant || null);
-      setMembers(Array.isArray(membersData) ? membersData : []);
+      setConversation(nextConversation);
+      setParticipant(nextParticipant);
+      setMembers(nextMembers);
       setAllUsers(Array.isArray(usersData) ? usersData : []);
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
       setPinnedMessages(Array.isArray(pinnedData) ? pinnedData : []);
@@ -58,6 +105,12 @@ export function useConversationInfo(conversationId: string | undefined, userIdFo
         String(m.system_meta?.action || '').toLowerCase() === 'group_dissolved'
       );
       setIsDissolved(!!dissolveMsg);
+
+      setConversationInfoSnapshot(conversationId, {
+        conversation: nextConversation,
+        participant: nextParticipant,
+        members: nextMembers,
+      });
     } catch (error) {
       console.error('Failed to load chat info:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin hội thoại');

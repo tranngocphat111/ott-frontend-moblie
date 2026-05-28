@@ -10,6 +10,7 @@ import {
   Alert,
   FlatList,
   Image,
+  InteractionManager,
   Linking,
   Modal,
   Pressable,
@@ -189,7 +190,15 @@ const isImageMessage = (message: ChatMessage) => {
 export default function ChatInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const {
+    conversationId,
+    title: paramTitle,
+    avatar: paramAvatar,
+  } = useLocalSearchParams<{
+    conversationId: string;
+    title?: string;
+    avatar?: string;
+  }>();
   const { user, chatUserId } = useAuth();
 
   const userIdForChat = chatUserId || user?.id;
@@ -224,8 +233,12 @@ export default function ChatInfoScreen() {
   });
 
   // Derived state
-  const title = getConversationTitle(conversation, userIdForChat);
-  const avatar = getConversationAvatar(conversation, userIdForChat);
+  const title = conversation
+    ? getConversationTitle(conversation, userIdForChat)
+    : String(paramTitle || "Tin nhắn");
+  const avatar = conversation
+    ? getConversationAvatar(conversation, userIdForChat)
+    : String(paramAvatar || "");
   const isGroup = conversation?.type === "group";
   const isMyDocuments = Boolean(
     conversation?.is_self_conversation ||
@@ -707,7 +720,11 @@ export default function ChatInfoScreen() {
   // Setup focus
   useFocusEffect(
     useCallback(() => {
-      void loadInfo();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadInfo();
+      });
+
+      return () => task.cancel();
     }, [loadInfo]),
   );
 

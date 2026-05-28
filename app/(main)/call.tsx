@@ -155,6 +155,10 @@ const getCallErrorMessage = (error: unknown) => {
     return 'Cuộc gọi này đã kết thúc hoặc không còn tồn tại.';
   }
 
+  if (/already_joined_elsewhere|stale_device_ignored/i.test(reason)) {
+    return 'Cuộc gọi này đã được nhận trên thiết bị khác.';
+  }
+
   if (/already_active/i.test(reason)) {
     return 'Cuộc gọi nhóm đang diễn ra. Hãy bấm tham gia lại sau vài giây.';
   }
@@ -445,6 +449,33 @@ export default function CallScreen() {
       },
     ]);
   }, [busyUserIds.length, endCall, router]);
+
+  useEffect(() => {
+    const handleAnsweredElsewhere = (payload: {
+      conversationId?: string;
+      callId?: string;
+      userId?: string;
+    }) => {
+      if (String(payload?.userId || '') !== String(userId || '')) return;
+      if (String(payload?.conversationId || '') !== String(conversationId || '')) return;
+      const activeCallId = currentCallId || callId;
+      if (
+        activeCallId &&
+        payload?.callId &&
+        String(payload.callId) !== String(activeCallId)
+      ) {
+        return;
+      }
+
+      void endCall(false);
+      setCallError('Cuộc gọi này đã được nhận trên thiết bị khác.');
+    };
+
+    chatSocket.on('cuoc_goi_da_nhan_o_thiet_bi_khac', handleAnsweredElsewhere as any);
+    return () => {
+      chatSocket.off('cuoc_goi_da_nhan_o_thiet_bi_khac', handleAnsweredElsewhere as any);
+    };
+  }, [callId, conversationId, currentCallId, endCall, userId]);
 
   const shouldRunTimer = isInCall && (hasRemoteAnswered || isGroup);
 
