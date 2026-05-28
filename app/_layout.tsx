@@ -1,6 +1,6 @@
-import { Stack } from 'expo-router';
-import { router, usePathname } from 'expo-router';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import { router, Stack, usePathname } from 'expo-router';
+import type { NotificationResponse } from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
@@ -22,6 +22,8 @@ import LoadingScreen from '@/components/common/LoadingScreen';
 import { setSystemBackgroundAsync } from '@/utils/useSystemBackground';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const isRunningInExpoGo = Constants.appOwnership === 'expo';
 
 const hasStoredAuthSession = async () => {
   const [accessToken, refreshToken] = await Promise.all([
@@ -126,7 +128,12 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    const openNotificationTarget = async (response?: Notifications.NotificationResponse | null) => {
+    if (isRunningInExpoGo) return;
+
+    let cancelled = false;
+    let subscription: { remove: () => void } | undefined;
+
+    const openNotificationTarget = async (response?: NotificationResponse | null) => {
       if (!(await hasStoredAuthSession())) return;
 
       const data = response?.notification.request.content.data || {};
@@ -143,18 +150,29 @@ export default function RootLayout() {
       router.push('/(main)/(tabs)/home' as any);
     };
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      void openNotificationTarget(response);
-    });
+    const setupNotificationNavigation = async () => {
+      const Notifications = await import('expo-notifications').catch((error) => {
+        console.warn('[Notifications] Listener unavailable:', error?.message || error);
+        return null;
+      });
+      if (!Notifications || cancelled) return;
 
-    void Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        if (response) void openNotificationTarget(response);
-      })
-      .catch(() => undefined);
+      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        void openNotificationTarget(response);
+      });
+
+      void Notifications.getLastNotificationResponseAsync()
+        .then((response) => {
+          if (response) void openNotificationTarget(response);
+        })
+        .catch(() => undefined);
+    };
+
+    void setupNotificationNavigation();
 
     return () => {
-      subscription.remove();
+      cancelled = true;
+      subscription?.remove();
     };
   }, []);
 

@@ -6,8 +6,12 @@ const GOOGLE_MOBILE_REDIRECT_URI = AuthSession.makeRedirectUri({
   path: 'auth/google',
 });
 
+const DEFAULT_API_BASE_URL = 'http://13.215.227.27/riff/api';
+const normalizeBaseUrl = (value?: string) =>
+  (value?.trim() || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+
 export const API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.8:8080/riff/api',
+  BASE_URL: normalizeBaseUrl(process.env.EXPO_PUBLIC_API_URL),
   TIMEOUT: Number(process.env.EXPO_PUBLIC_TIMEOUT) || 30000,
   HEADERS: {
     'Content-Type': 'application/json',
