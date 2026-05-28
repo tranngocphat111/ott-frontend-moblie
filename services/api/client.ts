@@ -8,6 +8,8 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { ApiError, ApiResponse, DeviceType } from '../../types';
 
+const shouldLogNetwork = typeof __DEV__ !== 'undefined' && __DEV__;
+
 const getApiErrorMessage = (
   error: AxiosError<ApiResponse | Record<string, unknown>>,
   fallbackBaseUrl: string
@@ -45,6 +47,88 @@ export const chatApiClient: AxiosInstance = axios.create({
   headers: CHAT_API_CONFIG.HEADERS,
 });
 
+let cachedAccessToken: string | null | undefined;
+let cachedRefreshToken: string | null | undefined;
+let accessTokenReadPromise: Promise<string | null> | null = null;
+let refreshTokenReadPromise: Promise<string | null> | null = null;
+
+const readSecureToken = (
+  key: 'accessToken' | 'refreshToken',
+  assign: (token: string | null) => void,
+  getPending: () => Promise<string | null> | null,
+  setPending: (promise: Promise<string | null> | null) => void,
+) => {
+  const pending = getPending();
+  if (pending) return pending;
+
+  const promise = SecureStore.getItemAsync(key)
+    .then((token) => {
+      assign(token);
+      return token;
+    })
+    .finally(() => setPending(null));
+
+  setPending(promise);
+  return promise;
+};
+
+export const authTokenStore = {
+  getAccessToken: async () => {
+    if (cachedAccessToken !== undefined) return cachedAccessToken;
+
+    return readSecureToken(
+      'accessToken',
+      (token) => {
+        cachedAccessToken = token;
+      },
+      () => accessTokenReadPromise,
+      (promise) => {
+        accessTokenReadPromise = promise;
+      },
+    );
+  },
+
+  getRefreshToken: async () => {
+    if (cachedRefreshToken !== undefined) return cachedRefreshToken;
+
+    return readSecureToken(
+      'refreshToken',
+      (token) => {
+        cachedRefreshToken = token;
+      },
+      () => refreshTokenReadPromise,
+      (promise) => {
+        refreshTokenReadPromise = promise;
+      },
+    );
+  },
+
+  setTokens: async (accessToken: string, refreshToken: string) => {
+    cachedAccessToken = accessToken;
+    cachedRefreshToken = refreshToken;
+    accessTokenReadPromise = null;
+    refreshTokenReadPromise = null;
+
+    await Promise.all([
+      SecureStore.setItemAsync('accessToken', accessToken),
+      SecureStore.setItemAsync('refreshToken', refreshToken),
+    ]);
+  },
+
+  clearTokens: async () => {
+    cachedAccessToken = null;
+    cachedRefreshToken = null;
+    accessTokenReadPromise = null;
+    refreshTokenReadPromise = null;
+
+    await Promise.all([
+      SecureStore.deleteItemAsync('accessToken'),
+      SecureStore.deleteItemAsync('refreshToken'),
+      SecureStore.deleteItemAsync('mockChatUserId'),
+    ]);
+  },
+};
+
 const AUTH_HEADER_SKIP_ROUTES = [
   '/auth/login',
   '/auth/google',
@@ -61,7 +145,7 @@ const shouldSkipAuthHeader = (url?: string) =>
 
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    const token = await SecureStore.getItemAsync('accessToken');
+    const token = await authTokenStore.getAccessToken();
     if (token && config.headers && !shouldSkipAuthHeader(config.url)) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -72,7 +156,7 @@ apiClient.interceptors.request.use(
 
 chatApiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    const token = await SecureStore.getItemAsync('accessToken');
+    const token = await authTokenStore.getAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -114,6 +198,7 @@ const shouldClearSessionAfterRefreshFailure = (error: unknown) => {
 };
 
 const clearStoredTokensAndLogout = async () => {
+  await authTokenStore.clearTokens();
   await triggerLogout();
 };
 
@@ -130,17 +215,19 @@ apiClient.interceptors.response.use(
       details: error.response?.data,
     };
 
-    console.log('API Error:', {
-      method: originalRequest?.method,
-      url: originalRequest?.url,
-      status: error.response?.status,
-      baseURL: originalRequest?.baseURL,
-      data: error.response?.data,
-      message: error.message,
-    });
+    if (shouldLogNetwork) {
+      console.log('API Error:', {
+        method: originalRequest?.method,
+        url: originalRequest?.url,
+        status: error.response?.status,
+        baseURL: originalRequest?.baseURL,
+        data: error.response?.data,
+        message: error.message,
+      });
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      const refreshToken = await authTokenStore.getRefreshToken();
 
       // Skip refresh cho các route public
       if (shouldSkipAuthHeader(originalRequest.url)) {
@@ -148,6 +235,7 @@ apiClient.interceptors.response.use(
       }
 
       if (!refreshToken) {
+        await authTokenStore.clearTokens();
         await triggerLogout();
         return Promise.reject(apiError);
       }
@@ -181,8 +269,7 @@ apiClient.interceptors.response.use(
           throw new Error('Invalid refresh response');
         }
 
-        await SecureStore.setItemAsync('accessToken', newToken);
-        await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+        await authTokenStore.setTokens(newToken, newRefreshToken);
 
         onRefreshed(newToken);
 
@@ -205,7 +292,9 @@ apiClient.interceptors.response.use(
 
 chatApiClient.interceptors.response.use(
   (response) => {
-    console.log('✅ CHAT API Success:', response.config.url, response.status);
+    if (shouldLogNetwork) {
+      console.log('✅ CHAT API Success:', response.config.url, response.status);
+    }
     return response.data;
   },
   async (error: AxiosError<ApiResponse | Record<string, unknown>>) => {
@@ -213,9 +302,10 @@ chatApiClient.interceptors.response.use(
 
     // Handle 401 with refresh token logic (same as apiClient)
     if (error.response?.status === 401 && !originalRequest._retry) {
-      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      const refreshToken = await authTokenStore.getRefreshToken();
 
       if (!refreshToken) {
+        await authTokenStore.clearTokens();
         await triggerLogout();
         return Promise.reject({
           code: 401,
@@ -251,8 +341,7 @@ chatApiClient.interceptors.response.use(
           throw new Error('Invalid refresh response');
         }
 
-        await SecureStore.setItemAsync('accessToken', newToken);
-        await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+        await authTokenStore.setTokens(newToken, newRefreshToken);
 
         onRefreshed(newToken);
 
@@ -282,7 +371,9 @@ chatApiClient.interceptors.response.use(
       /toi da 3|tối đa 3|gioi han 3|giới hạn 3/i.test(errorPayload);
 
     if (!isPinLimitError) {
-      console.log('❌ CHAT API Error:', error.config?.url, 'Status:', error.response?.status);
+      if (shouldLogNetwork) {
+        console.log('❌ CHAT API Error:', error.config?.url, 'Status:', error.response?.status);
+      }
     }
 
     const isNetworkError = !error.response;

@@ -250,7 +250,7 @@ export default function HomeScreen() {
     } finally {
       setLoadingUsers(false);
     }
-  }, [chatUserId, isFocused]);
+  }, [chatUserId]);
 
   useEffect(() => {
     void loadChatUsers();
@@ -265,11 +265,7 @@ export default function HomeScreen() {
 
     if (loadConversationsPromiseRef.current) {
       await loadConversationsPromiseRef.current;
-      // After waiting for a previous request, check the throttle again
-      const afterWaitNow = Date.now();
-      if (!force && afterWaitNow - lastConversationsLoadAtRef.current < 1500) {
-        return;
-      }
+      return;
     }
 
     const task = (async () => {

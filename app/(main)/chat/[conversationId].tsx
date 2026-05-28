@@ -1779,57 +1779,30 @@ export default function ChatDetailScreen() {
       }
 
       const payload = await MediaLibrary.getAssetsAsync({
-        first: 90,
+        first: 42,
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       });
 
-      const resolvedAssets = await Promise.all(
-        (payload.assets || []).map(async (asset) => {
-          try {
-            const detail = await MediaLibrary.getAssetInfoAsync(asset.id);
-            const uri = detail.localUri || asset.uri;
-            let thumbnailUri: string | undefined;
+      const resolvedAssets = (payload.assets || []).map((asset) => {
+        if (asset.mediaType === "video" && asset.uri) {
+          void VideoThumbnails.getThumbnailAsync(asset.uri, {
+            time: 50,
+            quality: 0.35,
+          }).then(res => {
+            setMediaAssets(prev => prev.map(a => a.id === asset.id ? { ...a, thumbnailUri: res.uri } : a));
+          }).catch(() => undefined);
+        }
 
-            if (asset.mediaType === "video") {
-              try {
-                // Ensure we have a renderable URI for VideoThumbnails
-                const thumbSource = detail.localUri || asset.uri;
-                if (thumbSource) {
-                  // Try to generate thumbnail with a very small offset for speed
-                  VideoThumbnails.getThumbnailAsync(thumbSource, {
-                    time: 50,
-                    quality: 0.4,
-                  }).then(res => {
-                    setMediaAssets(prev => prev.map(a => a.id === asset.id ? { ...a, thumbnailUri: res.uri } : a));
-                  }).catch(() => {
-                    // Fallback: use uri directly if thumbnail fails
-                  });
-                }
-              } catch (e) {
-                console.warn("Could not generate video thumbnail for asset:", asset.id, e);
-              }
-            }
-
-            return {
-              id: asset.id,
-              mediaType: asset.mediaType,
-              filename: asset.filename,
-              uri,
-              thumbnailUri,
-              width: asset.width,
-              height: asset.height,
-            };
-          } catch {
-            return {
-              id: asset.id,
-              mediaType: asset.mediaType,
-              filename: asset.filename,
-              uri: asset.uri,
-            };
-          }
-        }),
-      );
+        return {
+          id: asset.id,
+          mediaType: asset.mediaType,
+          filename: asset.filename,
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+        };
+      });
 
       setMediaAssets(resolvedAssets.filter((item) => !!item.uri));
     } catch (error) {
@@ -2561,7 +2534,6 @@ export default function ChatDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadConversation();
-      void loadRecentMedia(true);
 
       // Handle highlighting from search results
       if (searchHighlightedMessageId) {
@@ -2572,7 +2544,7 @@ export default function ChatDetailScreen() {
       }
 
       return cleanupHighlight;
-    }, [loadConversation, cleanupHighlight, loadRecentMedia, searchHighlightedMessageId, highlightMessage]),
+    }, [loadConversation, cleanupHighlight, searchHighlightedMessageId, highlightMessage]),
   );
 
   useEffect(() => {
