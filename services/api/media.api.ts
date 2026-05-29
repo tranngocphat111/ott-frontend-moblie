@@ -46,11 +46,15 @@ export interface Post {
   likes: number;
   comments: number;
   shares: number;
+  status?: string;
   visibility?: string;
   relationship?: 'self' | 'friend' | 'friend-of-friend' | 'stranger';
   relationshipLabel?: string;
   accessControls?: AccessControl[];
   sharedPost?: Post;
+  sharedPostDeleted?: boolean;
+  sharedPostRestricted?: boolean;
+  sharedPostCollapsed?: boolean;
 }
 
 export interface StoryContentItem {
@@ -133,6 +137,10 @@ export interface ApiPost {
   hashTags: string[] | null;
   accessControls?: AccessControl[];
   sharedPost?: ApiPost | null;
+  status?: string;
+  sharedPostDeleted?: boolean;
+  sharedPostRestricted?: boolean;
+  sharedPostCollapsed?: boolean;
 }
 
 export interface PostsPage {
@@ -186,6 +194,7 @@ export interface Comment {
   parentId?: string;
   depth: number;
   isEdited: boolean;
+  isDeleted?: boolean;
   time: string;
   totalReplies: number;
 }
@@ -352,6 +361,12 @@ const AVATAR_COLORS = [
 const colorFor = (index: number) => AVATAR_COLORS[index % AVATAR_COLORS.length];
 const MEDIA_ROOT = `${MEDIA_CONFIG.BASE_URL.replace(/\/$/, '')}/`;
 
+const normalizeStatus = (value?: string | null) => String(value || '').trim().toUpperCase();
+
+const isDeletedStatus = (value?: string | null) => normalizeStatus(value) === 'DELETED';
+
+const filterActivePosts = (posts: ApiPost[]) => posts.filter((post) => !isDeletedStatus(post.status));
+
 const mediaPath = (path: string) => `/media${path.startsWith('/') ? path : `/${path}`}`;
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -455,10 +470,14 @@ export const mapPost = (post: ApiPost, colorIndex: number, currentUserId?: strin
     likes: post.totalReactions ?? 0,
     comments: post.totalComments ?? 0,
     shares: post.totalShares ?? 0,
+    status: post.status,
     visibility: post.visibility,
     relationship: post.accountId === currentUserId ? 'self' : undefined,
     accessControls: post.accessControls,
     sharedPost: post.sharedPost && depth < 3 ? mapPost(post.sharedPost, colorIndex + 1, currentUserId, depth + 1) : undefined,
+    sharedPostDeleted: post.sharedPostDeleted,
+    sharedPostRestricted: post.sharedPostRestricted,
+    sharedPostCollapsed: post.sharedPostCollapsed,
   };
 };
 
@@ -471,6 +490,7 @@ export const mapComment = (comment: ApiComment): Comment => ({
   parentId: comment.parentCommentId ?? undefined,
   depth: comment.depth,
   isEdited: comment.edited,
+  isDeleted: comment.deleted,
   time: relativeTime(comment.createdAt ?? new Date().toISOString()),
   totalReplies: comment.totalReplies ?? 0,
 });
@@ -514,7 +534,7 @@ const appendUploadFiles = (
 export const fetchPosts = async (currentUserId?: string): Promise<Post[] | null> => {
   try {
     const payload = await (apiClient.get as any)(mediaPath('/posts'));
-    const raw = unwrapList<ApiPost>(payload);
+    const raw = filterActivePosts(unwrapList<ApiPost>(payload));
     if (!raw.length) return null;
 
     const colorMap = new Map<string, number>();
@@ -545,7 +565,7 @@ export const fetchPostsWithPage = async (
 
     const colorMap = new Map<string, number>();
     let colorIndex = 0;
-    const content = unwrapList<ApiPost>(data.content ?? []);
+    const content = filterActivePosts(unwrapList<ApiPost>(data.content ?? []));
     const posts = content.map((post) => {
       if (!colorMap.has(post.accountId)) colorMap.set(post.accountId, colorIndex++);
       return mapPost(post, colorMap.get(post.accountId)!, currentUserId);
@@ -579,7 +599,7 @@ export const findPostsWithAuthorized = async (
 
     const colorMap = new Map<string, number>();
     let colorIndex = 0;
-    const content = unwrapList<ApiPost>(data.content ?? []);
+    const content = filterActivePosts(unwrapList<ApiPost>(data.content ?? []));
     const posts = content.map((post) => {
       if (!colorMap.has(post.accountId)) colorMap.set(post.accountId, colorIndex++);
       return mapPost(post, colorMap.get(post.accountId)!, currentUserId);
@@ -599,8 +619,10 @@ export const findPostsWithAuthorized = async (
 
 export const fetchPostsByUser = async (userId: string, currentUserId?: string): Promise<Post[]> => {
   try {
-    const payload = await (apiClient.get as any)(mediaPath(`/posts/user/${userId}`));
-    return unwrapList<ApiPost>(payload)
+    const payload = await (apiClient.get as any)(mediaPath(`/posts/user/${userId}`), {
+      params: currentUserId ? { viewerId: currentUserId } : undefined,
+    });
+    return filterActivePosts(unwrapList<ApiPost>(payload))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .map((post, index) => mapPost(post, index, currentUserId));
   } catch {
@@ -610,9 +632,12 @@ export const fetchPostsByUser = async (userId: string, currentUserId?: string): 
 
 export const fetchPostById = async (postId: string, currentUserId?: string): Promise<Post | null> => {
   try {
-    const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}`));
+    const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}`), {
+      params: currentUserId ? { viewerId: currentUserId } : undefined,
+    });
     const post = unwrapApiResult<ApiPost>(payload);
-    return post ? mapPost(post, 0, currentUserId) : null;
+    if (!post || isDeletedStatus(post.status)) return null;
+    return mapPost(post, 0, currentUserId);
   } catch {
     return null;
   }
@@ -633,7 +658,9 @@ export const searchPosts = async (
       params: { q: query.trim(), viewerId: currentUserId, page, size, sort: 'createdAt,desc' },
     });
     const data = unwrapApiResult<SpringPage<ApiPost>>(payload);
-    const content = data ? unwrapList<ApiPost>(data.content ?? []) : unwrapList<ApiPost>(payload);
+    const content = filterActivePosts(
+      data ? unwrapList<ApiPost>(data.content ?? []) : unwrapList<ApiPost>(payload),
+    );
     const posts = content.map((post, index) => mapPost(post, index, currentUserId));
 
     return {
@@ -726,7 +753,21 @@ export const deletePost = async (postId: string): Promise<boolean> => {
     await (apiClient.delete as any)(mediaPath(`/posts/${postId}`));
     return true;
   } catch (error: any) {
-    return error?.code === 404 || error?.response?.status === 404;
+    const status = error?.code ?? error?.response?.status;
+    if (status === 404) return true;
+
+    if (status === 500) {
+      try {
+        const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}`));
+        const post = unwrapApiResult<ApiPost>(payload);
+        return !post || isDeletedStatus(post.status);
+      } catch (probeError: any) {
+        const probeStatus = probeError?.code ?? probeError?.response?.status;
+        if (probeStatus === 404) return true;
+      }
+    }
+
+    return false;
   }
 };
 
@@ -833,7 +874,7 @@ const fetchRootCommentsFallback = async (postId: string, page: number, size: num
     const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}/comments`));
     const raw = unwrapList<ApiComment>(payload);
     const roots = raw
-      .filter((comment) => !comment.deleted && !comment.parentCommentId)
+      .filter((comment) => !comment.parentCommentId)
       .map(mapComment);
     const start = page * size;
     return {
@@ -856,7 +897,6 @@ export const fetchRootComments = async (postId: string, page = 0, size = 20): Pr
     const data = unwrapApiResult<SpringPage<ApiComment>>(payload);
     if (!data) return fetchRootCommentsFallback(postId, page, size);
     const comments = unwrapList<ApiComment>(data.content ?? [])
-      .filter((comment) => !comment.deleted)
       .map(mapComment);
     return {
       comments,
@@ -878,7 +918,6 @@ export const fetchReplies = async (commentId: string, page = 0, size = 10): Prom
     const data = unwrapApiResult<SpringPage<ApiComment>>(payload);
     if (!data) return emptyCommentPage(page);
     const comments = unwrapList<ApiComment>(data.content ?? [])
-      .filter((comment) => !comment.deleted)
       .map(mapComment);
     return {
       comments,

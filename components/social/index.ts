@@ -10,3 +10,4 @@ export { SocialConfirmModal, type SocialConfirmAction } from './SocialConfirmMod
 export { SocialStoryCard } from './SocialStoryCard';
 export { StoryViewerModal } from './StoryViewerModal';
 export { SOCIAL_COLORS } from './socialTheme';
+export * from './SocialProfile';

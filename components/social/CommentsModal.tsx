@@ -13,12 +13,14 @@ export function CommentsModal({
   currentUserId,
   onClose,
   onCountChange,
+  renderHeader,
 }: {
   visible: boolean;
   post: Post | null;
   currentUserId?: string;
   onClose: () => void;
   onCountChange: (postId: string, delta: number) => void;
+  renderHeader?: (post: Post) => React.ReactNode;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [page, setPage] = useState(0);
@@ -120,15 +122,102 @@ export function CommentsModal({
     const comment = pendingDeleteComment;
     const ok = await MediaApi.deleteComment(post.id, comment.id);
     if (!ok) return;
-    setComments((prev) => prev.filter((item) => item.id !== comment.id));
-    setRepliesByParent((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((parentId) => {
-        next[parentId] = next[parentId].filter((item) => item.id !== comment.id);
+
+    if (comment.parentId) {
+      setRepliesByParent((prev) => {
+        const next = { ...prev };
+        if (next[comment.parentId]) {
+          next[comment.parentId] = next[comment.parentId].filter((item) => item.id !== comment.id);
+        }
+        return next;
       });
-      return next;
-    });
+      setComments((prev) =>
+        prev.map((item) =>
+          item.id === comment.parentId ? { ...item, totalReplies: Math.max(0, item.totalReplies - 1) } : item
+        )
+      );
+    } else {
+      setComments((prev) => prev.filter((item) => item.id !== comment.id));
+    }
+    
+    setPendingDeleteComment(null);
     onCountChange(post.id, -1);
+  };
+
+  const renderComment = (comment: Comment, depth: number) => {
+    const replies = repliesByParent[comment.id] || [];
+    const isRoot = depth === 0;
+
+    // Cap indentation visual depth to avoid going off screen
+    const containerClass = isRoot ? "mb-4" : (depth > 2 ? "ml-4 mt-3" : "ml-12 mt-3");
+    
+    return (
+      <View key={comment.id} className={containerClass}>
+        {comment.isDeleted ? (
+          <View className="flex-row">
+            <View className={`rounded-full items-center justify-center border border-gray-200 bg-gray-100 ${isRoot ? 'h-9 w-9' : 'h-7 w-7'}`}>
+              <Feather name="trash-2" size={isRoot ? 16 : 14} color="#9ca3af" />
+            </View>
+            <View className="ml-3 flex-1">
+              <View className="rounded-xl px-3 py-2 border border-dashed border-gray-200" style={{ backgroundColor: SOCIAL_COLORS.page }}>
+                <Text className={`italic ${isRoot ? 'text-[13px]' : 'text-[12px]'}`} style={{ color: SOCIAL_COLORS.textSoft }}>
+                  Bình luận này đã bị xóa.
+                </Text>
+              </View>
+              {comment.totalReplies > 0 ? (
+                <View className="ml-2 mt-1 flex-row items-center gap-4">
+                  <TouchableOpacity onPress={() => loadReplies(comment)}>
+                    <Text className="text-xs font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>
+                      {replies.length ? 'Ẩn/hiện phản hồi' : `Xem ${comment.totalReplies} phản hồi`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <Pressable className="flex-row" onLongPress={() => deleteComment(comment)}>
+            <Avatar uri={comment.authorAvatar} name={comment.authorName} size={isRoot ? 36 : 30} />
+            <View className="ml-3 flex-1">
+              <View className="rounded-xl px-3 py-2" style={{ backgroundColor: isRoot ? SOCIAL_COLORS.card : SOCIAL_COLORS.chipLight }}>
+                <Text className={`font-bold ${isRoot ? 'text-sm' : 'text-xs'}`} style={{ color: SOCIAL_COLORS.text }}>{comment.authorName}</Text>
+                <Text className={`mt-1 leading-5 ${isRoot ? 'text-[14px]' : 'text-[13px]'}`} style={{ color: SOCIAL_COLORS.text }}>{comment.text}</Text>
+              </View>
+              <View className="ml-2 mt-1 flex-row items-center gap-4">
+                <Text className="text-xs" style={{ color: SOCIAL_COLORS.textSoft }}>{comment.time}</Text>
+                <TouchableOpacity onPress={() => setReplyingTo(comment)}>
+                  <Text className="text-xs font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>Trả lời</Text>
+                </TouchableOpacity>
+                {comment.authorId === currentUserId ? (
+                  <TouchableOpacity onPress={() => deleteComment(comment)}>
+                    <Text className="text-xs font-bold" style={{ color: '#ef4444' }}>Xóa</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {comment.totalReplies > 0 ? (
+                  <TouchableOpacity onPress={() => loadReplies(comment)}>
+                    <Text className="text-xs font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>
+                      {replies.length ? 'Ẩn/hiện phản hồi' : `Xem ${comment.totalReplies} phản hồi`}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          </Pressable>
+        )}
+
+        {repliesLoading[comment.id] ? (
+          <View className="ml-12 mt-2">
+            <ActivityIndicator color={THEME_COLORS.primary[600]} size="small" />
+          </View>
+        ) : null}
+
+        {replies.length > 0 ? (
+          <View>
+            {replies.map((reply) => renderComment(reply, depth + 1))}
+          </View>
+        ) : null}
+      </View>
+    );
   };
 
   return (
@@ -142,82 +231,35 @@ export function CommentsModal({
               </TouchableOpacity>
               <Text className="text-lg font-bold" style={{ color: SOCIAL_COLORS.text }}>Bình luận</Text>
               <View className="h-10 w-10" />
-            </View>
-
-          {loading ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator color={THEME_COLORS.primary[600]} />
-            </View>
-          ) : comments.length === 0 ? (
-            <View className="flex-1 items-center justify-center pb-20">
-              <Feather name="message-circle" size={34} color={SOCIAL_COLORS.textSoft} />
-              <Text className="mt-3 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Chưa có bình luận</Text>
-            </View>
-          ) : (
-            <FlatList
-              className="flex-1"
-              data={comments}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
-              onEndReached={loadMore}
-              onEndReachedThreshold={0.3}
-              ListFooterComponent={
+          <FlatList
+            className="flex-1"
+            data={comments}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.3}
+            ListHeaderComponent={renderHeader && post ? () => <>{renderHeader(post)}</> : undefined}
+            ListEmptyComponent={
+              loading ? (
+                <View className="py-10 items-center justify-center">
+                  <ActivityIndicator color={THEME_COLORS.primary[600]} />
+                </View>
+              ) : (
+                <View className="py-20 items-center justify-center">
+                  <Feather name="message-circle" size={34} color={SOCIAL_COLORS.textSoft} />
+                  <Text className="mt-3 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Chưa có bình luận</Text>
+                </View>
+              )
+            }
+            ListFooterComponent={
                 loadingMore ? (
                   <View className="py-3">
                     <ActivityIndicator color={THEME_COLORS.primary[600]} />
                   </View>
                 ) : null
               }
-              renderItem={({ item }) => {
-                const replies = repliesByParent[item.id] || [];
-                return (
-                  <View className="mb-4">
-                    <Pressable className="flex-row" onLongPress={() => deleteComment(item)}>
-                      <Avatar uri={item.authorAvatar} name={item.authorName} size={36} />
-                      <View className="ml-3 flex-1">
-                        <View className="rounded-xl px-3 py-2" style={{ backgroundColor: SOCIAL_COLORS.card }}>
-                          <Text className="text-sm font-bold" style={{ color: SOCIAL_COLORS.text }}>{item.authorName}</Text>
-                          <Text className="mt-1 text-[14px] leading-5" style={{ color: SOCIAL_COLORS.text }}>{item.text}</Text>
-                        </View>
-                        <View className="ml-2 mt-1 flex-row items-center gap-4">
-                          <Text className="text-xs" style={{ color: SOCIAL_COLORS.textSoft }}>{item.time}</Text>
-                          <TouchableOpacity onPress={() => setReplyingTo(item)}>
-                            <Text className="text-xs font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>Trả lời</Text>
-                          </TouchableOpacity>
-                          {item.totalReplies > 0 ? (
-                            <TouchableOpacity onPress={() => loadReplies(item)}>
-                              <Text className="text-xs font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>
-                                {replies.length ? 'Ẩn/hiện phản hồi' : `Xem ${item.totalReplies} phản hồi`}
-                              </Text>
-                            </TouchableOpacity>
-                          ) : null}
-                        </View>
-                      </View>
-                    </Pressable>
-
-                    {repliesLoading[item.id] ? (
-                      <View className="ml-12 mt-2">
-                        <ActivityIndicator color={THEME_COLORS.primary[600]} size="small" />
-                      </View>
-                    ) : null}
-
-                    {replies.map((reply) => (
-                      <Pressable key={reply.id} className="ml-12 mt-3 flex-row" onLongPress={() => deleteComment(reply)}>
-                        <Avatar uri={reply.authorAvatar} name={reply.authorName} size={30} />
-                        <View className="ml-2 flex-1">
-                          <View className="rounded-xl px-3 py-2" style={{ backgroundColor: SOCIAL_COLORS.chipLight }}>
-                            <Text className="text-xs font-bold" style={{ color: SOCIAL_COLORS.text }}>{reply.authorName}</Text>
-                            <Text className="mt-1 text-[13px] leading-5" style={{ color: SOCIAL_COLORS.text }}>{reply.text}</Text>
-                          </View>
-                          <Text className="ml-2 mt-1 text-xs" style={{ color: SOCIAL_COLORS.textSoft }}>{reply.time}</Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
-                );
-              }}
-            />
-          )}
+              renderItem={({ item }) => renderComment(item, 0)}
+          />
 
           <View className="border-t px-4 py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
             {replyingTo ? (

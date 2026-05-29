@@ -11,6 +11,15 @@ const SHARE_VISIBILITY_OPTIONS: { value: Visibility; label: string; icon: keyof 
   { value: 'FRIENDS', label: 'Bạn bè', icon: 'people' },
   { value: 'PRIVATE', label: 'Chỉ mình tôi', icon: 'lock-closed' },
 ];
+const resolveRootPost = (input: Post): Post => {
+  const seen = new Set<string>();
+  let current = input;
+  while (current.sharedPost && !seen.has(current.id)) {
+    seen.add(current.id);
+    current = current.sharedPost;
+  }
+  return current;
+};
 
 export function SharePostModal({
   visible,
@@ -57,6 +66,7 @@ export function SharePostModal({
   };
 
   const canSubmit = Boolean(post && currentUserId) && !submitting;
+  const previewPost = post ? (post.sharedPost ? resolveRootPost(post.sharedPost) : post) : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -123,28 +133,28 @@ export function SharePostModal({
               textAlignVertical="top"
             />
 
-            {post ? (
+            {previewPost ? (
               <View className="mt-4 rounded-2xl border p-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
                 <View className="flex-row items-center">
-                  <Avatar uri={post.author.avatar} name={post.author.name} color={post.author.color} size={36} />
+                  <Avatar uri={previewPost.author.avatar} name={previewPost.author.name} color={previewPost.author.color} size={36} />
                   <View className="ml-2 flex-1">
                     <Text className="text-[13px] font-black" style={{ color: SOCIAL_COLORS.text }} numberOfLines={1}>
-                      {post.author.name}
+                      {previewPost.author.name}
                     </Text>
                     <Text className="text-[11px]" style={{ color: SOCIAL_COLORS.textMuted }}>
-                      {post.time}
+                      {previewPost.time}
                     </Text>
                   </View>
                 </View>
-                {post.content.trim() ? (
+                {previewPost.content.trim() ? (
                   <Text className="mt-3 text-[13px] leading-5" style={{ color: SOCIAL_COLORS.text }} numberOfLines={4}>
-                    {post.content}
+                    {previewPost.content}
                   </Text>
                 ) : null}
-                {post.media.length ? (
+                {previewPost.media.length ? (
                   <View className="mt-3 flex-row overflow-hidden rounded-xl" style={{ height: 88, backgroundColor: SOCIAL_COLORS.primaryDark }}>
-                    {post.media.slice(0, 3).map((item, index) => (
-                      <View key={item.id || `${item.url}-${index}`} style={{ flex: 1, borderRightWidth: index < Math.min(post.media.length, 3) - 1 ? 1 : 0, borderColor: '#fff' }}>
+                    {previewPost.media.slice(0, 3).map((item, index) => (
+                      <View key={item.id || `${item.url}-${index}`} style={{ flex: 1, borderRightWidth: index < Math.min(previewPost.media.length, 3) - 1 ? 1 : 0, borderColor: '#fff' }}>
                         {(item.type === 'image' || item.thumbnailUrl) && (item.thumbnailUrl || item.url) ? (
                           <ExpoImage source={{ uri: item.thumbnailUrl || item.url }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                         ) : (
