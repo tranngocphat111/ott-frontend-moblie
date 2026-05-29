@@ -238,7 +238,7 @@ function PostEngagementSummary({
   );
 }
 
-function SharedPostPreview({ post }: { post: Post }) {
+function SharedPostPreview({ post, onPress }: { post: Post; onPress?: () => void }) {
   const router = useRouter();
   const firstMedia = post.media[0];
   const imageUri =
@@ -253,12 +253,12 @@ function SharedPostPreview({ post }: { post: Post }) {
         backgroundColor: SOCIAL_COLORS.chipLight,
         borderColor: SOCIAL_COLORS.border,
       }}
-      onPress={() =>
+      onPress={onPress || (() =>
         router.push({
           pathname: "/(main)/social/profile/[userId]",
           params: { userId: post.author.id },
         })
-      }>
+      )}>
       <View className="flex-row items-center px-3 py-3">
         <Avatar
           uri={post.author.avatar}
@@ -403,23 +403,36 @@ export function PostCard({
     }
   };
 
+  const isDeletedPost = (p: Post) => p.status === 'deleted' || p.status === 'DELETED' || p.visibility === 'DELETED' || p.visibility === 'deleted';
+  const hasVisibleSharedPost = Boolean(post.sharedPost && !isDeletedPost(post.sharedPost));
+  const shouldShowSharedFallback = Boolean(
+    post.sharedPostDeleted ||
+    post.sharedPostRestricted ||
+    post.sharedPostCollapsed ||
+    (post.sharedPost && isDeletedPost(post.sharedPost))
+  );
+
   return (
-    <View
-      className="relative mx-4 mb-3 overflow-visible rounded-2xl border py-3"
+    <Pressable
+      onPress={() => onComment(post)}
+      className="relative mb-3 overflow-visible border-b py-3"
       style={{
         backgroundColor: SOCIAL_COLORS.card,
         borderColor: SOCIAL_COLORS.border,
-        ...SOCIAL_SHADOW,
       }}>
       <View className="flex-row items-start px-4">
         <Pressable
           className="flex-1 flex-row items-start"
-          onPress={() =>
-            router.push({
-              pathname: "/(main)/social/profile/[userId]",
-              params: { userId: post.author.id },
-            })
-          }>
+          onPress={() => {
+            if (post.author.id === currentUserId) {
+              router.push("/(main)/(tabs)/profile" as any);
+            } else {
+              router.push({
+                pathname: "/(main)/social/profile/[userId]",
+                params: { userId: post.author.id },
+              });
+            }
+          }}>
           <Avatar
             uri={post.author.avatar}
             name={post.author.name}
@@ -495,8 +508,32 @@ export function PostCard({
         <PostMediaGrid media={post.media} onOpenMedia={setViewerIndex} />
       )}
 
-      {!deleted && post.sharedPost ?
-        <SharedPostPreview post={post.sharedPost} />
+      {!deleted && hasVisibleSharedPost && post.sharedPost ?
+        <SharedPostPreview post={post.sharedPost} onPress={() => onComment(post.sharedPost!)} />
+      : null}
+
+      {!deleted && shouldShowSharedFallback ?
+        <View
+          className="mx-4 mt-3 overflow-hidden rounded-2xl border px-4 py-5"
+          style={{
+            backgroundColor: SOCIAL_COLORS.chipLight,
+            borderColor: SOCIAL_COLORS.border,
+          }}>
+          <Text
+            className="text-[13px] font-bold"
+            style={{ color: SOCIAL_COLORS.text }}>
+            {post.sharedPostCollapsed ?
+              "Nội dung đã được thu gọn"
+            : "Nội dung không khả dụng"}
+          </Text>
+          <Text
+            className="mt-1 text-[11px]"
+            style={{ color: SOCIAL_COLORS.textMuted }}>
+            {post.sharedPostCollapsed ?
+              "Chuỗi chia sẻ quá dài. Mở bài gốc để xem đầy đủ."
+            : "Bài viết đã bị xóa hoặc bạn không có quyền xem."}
+          </Text>
+        </View>
       : null}
 
       {!deleted && (
@@ -635,6 +672,6 @@ export function PostCard({
           ]}
         />
       )}
-    </View>
+    </Pressable>
   );
 }

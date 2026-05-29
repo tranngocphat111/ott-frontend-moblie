@@ -52,6 +52,9 @@ export interface Post {
   relationshipLabel?: string;
   accessControls?: AccessControl[];
   sharedPost?: Post;
+  sharedPostDeleted?: boolean;
+  sharedPostRestricted?: boolean;
+  sharedPostCollapsed?: boolean;
 }
 
 export interface StoryContentItem {
@@ -135,6 +138,9 @@ export interface ApiPost {
   accessControls?: AccessControl[];
   sharedPost?: ApiPost | null;
   status?: string;
+  sharedPostDeleted?: boolean;
+  sharedPostRestricted?: boolean;
+  sharedPostCollapsed?: boolean;
 }
 
 export interface PostsPage {
@@ -188,6 +194,7 @@ export interface Comment {
   parentId?: string;
   depth: number;
   isEdited: boolean;
+  isDeleted?: boolean;
   time: string;
   totalReplies: number;
 }
@@ -468,6 +475,9 @@ export const mapPost = (post: ApiPost, colorIndex: number, currentUserId?: strin
     relationship: post.accountId === currentUserId ? 'self' : undefined,
     accessControls: post.accessControls,
     sharedPost: post.sharedPost && depth < 3 ? mapPost(post.sharedPost, colorIndex + 1, currentUserId, depth + 1) : undefined,
+    sharedPostDeleted: post.sharedPostDeleted,
+    sharedPostRestricted: post.sharedPostRestricted,
+    sharedPostCollapsed: post.sharedPostCollapsed,
   };
 };
 
@@ -480,6 +490,7 @@ export const mapComment = (comment: ApiComment): Comment => ({
   parentId: comment.parentCommentId ?? undefined,
   depth: comment.depth,
   isEdited: comment.edited,
+  isDeleted: comment.deleted,
   time: relativeTime(comment.createdAt ?? new Date().toISOString()),
   totalReplies: comment.totalReplies ?? 0,
 });
@@ -863,7 +874,7 @@ const fetchRootCommentsFallback = async (postId: string, page: number, size: num
     const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}/comments`));
     const raw = unwrapList<ApiComment>(payload);
     const roots = raw
-      .filter((comment) => !comment.deleted && !comment.parentCommentId)
+      .filter((comment) => !comment.parentCommentId)
       .map(mapComment);
     const start = page * size;
     return {
@@ -886,7 +897,6 @@ export const fetchRootComments = async (postId: string, page = 0, size = 20): Pr
     const data = unwrapApiResult<SpringPage<ApiComment>>(payload);
     if (!data) return fetchRootCommentsFallback(postId, page, size);
     const comments = unwrapList<ApiComment>(data.content ?? [])
-      .filter((comment) => !comment.deleted)
       .map(mapComment);
     return {
       comments,
@@ -908,7 +918,6 @@ export const fetchReplies = async (commentId: string, page = 0, size = 10): Prom
     const data = unwrapApiResult<SpringPage<ApiComment>>(payload);
     if (!data) return emptyCommentPage(page);
     const comments = unwrapList<ApiComment>(data.content ?? [])
-      .filter((comment) => !comment.deleted)
       .map(mapComment);
     return {
       comments,

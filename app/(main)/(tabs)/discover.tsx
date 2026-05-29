@@ -700,6 +700,22 @@ export default function DiscoverScreen() {
         currentUserId={currentUserId}
         onClose={() => setCommentPost(null)}
         onCountChange={handleCommentCountChange}
+        renderHeader={(p) => (
+          <PostCard
+            post={p}
+            currentUserId={currentUserId}
+            reaction={reactionByPost[p.id]}
+            reactionCounts={reactionCountsByPost[p.id]}
+            showReactionPicker={reactionPickerPost?.id === p.id}
+            onReact={handleReact}
+            onPickReaction={setReactionPickerPost}
+            onComment={setCommentPost}
+            onShowReactions={setReactionsListPost}
+            onEdit={setEditingPost}
+            onDelete={handleDeletePost}
+            onShare={handleSharePost}
+          />
+        )}
       />
 
       <ReactionsListModal
