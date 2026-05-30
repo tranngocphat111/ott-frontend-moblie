@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
@@ -123,6 +124,7 @@ const NotificationAvatar = ({
 };
 
 export function NotificationsContent({ includeTopInset = true }: Props) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { chatUserId } = useAuth();
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
@@ -295,7 +297,16 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
 
     return (
       <Pressable
-        onPress={() => unread && void markAsRead(item.id)}
+        onPress={() => {
+          if (unread) {
+            void markAsRead(item.id);
+          }
+          if (['NEW_POST', 'UPDATE_POST'].includes(item.type) && item.referenceId) {
+            router.push({ pathname: '/(main)/social/post/[postId]', params: { postId: item.referenceId } });
+          } else if (['NEW_STORY', 'UPDATE_STORY'].includes(item.type) && item.referenceId) {
+            router.push({ pathname: '/(main)/social/story/[storyId]', params: { storyId: item.referenceId } });
+          }
+        }}
         className="mx-4 mb-3 flex-row rounded-2xl border px-4 py-4"
         style={{
           backgroundColor: unread ? '#fff8f1' : '#ffffff',
