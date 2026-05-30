@@ -20,6 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { THEME_COLORS } from '@/constants/theme';
 import { MEDIA_CONFIG } from '@/configuration/api';
 import { useAuth } from '@/contexts/Authcontext';
+import { getBackendDateTime } from '@/utils/time';
 
 const getFullUrl = (url?: string) => {
   if (!url) return "";
@@ -52,7 +53,8 @@ interface CreateGroupModalProps {
 const getRelativeTime = (dateStr?: string): string => {
   if (!dateStr) return '';
   const now = Date.now();
-  const then = new Date(dateStr).getTime();
+  const then = getBackendDateTime(dateStr);
+  if (!then) return '';
   const diffMs = now - then;
   const minutes = Math.floor(diffMs / 60000);
   if (minutes < 60) return `${minutes} phút trước`;
@@ -255,8 +257,8 @@ export function CreateGroupModal({
   const recentUsers = useMemo(() => {
     // Sort by last_active_at descending
     return [...filteredUsers].sort((a, b) => {
-      const timeA = a.last_active_at ? new Date(a.last_active_at).getTime() : 0;
-      const timeB = b.last_active_at ? new Date(b.last_active_at).getTime() : 0;
+      const timeA = getBackendDateTime(a.last_active_at);
+      const timeB = getBackendDateTime(b.last_active_at);
       return timeB - timeA;
     });
   }, [filteredUsers]);

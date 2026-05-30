@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { parseBackendDate } from '@/utils/time';
 
 export default function SessionsScreen() {
   const router = useRouter();
@@ -36,7 +37,8 @@ export default function SessionsScreen() {
   const formatLastActive = (dateString?: string, fallback?: string) => {
     const ds = dateString || fallback;
     if (!ds) return 'Không rõ';
-    const date = new Date(ds);
+    const date = parseBackendDate(ds);
+    if (!date) return 'Không rõ';
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
 

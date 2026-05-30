@@ -1,5 +1,6 @@
 import type { ChatConversation, ChatMessage } from '@/types';
 import { MEDIA_CONFIG } from '@/configuration/api';
+import { parseBackendDate } from '@/utils/time';
 
 const CUSTOM_SHORTCODE_TO_EMOJI_MAP: Record<string, string> = {
   ':D': '😃',
@@ -222,8 +223,8 @@ export const getMessageBodyText = (message: ChatMessage) => {
 
 export const formatConversationTime = (value?: string | null) => {
   if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseBackendDate(value);
+  if (!date) return '';
   return date.toLocaleTimeString('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
@@ -244,8 +245,8 @@ const getDayDiff = (date: Date, reference = new Date()) => {
 
 export const formatMessageTimestampLabel = (value?: string | null) => {
   if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseBackendDate(value);
+  if (!date) return '';
 
   const timePart = formatConversationTime(value);
   const dayDiff = getDayDiff(date);
@@ -271,8 +272,8 @@ export const formatMessageTimestampLabel = (value?: string | null) => {
 
 export const formatMessageDate = (value?: string | null) => {
   if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseBackendDate(value);
+  if (!date) return '';
   return date.toLocaleString('vi-VN', {
     day: '2-digit',
     month: '2-digit',
@@ -288,8 +289,8 @@ export const shouldShowTimestamp = (
   if (!currentTime) return false;
   if (!previousTime) return true;
 
-  const current = new Date(currentTime).getTime();
-  const previous = new Date(previousTime).getTime();
+  const current = parseBackendDate(currentTime)?.getTime() ?? NaN;
+  const previous = parseBackendDate(previousTime)?.getTime() ?? NaN;
 
   if (Number.isNaN(current) || Number.isNaN(previous)) return true;
 
@@ -303,8 +304,8 @@ export const shouldShowTimestampAtClusterEnd = (
   if (!currentTime) return false;
   if (!nextTime) return true;
 
-  const current = new Date(currentTime).getTime();
-  const next = new Date(nextTime).getTime();
+  const current = parseBackendDate(currentTime)?.getTime() ?? NaN;
+  const next = parseBackendDate(nextTime)?.getTime() ?? NaN;
 
   if (Number.isNaN(current) || Number.isNaN(next)) return true;
 
@@ -324,8 +325,8 @@ export const shouldBreakMessageCluster = (
     return true;
   }
 
-  const previous = new Date(previousTime).getTime();
-  const current = new Date(currentTime).getTime();
+  const previous = parseBackendDate(previousTime)?.getTime() ?? NaN;
+  const current = parseBackendDate(currentTime)?.getTime() ?? NaN;
 
   if (Number.isNaN(previous) || Number.isNaN(current)) return true;
 

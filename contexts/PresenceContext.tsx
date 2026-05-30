@@ -10,6 +10,7 @@ import React, {
 import { AppState } from 'react-native';
 import { useAuth } from '@/contexts/Authcontext';
 import { chatSocket } from '@/services/socket/chatSocket';
+import { parseBackendDate } from '@/utils/time';
 
 type PresenceEntry = {
   isOnline: boolean;
@@ -104,7 +105,7 @@ export const PresenceProvider: React.FC<{ children: ReactNode }> = ({ children }
           next.set(userId, {
             ...previous,
             isOnline: item.isOnline,
-            lastSeenAt: item.lastSeenAt ? new Date(item.lastSeenAt) : previous.lastSeenAt,
+            lastSeenAt: parseBackendDate(item.lastSeenAt) || previous.lastSeenAt,
           });
         });
         return next;
@@ -118,7 +119,7 @@ export const PresenceProvider: React.FC<{ children: ReactNode }> = ({ children }
     }) => {
       updatePresence(payload.userId, {
         isOnline: payload.isOnline,
-        lastSeenAt: payload.lastSeenAt ? new Date(payload.lastSeenAt) : null,
+        lastSeenAt: parseBackendDate(payload.lastSeenAt),
       });
     };
 

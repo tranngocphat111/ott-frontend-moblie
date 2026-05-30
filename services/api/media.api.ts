@@ -1,5 +1,6 @@
 import { MEDIA_CONFIG } from '@/configuration/api';
 import { apiClient, chatApiClient } from './client';
+import { getBackendDateTime, parseBackendDate } from '@/utils/time';
 
 export type MediaKind = 'image' | 'video';
 export type Visibility = 'PUBLIC' | 'FRIENDS' | 'PRIVATE' | 'CUSTOM';
@@ -419,8 +420,8 @@ export const resolveMediaUrl = (raw?: string | null): string | undefined => {
 
 export const relativeTime = (iso: string | null | undefined): string => {
   if (!iso) return 'Vừa xong';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return 'Vừa xong';
+  const date = parseBackendDate(iso);
+  if (!date) return 'Vừa xong';
 
   const diffMs = Date.now() - date.getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -541,7 +542,7 @@ export const fetchPosts = async (currentUserId?: string): Promise<Post[] | null>
     let colorIndex = 0;
 
     return raw
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => getBackendDateTime(b.createdAt) - getBackendDateTime(a.createdAt))
       .map((post) => {
         if (!colorMap.has(post.accountId)) colorMap.set(post.accountId, colorIndex++);
         return mapPost(post, colorMap.get(post.accountId)!, currentUserId);
@@ -623,7 +624,7 @@ export const fetchPostsByUser = async (userId: string, currentUserId?: string): 
       params: currentUserId ? { viewerId: currentUserId } : undefined,
     });
     return filterActivePosts(unwrapList<ApiPost>(payload))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => getBackendDateTime(b.createdAt) - getBackendDateTime(a.createdAt))
       .map((post, index) => mapPost(post, index, currentUserId));
   } catch {
     return [];

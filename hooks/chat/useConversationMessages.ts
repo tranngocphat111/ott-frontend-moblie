@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { ChatApi } from '@/services/api';
 import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
 import { countVisualItems } from '@/utils/chat';
+import { getBackendDateTime } from '@/utils/time';
 
 const PAGE_SIZE = 20;
 
@@ -39,8 +40,8 @@ export function useConversationMessages(conversationId: string | undefined, user
     });
 
     return Array.from(map.values()).sort((left, right) => {
-      const leftTime = new Date(left.createdAt || left.created_at || 0).getTime();
-      const rightTime = new Date(right.createdAt || right.created_at || 0).getTime();
+      const leftTime = getBackendDateTime(left.createdAt || left.created_at || 0);
+      const rightTime = getBackendDateTime(right.createdAt || right.created_at || 0);
 
       if (leftTime !== rightTime) return leftTime - rightTime;
 
@@ -80,8 +81,8 @@ export function useConversationMessages(conversationId: string | undefined, user
     });
 
     return Array.from(map.values()).sort((left, right) => {
-      const leftPinnedAt = new Date(left.pinned_at || left.createdAt || left.created_at || 0).getTime();
-      const rightPinnedAt = new Date(right.pinned_at || right.createdAt || right.created_at || 0).getTime();
+      const leftPinnedAt = getBackendDateTime(left.pinned_at || left.createdAt || left.created_at || 0);
+      const rightPinnedAt = getBackendDateTime(right.pinned_at || right.createdAt || right.created_at || 0);
 
       if (leftPinnedAt !== rightPinnedAt) return rightPinnedAt - leftPinnedAt;
 

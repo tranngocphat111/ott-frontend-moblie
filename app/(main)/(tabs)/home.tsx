@@ -24,6 +24,7 @@ import { ChatApi, chatSocket } from '@/services/api';
 import { THEME_COLORS } from '@/constants/theme';
 import { getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
 import { setConversationInfoSnapshot } from '@/utils/conversationInfoCache';
+import { getBackendDateTime } from '@/utils/time';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type {
   ChatCategory,
@@ -83,12 +84,12 @@ const sortConversationItems = (items: ChatConversationWithParticipant[]) => {
       return rightPinned - leftPinned;
     }
 
-    const leftTime = new Date(
+    const leftTime = getBackendDateTime(
       left.conversation.last_message?.createdAt || left.conversation.updatedAt || 0,
-    ).getTime();
-    const rightTime = new Date(
+    );
+    const rightTime = getBackendDateTime(
       right.conversation.last_message?.createdAt || right.conversation.updatedAt || 0,
-    ).getTime();
+    );
 
     return rightTime - leftTime;
   });
@@ -820,13 +821,7 @@ export default function HomeScreen() {
       // 3. If still not found and we have a contactId, try to find on server (for hidden/deleted chats)
       if (!targetConv && contactId && chatUserId) {
         try {
-          // This API call effectively acts as a findPrivateConversation
-          const response = await ChatApi.createConversation({
-            creatorId: chatUserId,
-            type: 'private',
-            memberIds: [contactId],
-          });
-          const fetchedConv = response?._id ? response : (response?.conversation || null);
+          const fetchedConv = await ChatApi.findPrivateConversation(chatUserId, contactId);
           
           if (fetchedConv && fetchedConv._id && !String(fetchedConv._id).startsWith(VIRTUAL_CONV_PREFIX)) {
             targetConv = {

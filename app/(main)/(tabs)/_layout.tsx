@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
 import { NotificationApi } from '@/services/api/notification.api';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
+import { getBackendDateTime } from '@/utils/time';
 
 type TabIconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -23,8 +24,10 @@ const isMutedConversation = (item: ChatConversationWithParticipant) => {
   if (status === 'off') return true;
   if (status !== 'mute') return false;
 
-  const muteUntil = settings?.mute_until ? new Date(settings.mute_until).getTime() : Number.POSITIVE_INFINITY;
-  return Number.isNaN(muteUntil) || muteUntil > Date.now();
+  const muteUntil = settings?.mute_until
+    ? getBackendDateTime(settings.mute_until)
+    : Number.POSITIVE_INFINITY;
+  return !muteUntil || muteUntil > Date.now();
 };
 
 const isDisplayableNotification = (item: { type?: string }) => {

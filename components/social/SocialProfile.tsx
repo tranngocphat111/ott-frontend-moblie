@@ -392,23 +392,20 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
 
       let conversation: any = existing?.conversation;
       if (!conversation?._id) {
-        const created = await ChatApi.createConversation({
-          creatorId: currentUserId,
-          type: "private",
-          memberIds: [userId],
-        });
-        conversation =
-          created?._id ? created : (
-            created?.conversation || created?.data || created?.result
+        try {
+          conversation = await ChatApi.findPrivateConversation(
+            currentUserId,
+            userId,
           );
+        } catch (error) {
+          console.warn("Không thể kiểm tra hội thoại riêng hiện có:", error);
+        }
       }
 
-      const conversationId = String(
-        conversation?._id ||
-          conversation?.id ||
-          conversation?.conversationId ||
-          "",
+      const existingConversationId = String(
+        conversation?._id || conversation?.id || conversation?.conversationId || "",
       );
+      const conversationId = existingConversationId || `VIRTUAL_CONV_${userId}`;
       if (!conversationId) {
         Alert.alert("Không mở được tin nhắn", "Vui lòng thử lại sau.");
         return;

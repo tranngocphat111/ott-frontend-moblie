@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
 import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
+import { parseBackendDate } from "@/utils/time";
 import { getMessageTranslationCandidate } from "@/utils/translationDetection";
 import { THEME_COLORS } from "@/constants/theme";
 import {
@@ -265,8 +266,8 @@ const getCallDisplayCopy = (message: ChatMessage, isGroupCall = false) => {
     normalizedType === "call_cancel" ||
     normalizedType === "call_no_answer";
 
-  const callDate = new Date(String(message.createdAt || message.created_at || ""));
-  const callTimeLabel = Number.isNaN(callDate.getTime())
+  const callDate = parseBackendDate(message.createdAt || message.created_at);
+  const callTimeLabel = !callDate
     ? ""
     : callDate.toLocaleTimeString("vi-VN", {
       hour: "2-digit",

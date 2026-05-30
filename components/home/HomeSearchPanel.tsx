@@ -3,6 +3,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { THEME_COLORS } from '@/constants/theme';
 import { resolveMediaUrl } from '@/utils/chat';
+import { parseBackendDate } from '@/utils/time';
 import type {
   ChatSearchContactItem,
   ChatSearchFileItem,
@@ -226,7 +227,7 @@ export function HomeSearchPanel({
                       <View className="flex-row items-center justify-between">
                         <Text className="text-[14px] font-semibold text-slate-800">{item.sender_name || 'Người dùng'}</Text>
                         <Text className="text-[11px] text-slate-400">
-                          {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}
+                          {parseBackendDate(item.createdAt)?.toLocaleDateString('vi-VN') || ''}
                         </Text>
                       </View>
                       <Text className="mt-0.5 text-[13px] text-slate-600" numberOfLines={2}>{previewMessage(item)}</Text>

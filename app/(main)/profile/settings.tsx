@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { parseBackendDate } from '@/utils/time';
 
 const InfoRow = ({
   label,
@@ -70,7 +71,7 @@ export default function ProfileScreen() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Chưa cập nhật';
-    return new Date(dateString).toLocaleDateString('vi-VN');
+    return parseBackendDate(dateString)?.toLocaleDateString('vi-VN') || 'Chưa cập nhật';
   };
 
   const formatGender = (gender?: string) => {
@@ -185,7 +186,7 @@ export default function ProfileScreen() {
             {user?.lastLoginAt && (
               <InfoRow
                 label="Đăng nhập gần nhất"
-                value={new Date(user.lastLoginAt).toLocaleString('vi-VN')}
+                value={parseBackendDate(user.lastLoginAt)?.toLocaleString('vi-VN') || 'Chưa cập nhật'}
               />
             )}
           </View>

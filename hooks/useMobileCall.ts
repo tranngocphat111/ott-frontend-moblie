@@ -551,8 +551,13 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
           );
         }
 
-        if (!response?.ok && response?.reason === 'busy' && response.targetUserId) {
-          setBusyUserIds([response.targetUserId]);
+        const busyTargetUserId = response?.targetUserId;
+        if (
+          !response?.ok &&
+          /busy|caller_busy|target_busy/i.test(String(response?.reason || '')) &&
+          busyTargetUserId
+        ) {
+          setBusyUserIds([busyTargetUserId]);
           closeCallLocally();
           return;
         }

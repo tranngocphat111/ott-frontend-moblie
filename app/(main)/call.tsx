@@ -439,7 +439,13 @@ export default function CallScreen() {
 
   useEffect(() => {
     if (busyUserIds.length === 0) return;
-    Alert.alert('Không thể kết nối', 'Người nhận đang trong một cuộc gọi khác.', [
+    const isCallerBusy = busyUserIds.some((id) => String(id) === String(userId));
+    Alert.alert(
+      isCallerBusy ? 'Đang trong cuộc gọi' : 'Không thể kết nối',
+      isCallerBusy
+        ? 'Bạn đang trong một cuộc gọi khác. Vui lòng kết thúc cuộc gọi hiện tại trước khi gọi mới.'
+        : 'Người nhận đang trong một cuộc gọi khác.',
+      [
       {
         text: 'Đóng',
         onPress: () => {
@@ -447,8 +453,9 @@ export default function CallScreen() {
           router.back();
         },
       },
-    ]);
-  }, [busyUserIds.length, endCall, router]);
+      ],
+    );
+  }, [busyUserIds, endCall, router, userId]);
 
   useEffect(() => {
     const handleAnsweredElsewhere = (payload: {
