@@ -1093,6 +1093,17 @@ export const blockRelationship = async (relationshipId: string, blockerId: strin
   }
 };
 
+export const blockUserDirectly = async (requesterId: string, receiverId: string): Promise<boolean> => {
+  try {
+    await (apiClient.post as any)(mediaPath('/relationships/block'), null, {
+      params: { requesterId, receiverId },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const sendFriendRequest = async (requesterId: string, receiverId?: string): Promise<any> => {
   try {
     const payload = await (apiClient.post as any)(mediaPath('/relationships/send'), null, {
@@ -1429,6 +1440,15 @@ export const fetchStoryViewers = async (storyId: string): Promise<any[]> => {
   }
 };
 
+export const fetchStoryById = async (storyId: string): Promise<Post | null> => {
+  try {
+    const payload = await (apiClient.get as any)(mediaPath(`/stories/${storyId}`));
+    return unwrap<Post>(payload);
+  } catch {
+    return null;
+  }
+};
+
 export const updateStory = async (
   storyId: string,
   request: StoryCreateRequest,
@@ -1573,10 +1593,10 @@ export const clearViewHistory = async (): Promise<boolean> => {
 };
 
 export const MediaApi = {
-  addComment,
   acceptFriendRequest,
   acceptFriendRequestViaChat,
   blockRelationship,
+  blockUserDirectly,
   blockUserViaChat,
   cancelFriendRequestViaChat,
   cancelRelationship,
@@ -1603,6 +1623,7 @@ export const MediaApi = {
   fetchSavedContents,
   fetchSearchPosts: searchPosts,
   fetchStories,
+  fetchStoryById,
   fetchStoryGroups,
   fetchStoryViewers,
   fetchSuggestedUsers,

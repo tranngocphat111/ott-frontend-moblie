@@ -2,8 +2,10 @@ import { CommentsModal, CreatePostModal, PostCard, ReactionsListModal, SharePost
 import { useAuth } from '@/contexts/Authcontext';
 import { MediaApi, type Post } from '@/services/api/media.api';
 import { userApi } from '@/services/api/user.api';
+import { relationshipSocket, type RelationshipRealtimePayload } from '@/services/socket/relationshipSocket';
 import type { UserResponse } from '@/types';
 import { Feather } from '@expo/vector-icons';
+import { Avatar } from '@/components/social/SocialAvatar';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -76,7 +78,13 @@ export default function SocialSearchScreen() {
 
       if (replace) setLoading(true);
       try {
-        if (searchMode === 'posts') {
+        let currentMode = searchMode;
+        if (trimmed.startsWith('#') && searchMode !== 'posts') {
+          setSearchMode('posts');
+          currentMode = 'posts';
+        }
+
+        if (currentMode === 'posts') {
           const data = await MediaApi.searchPosts(trimmed, currentUserId, nextPage, PAGE_SIZE);
           if (!data) return;
           setPosts((prev) => {
@@ -90,9 +98,14 @@ export default function SocialSearchScreen() {
           void hydrateUserReactions();
         } else {
           const res = await userApi.searchUsers(trimmed);
-          if (res.result) {
-            setUsers(res.result);
+          let userList = [];
+          if (Array.isArray(res)) {
+            userList = res;
+          } else if ((res as any).result) {
+            userList = (res as any).result;
           }
+          userList = userList.filter((u: any) => u.relationshipStatus !== 'BLOCKED' && u.relationshipStatus !== 'USER_BLOCKED');
+          setUsers(userList);
           setHasMore(false);
         }
       } finally {
@@ -116,6 +129,39 @@ export default function SocialSearchScreen() {
     return () => clearTimeout(timer);
   }, [query, runSearch, searchMode]);
 
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const handleRelationshipUpdate = (payload: RelationshipRealtimePayload) => {
+      if (!payload) return;
+
+      const targetIds = payload.targetUserIds || [];
+      const isTarget = targetIds.includes(currentUserId) || payload.requesterId === currentUserId || payload.receiverId === currentUserId;
+      if (!isTarget) return;
+
+      setUsers((prevUsers) => prevUsers.map(u => {
+        const uId = (u as any)._id || u.user_id;
+        if (uId === payload.requesterId || uId === payload.receiverId) {
+          let newStatus = (u as any).relationshipStatus;
+          if (payload.type === 'REQUEST_SENT') {
+            newStatus = payload.requesterId === currentUserId ? 'PENDING_REQUEST_SENT' : 'PENDING_REQUEST_RECEIVED';
+          } else if (payload.type === 'REQUEST_ACCEPTED') {
+            newStatus = 'FRIEND';
+          } else if (['REQUEST_REJECTED', 'REQUEST_CANCELED', 'REQUEST_CANCELLED', 'UNFRIENDED'].includes(payload.type)) {
+            newStatus = 'NONE';
+          } else if (['BLOCKED', 'USER_BLOCKED'].includes(payload.type)) {
+            newStatus = 'BLOCKED';
+          }
+          return { ...u, relationshipStatus: newStatus };
+        }
+        return u;
+      }));
+    };
+
+    relationshipSocket.onRelationshipUpdate(handleRelationshipUpdate);
+    return () => relationshipSocket.offRelationshipUpdate(handleRelationshipUpdate);
+  }, [currentUserId]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     try {
@@ -132,6 +178,44 @@ export default function SocialSearchScreen() {
       await runSearch(page + 1, false);
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  const handleSendFriendRequest = async (targetId: string) => {
+    if (!currentUserId) return;
+    try {
+      const res = await MediaApi.sendFriendRequest(currentUserId, targetId);
+      if (res) {
+        setUsers(users.map(u => ((u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'PENDING_REQUEST_SENT' } : u));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAcceptFriendRequest = async (targetId: string) => {
+    if (!currentUserId) return;
+    try {
+      const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
+      if (rel?.id) {
+        await MediaApi.acceptFriendRequest(rel.id);
+        setUsers(users.map(u => ((u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'FRIEND' } : u));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRejectFriendRequest = async (targetId: string) => {
+    if (!currentUserId) return;
+    try {
+      const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
+      if (rel?.id) {
+        await MediaApi.rejectFriendRequest(rel.id);
+        setUsers(users.map(u => ((u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'NONE' } : u));
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -263,23 +347,76 @@ export default function SocialSearchScreen() {
         }
         renderItem={({ item }) => {
           if (searchMode === 'users') {
-            const userItem = item as unknown as UserResponse;
+            const userItem = item as any; // Cast to any to handle displayName/phoneNumber
+            const targetId = userItem.id || userItem._id || userItem.user_id;
+            const name = userItem.displayName || userItem.fullName || userItem.username || 'User';
+            const phone = userItem.phoneNumber || userItem.phone;
+            const relationshipStatus = userItem.relationshipStatus;
+            
+            const stringToColor = (str: string) => {
+              if (!str) return "#ccc";
+              let hash = 0;
+              for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+              return "#" + "00000".substring(0, 6 - c.length) + c;
+            };
+
             return (
-              <View className="flex-row items-center p-4 bg-white border-b border-gray-100">
-                <View className="h-12 w-12 rounded-full bg-gray-200 overflow-hidden items-center justify-center">
-                  {userItem.avatarUrl ? (
-                    // We don't have Image imported directly so we'll just show initial for simplicity
-                    <Text className="text-gray-500 font-bold text-lg">{userItem.fullName?.[0]}</Text>
-                  ) : (
-                    <Text className="text-gray-500 font-bold text-lg">{userItem.fullName?.[0]}</Text>
+              <TouchableOpacity
+                className="p-4 bg-white border-b border-gray-100 flex-row items-start"
+                onPress={() => router.push({ pathname: '/(main)/social/profile/[userId]', params: { userId: targetId } })}
+              >
+                <Avatar uri={userItem.avatarUrl || userItem.avatar} name={name} size={48} color={stringToColor(name)} />
+                <View className="ml-4 flex-1">
+                  <Text className="font-bold text-base text-gray-900">{name}</Text>
+                  {userItem.email && <Text className="text-gray-500 text-sm mt-0.5">{userItem.email}</Text>}
+                  {phone && <Text className="text-gray-500 text-sm">{phone}</Text>}
+                  {relationshipStatus === 'PENDING_REQUEST_RECEIVED' && (
+                    <Text className="text-gray-400 text-xs mt-0.5">Vừa gửi lời mời</Text>
+                  )}
+
+                  {currentUserId !== targetId && (
+                    <View className="mt-3 flex-row gap-2">
+                      {relationshipStatus === 'FRIEND' ? (
+                        <View className="flex-1 items-center justify-center py-2 rounded-lg bg-gray-100">
+                          <Text className="text-gray-600 font-bold">Bạn bè</Text>
+                        </View>
+                      ) : relationshipStatus === 'PENDING_REQUEST_SENT' ? (
+                        <View className="flex-1 items-center justify-center py-2 rounded-lg bg-gray-100">
+                          <Text className="text-gray-600 font-bold">Đã gửi lời mời</Text>
+                        </View>
+                      ) : relationshipStatus === 'PENDING_REQUEST_RECEIVED' ? (
+                        <>
+                          <TouchableOpacity
+                            onPress={() => handleAcceptFriendRequest(targetId)}
+                            className="flex-1 items-center justify-center py-2 rounded-lg"
+                            style={{ backgroundColor: SOCIAL_COLORS.primary }}
+                          >
+                            <Text className="text-white font-bold">Xác nhận</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleRejectFriendRequest(targetId)}
+                            className="flex-1 items-center justify-center py-2 rounded-lg"
+                            style={{ backgroundColor: SOCIAL_COLORS.chip }}
+                          >
+                            <Text className="font-bold" style={{ color: SOCIAL_COLORS.primaryDark }}>Xóa</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => handleSendFriendRequest(targetId)}
+                          className="flex-1 items-center justify-center py-2 rounded-lg"
+                          style={{ backgroundColor: SOCIAL_COLORS.primary }}
+                        >
+                          <Text className="text-white font-bold">Thêm bạn bè</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   )}
                 </View>
-                <View className="ml-4 flex-1">
-                  <Text className="font-bold text-base text-gray-900">{userItem.fullName}</Text>
-                  {userItem.email && <Text className="text-gray-500 text-sm">{userItem.email}</Text>}
-                  {userItem.phone && <Text className="text-gray-500 text-sm">{userItem.phone}</Text>}
-                </View>
-              </View>
+              </TouchableOpacity>
             );
           }
           return (

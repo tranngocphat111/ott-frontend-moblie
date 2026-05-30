@@ -34,9 +34,11 @@ function StoryRail({
   pendingMap?: Record<string, string>;
   hiddenIds?: Set<string>;
 }) {
+  const isEmpty = storyGroups.length === 0;
+
   return (
     <View className="pb-3" style={{ backgroundColor: SOCIAL_COLORS.page }}>
-        {loadError ? (
+      <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
@@ -53,8 +55,18 @@ function StoryRail({
           <View
             className="h-[126px]"
             style={{ backgroundColor: SOCIAL_COLORS.chip }}>
-            {currentUserAvatar ?
+            {currentUserAvatar ? (
               <ExpoImage
+                source={{ uri: currentUserAvatar }}
+                style={{ width: "100%", height: "100%" }}
+                contentFit="cover"
+              />
+            ) : (
+              <View className="h-full w-full items-center justify-center">
+                <Avatar name={currentUserName} size={46} />
+              </View>
+            )}
+          </View>
           <View
             className="h-[50px] items-center justify-end px-2 pb-2.5"
             style={{ backgroundColor: SOCIAL_COLORS.card }}>

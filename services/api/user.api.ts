@@ -39,7 +39,7 @@ export const userApi = {
     return apiClient.post(API_ENDPOINTS.USERS.REGISTER, payload);
   },
 
-  searchUsers: async (query: string): Promise<ApiResponse<UserResponse[]>> => {
+  searchUsers: async (query: string): Promise<UserResponse[]> => {
     return apiClient.get(`${API_ENDPOINTS.USERS.SEARCH}?q=${encodeURIComponent(query)}`);
   },
 };

@@ -231,6 +231,7 @@ export function CommentsModal({
               </TouchableOpacity>
               <Text className="text-lg font-bold" style={{ color: SOCIAL_COLORS.text }}>Bình luận</Text>
               <View className="h-10 w-10" />
+            </View>
           <FlatList
             className="flex-1"
             data={comments}
