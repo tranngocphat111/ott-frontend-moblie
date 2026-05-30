@@ -70,6 +70,8 @@ export default function DiscoverScreen() {
   const [reactionCountsByPost, setReactionCountsByPost] = useState<
     Record<string, Record<string, number>>
   >({});
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [storyLoadError, setStoryLoadError] = useState<string | null>(null);
 
   const [pendingMap, setPendingMap] = useState<Record<string, string>>({});
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
@@ -124,6 +126,8 @@ export default function DiscoverScreen() {
       }
 
       if (!isRefresh) setLoading(true);
+      setFeedError(null);
+      setStoryLoadError(null);
       try {
         const [postsPage, stories, reactions, suggested] = await Promise.all([
           MediaApi.findPostsWithAuthorized(0, PAGE_SIZE, currentUserId),
@@ -146,6 +150,13 @@ export default function DiscoverScreen() {
         });
         setReactionByPost(nextReactions);
         void refreshReactionCounts(nextPosts, true);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message ?
+            error.message
+          : "Không tải được bài viết hoặc story. Vui lòng thử lại sau.";
+        setFeedError(message);
+        setStoryLoadError(message);
       } finally {
         setLoading(false);
       }
@@ -339,26 +350,35 @@ export default function DiscoverScreen() {
 
   const refreshStories = useCallback(async () => {
     if (!currentUserId) return;
-    const [stories, suggested] = await Promise.all([
-      MediaApi.fetchStoryGroups(currentUserId),
-      MediaApi.fetchSuggestedUsers(currentUserId),
-    ]);
+    try {
+      setStoryLoadError(null);
+      const [stories, suggested] = await Promise.all([
+        MediaApi.fetchStoryGroups(currentUserId),
+        MediaApi.fetchSuggestedUsers(currentUserId),
+      ]);
 
-    // Deduplicate stories by ID to prevent duplicates after edit (like web frontend)
-    const seenIds = new Set<string>();
-    const dedupedStories = stories
-      .map((group) => ({
-        ...group,
-        stories: group.stories.filter((s) => {
-          if (seenIds.has(s.id)) return false;
-          seenIds.add(s.id);
-          return true;
-        }),
-      }))
-      .filter((group) => group.stories.length > 0);
+      // Deduplicate stories by ID to prevent duplicates after edit (like web frontend)
+      const seenIds = new Set<string>();
+      const dedupedStories = stories
+        .map((group) => ({
+          ...group,
+          stories: group.stories.filter((s) => {
+            if (seenIds.has(s.id)) return false;
+            seenIds.add(s.id);
+            return true;
+          }),
+        }))
+        .filter((group) => group.stories.length > 0);
 
-    setStoryGroups(dedupedStories);
-    setSuggestedUsers(suggested);
+      setStoryGroups(dedupedStories);
+      setSuggestedUsers(suggested);
+    } catch (error) {
+      setStoryLoadError(
+        error instanceof Error && error.message ?
+          error.message
+        : "Không tải được story. Vui lòng thử lại sau.",
+      );
+    }
   }, [currentUserId]);
 
   const onRefresh = async () => {
@@ -544,6 +564,7 @@ export default function DiscoverScreen() {
         storyGroups={storyGroups}
         suggestedUsers={suggestedUsers}
         topInset={insets.top}
+        storyLoadError={storyLoadError}
         onCreatePost={() => {
           setEditingPost(null);
           setCreatePostVisible(true);
@@ -597,6 +618,38 @@ export default function DiscoverScreen() {
         translucent
         backgroundColor={SOCIAL_COLORS.page}
       />
+      {feedError && posts.length > 0 && !loading ?
+        <View
+          className="mx-4 mb-3 rounded-2xl border px-4 py-3"
+          style={{
+            backgroundColor: SOCIAL_COLORS.card,
+            borderColor: SOCIAL_COLORS.border,
+          }}>
+          <View className="flex-row items-start gap-3">
+            <View
+              className="mt-0.5 h-8 w-8 items-center justify-center rounded-full"
+              style={{ backgroundColor: SOCIAL_COLORS.chipLight }}>
+              <Feather
+                name="alert-triangle"
+                size={16}
+                color={SOCIAL_COLORS.primaryDark}
+              />
+            </View>
+            <View className="flex-1">
+              <Text
+                className="text-sm font-bold"
+                style={{ color: SOCIAL_COLORS.text }}>
+                Không tải được bài viết
+              </Text>
+              <Text
+                className="mt-1 text-xs"
+                style={{ color: SOCIAL_COLORS.textMuted }}>
+                {feedError}
+              </Text>
+            </View>
+          </View>
+        </View>
+      : null}
       {loading ?
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={THEME_COLORS.primary[600]} size="large" />
@@ -634,12 +687,14 @@ export default function DiscoverScreen() {
               <Text
                 className="mt-3 text-center text-base font-bold"
                 style={{ color: SOCIAL_COLORS.text }}>
-                Chưa có bài viết
+                {feedError ? "Không tải được bài viết" : "Chưa có bài viết"}
               </Text>
               <Text
                 className="mt-1 text-center text-sm"
                 style={{ color: SOCIAL_COLORS.textMuted }}>
-                Hãy tạo bài viết đầu tiên trên mobile.
+                {feedError ?
+                  feedError
+                : "Hãy tạo bài viết đầu tiên trên mobile."}
               </Text>
             </View>
           }
