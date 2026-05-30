@@ -1,6 +1,8 @@
 import { CommentsModal, CreatePostModal, PostCard, ReactionsListModal, SharePostModal, SOCIAL_COLORS, SocialConfirmModal } from '@/components/social';
 import { useAuth } from '@/contexts/Authcontext';
 import { MediaApi, type Post } from '@/services/api/media.api';
+import { userApi } from '@/services/api/user.api';
+import type { UserResponse } from '@/types';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -25,6 +27,8 @@ export default function SocialSearchScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
+  const [searchMode, setSearchMode] = useState<'posts' | 'users'>('users');
+  const [users, setUsers] = useState<UserResponse[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [reactionPickerPost, setReactionPickerPost] = useState<Post | null>(null);
   const [reactionsListPost, setReactionsListPost] = useState<Post | null>(null);
@@ -63,6 +67,7 @@ export default function SocialSearchScreen() {
       setHasSearched(Boolean(trimmed));
       if (!trimmed) {
         setPosts([]);
+        setUsers([]);
         setHasMore(false);
         setPage(0);
         setReactionCountsByPost({});
@@ -71,20 +76,25 @@ export default function SocialSearchScreen() {
 
       if (replace) setLoading(true);
       try {
-        const data = await MediaApi.searchPosts(trimmed, currentUserId, nextPage, PAGE_SIZE);
-        if (!data) {
-          Alert.alert('Không tìm kiếm được', 'Vui lòng thử lại sau.');
-          return;
+        if (searchMode === 'posts') {
+          const data = await MediaApi.searchPosts(trimmed, currentUserId, nextPage, PAGE_SIZE);
+          if (!data) return;
+          setPosts((prev) => {
+            if (replace) return data.posts;
+            const ids = new Set(prev.map((post) => post.id));
+            return [...prev, ...data.posts.filter((post) => !ids.has(post.id))];
+          });
+          setPage(nextPage);
+          setHasMore(data.hasMore);
+          void refreshReactionCounts(data.posts, replace);
+          void hydrateUserReactions();
+        } else {
+          const res = await userApi.searchUsers(trimmed);
+          if (res.result) {
+            setUsers(res.result);
+          }
+          setHasMore(false);
         }
-        setPosts((prev) => {
-          if (replace) return data.posts;
-          const ids = new Set(prev.map((post) => post.id));
-          return [...prev, ...data.posts.filter((post) => !ids.has(post.id))];
-        });
-        setPage(nextPage);
-        setHasMore(data.hasMore);
-        void refreshReactionCounts(data.posts, replace);
-        void hydrateUserReactions();
       } finally {
         if (replace) setLoading(false);
       }
@@ -95,6 +105,7 @@ export default function SocialSearchScreen() {
   useEffect(() => {
     if (!query.trim()) {
       setPosts([]);
+      setUsers([]);
       setHasSearched(false);
       setHasMore(false);
       return;
@@ -103,7 +114,7 @@ export default function SocialSearchScreen() {
       void runSearch(0, true, query);
     }, 420);
     return () => clearTimeout(timer);
-  }, [query, runSearch]);
+  }, [query, runSearch, searchMode]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -197,11 +208,25 @@ export default function SocialSearchScreen() {
           onSubmitEditing={() => runSearch(0, true)}
           returnKeyType="search"
           autoFocus
-          placeholder="Tìm bài viết"
+          placeholder={searchMode === 'posts' ? "Tìm bài viết" : "Tìm người dùng (tên, email, sđt)"}
           placeholderTextColor={SOCIAL_COLORS.textSoft}
           className="ml-3 flex-1 text-[15px] font-semibold"
           style={{ color: SOCIAL_COLORS.text }}
         />
+      </View>
+      <View className="flex-row mt-4">
+        <TouchableOpacity
+          className={`flex-1 py-2 items-center border-b-2 ${searchMode === 'users' ? 'border-blue-500' : 'border-transparent'}`}
+          onPress={() => setSearchMode('users')}
+        >
+          <Text className={`font-bold ${searchMode === 'users' ? 'text-blue-500' : 'text-gray-500'}`}>Người dùng</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          className={`flex-1 py-2 items-center border-b-2 ${searchMode === 'posts' ? 'border-blue-500' : 'border-transparent'}`}
+          onPress={() => setSearchMode('posts')}
+        >
+          <Text className={`font-bold ${searchMode === 'posts' ? 'text-blue-500' : 'text-gray-500'}`}>Bài viết</Text>
+        </TouchableOpacity>
       </View>
       </View>
     </View>
@@ -211,8 +236,8 @@ export default function SocialSearchScreen() {
     <SafeAreaView className="flex-1" edges={['left', 'right']} style={{ backgroundColor: SOCIAL_COLORS.page }}>
       <StatusBar style="dark" translucent backgroundColor={SOCIAL_COLORS.page} />
       <FlatList
-        data={posts}
-        keyExtractor={(item) => item.id}
+        data={searchMode === 'posts' ? posts : (users as any)}
+        keyExtractor={(item: any) => item.id}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingBottom: 32 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={SOCIAL_COLORS.primary} />}
@@ -225,7 +250,7 @@ export default function SocialSearchScreen() {
           <View className="mx-4 mt-8 items-center rounded-2xl border px-6 py-10" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
             {loading ? <ActivityIndicator color={SOCIAL_COLORS.primary} /> : <Feather name={hasSearched ? 'search' : 'compass'} size={30} color={SOCIAL_COLORS.textSoft} />}
             <Text className="mt-3 text-center text-base font-bold" style={{ color: SOCIAL_COLORS.text }}>
-              {loading ? 'Đang tìm...' : hasSearched ? 'Không có kết quả' : 'Nhập từ khóa để tìm bài viết'}
+              {loading ? 'Đang tìm...' : hasSearched ? 'Không có kết quả' : (searchMode === 'users' ? 'Nhập tên, email hoặc SĐT' : 'Nhập từ khóa để tìm bài viết')}
             </Text>
           </View>
         }
@@ -236,22 +261,44 @@ export default function SocialSearchScreen() {
             </View>
           ) : null
         }
-        renderItem={({ item }) => (
-          <PostCard
-            post={item}
-            currentUserId={currentUserId}
-            reaction={reactionByPost[item.id]}
-            reactionCounts={reactionCountsByPost[item.id]}
-            showReactionPicker={reactionPickerPost?.id === item.id}
-            onReact={handleReact}
-            onPickReaction={setReactionPickerPost}
-            onComment={setCommentPost}
-            onShowReactions={setReactionsListPost}
-            onEdit={setEditingPost}
-            onDelete={setPendingDeletePost}
-            onShare={setSharePost}
-          />
-        )}
+        renderItem={({ item }) => {
+          if (searchMode === 'users') {
+            const userItem = item as unknown as UserResponse;
+            return (
+              <View className="flex-row items-center p-4 bg-white border-b border-gray-100">
+                <View className="h-12 w-12 rounded-full bg-gray-200 overflow-hidden items-center justify-center">
+                  {userItem.avatarUrl ? (
+                    // We don't have Image imported directly so we'll just show initial for simplicity
+                    <Text className="text-gray-500 font-bold text-lg">{userItem.fullName?.[0]}</Text>
+                  ) : (
+                    <Text className="text-gray-500 font-bold text-lg">{userItem.fullName?.[0]}</Text>
+                  )}
+                </View>
+                <View className="ml-4 flex-1">
+                  <Text className="font-bold text-base text-gray-900">{userItem.fullName}</Text>
+                  {userItem.email && <Text className="text-gray-500 text-sm">{userItem.email}</Text>}
+                  {userItem.phone && <Text className="text-gray-500 text-sm">{userItem.phone}</Text>}
+                </View>
+              </View>
+            );
+          }
+          return (
+            <PostCard
+              post={item as Post}
+              currentUserId={currentUserId}
+              reaction={reactionByPost[item.id]}
+              reactionCounts={reactionCountsByPost[item.id]}
+              showReactionPicker={reactionPickerPost?.id === item.id}
+              onReact={handleReact}
+              onPickReaction={setReactionPickerPost}
+              onComment={setCommentPost}
+              onShowReactions={setReactionsListPost}
+              onEdit={setEditingPost}
+              onDelete={setPendingDeletePost}
+              onShare={setSharePost}
+            />
+          );
+        }}
       />
 
       <CreatePostModal

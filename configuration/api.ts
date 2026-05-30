@@ -88,5 +88,6 @@ export const API_ENDPOINTS = {
   USERS: {
     REQUEST_REGISTER_OTP: '/users/register/otp',
     REGISTER: '/users/register',
+    SEARCH: '/users/search',
   },
 };
