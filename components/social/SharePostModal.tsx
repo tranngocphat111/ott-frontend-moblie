@@ -1,16 +1,12 @@
-import { MediaApi, type Post, type Visibility } from '@/services/api/media.api';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { MediaApi, type AccessControl, type FriendOption, type Post, type Visibility } from '@/services/api/media.api';
+import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Avatar } from './SocialAvatar';
+import { FriendSelector } from './FriendSelector';
+import { VisibilityPills } from './VisibilityPills';
 import { SOCIAL_COLORS, useFullScreenModalPadding } from './socialTheme';
-
-const SHARE_VISIBILITY_OPTIONS: { value: Visibility; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'PUBLIC', label: 'Công khai', icon: 'earth' },
-  { value: 'FRIENDS', label: 'Bạn bè', icon: 'people' },
-  { value: 'PRIVATE', label: 'Chỉ mình tôi', icon: 'lock-closed' },
-];
 const resolveRootPost = (input: Post): Post => {
   const seen = new Set<string>();
   let current = input;
@@ -40,6 +36,11 @@ export function SharePostModal({
 }) {
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<Visibility>('PUBLIC');
+  const [friends, setFriends] = useState<FriendOption[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendSearch, setFriendSearch] = useState('');
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [customRuleType, setCustomRuleType] = useState<AccessControl['ruleType']>('INCLUDE');
   const [submitting, setSubmitting] = useState(false);
   const modalPadding = useFullScreenModalPadding();
 
@@ -47,13 +48,35 @@ export function SharePostModal({
     if (!visible) return;
     setCaption('');
     setVisibility('PUBLIC');
+    setFriendSearch('');
+    setSelectedFriendIds([]);
+    setCustomRuleType('INCLUDE');
   }, [visible, post?.id]);
+
+  useEffect(() => {
+    if (!visible || visibility !== 'CUSTOM' || !currentUserId || friends.length > 0) return;
+    setFriendsLoading(true);
+    MediaApi.fetchFriends(currentUserId)
+      .then(setFriends)
+      .finally(() => setFriendsLoading(false));
+  }, [friends.length, currentUserId, visibility, visible]);
+
+  const toggleFriend = (friendId: string) => {
+    setSelectedFriendIds((prev) =>
+      prev.includes(friendId) ? prev.filter((id) => id !== friendId) : [...prev, friendId],
+    );
+  };
+
+  const accessControls: AccessControl[] | undefined =
+    visibility === 'CUSTOM'
+      ? selectedFriendIds.map((accountId) => ({ accountId, ruleType: customRuleType }))
+      : undefined;
 
   const submit = async () => {
     if (!post || !currentUserId || submitting) return;
     setSubmitting(true);
     try {
-      const result = await MediaApi.sharePost(post.id, currentUserId, caption.trim() || undefined, visibility);
+      const result = await MediaApi.sharePost(post.id, currentUserId, caption.trim() || undefined, visibility, accessControls);
       if (!result.post) {
         Alert.alert('Không chia sẻ được', result.error || 'Vui lòng thử lại sau.');
         return;
@@ -65,7 +88,7 @@ export function SharePostModal({
     }
   };
 
-  const canSubmit = Boolean(post && currentUserId) && !submitting;
+  const canSubmit = Boolean(post && currentUserId) && (visibility !== 'CUSTOM' || selectedFriendIds.length > 0) && !submitting;
   const previewPost = post ? (post.sharedPost ? resolveRootPost(post.sharedPost) : post) : null;
 
   return (
@@ -98,28 +121,25 @@ export function SharePostModal({
                 <Text className="text-[15px] font-bold" style={{ color: SOCIAL_COLORS.text }}>
                   {currentUserName || 'Người dùng'}
                 </Text>
-                <View className="mt-2 flex-row flex-wrap gap-2">
-                  {SHARE_VISIBILITY_OPTIONS.map((item) => {
-                    const active = visibility === item.value;
-                    return (
-                      <TouchableOpacity
-                        key={item.value}
-                        className="h-8 flex-row items-center rounded-full border px-3"
-                        style={{
-                          backgroundColor: active ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.chipLight,
-                          borderColor: active ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.border,
-                        }}
-                        onPress={() => setVisibility(item.value)}
-                      >
-                        <Ionicons name={item.icon} size={13} color={active ? '#fff' : SOCIAL_COLORS.primary} />
-                        <Text className="ml-1.5 text-[11px] font-bold" style={{ color: active ? '#fff' : SOCIAL_COLORS.textMuted }}>
-                          {item.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
               </View>
+            </View>
+
+            <View className="mt-4">
+              <VisibilityPills value={visibility} onChange={setVisibility} />
+              <FriendSelector
+                visible={visibility === 'CUSTOM'}
+                friends={friends}
+                loading={friendsLoading}
+                selectedIds={selectedFriendIds}
+                ruleType={customRuleType}
+                search={friendSearch}
+                onRuleTypeChange={setCustomRuleType}
+                onSearchChange={setFriendSearch}
+                onToggleFriend={toggleFriend}
+              />
+              {visibility === 'CUSTOM' && selectedFriendIds.length === 0 ? (
+                <Text className="mt-2 text-xs font-semibold text-red-500">Chọn ít nhất một người cho phạm vi tùy chỉnh.</Text>
+              ) : null}
             </View>
 
             <TextInput

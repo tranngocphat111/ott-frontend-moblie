@@ -620,8 +620,7 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
   const hasProfileDetails = Boolean(
     profileUser?.work ||
     profileUser?.location ||
-    profileUser?.relationshipStatus ||
-    (isMine && profileUser?.phoneNumber),
+    profileUser?.relationshipStatus
   );
 
   if (!loading && relationshipStatus === "BLOCKED") {
@@ -895,16 +894,7 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
               </Text>
             </View>
           : null}
-          {profileUser?.phoneNumber && isMine ?
-            <View className="flex-row items-start">
-              <Ionicons name="call" size={22} color={SOCIAL_COLORS.textMuted} />
-              <Text
-                className="ml-3 flex-1 text-[16px] leading-6"
-                style={{ color: SOCIAL_COLORS.text }}>
-                {profileUser.phoneNumber}
-              </Text>
-            </View>
-          : null}
+
           {!hasProfileDetails ?
             <Text
               className="text-[15px] font-semibold"
