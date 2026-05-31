@@ -300,16 +300,18 @@ export default function SocialSearchScreen() {
       </View>
       <View className="flex-row mt-4">
         <TouchableOpacity
-          className={`flex-1 py-2 items-center border-b-2 ${searchMode === 'users' ? 'border-blue-500' : 'border-transparent'}`}
+          className={`flex-1 py-2 items-center border-b-2 ${searchMode === 'users' ? '' : 'border-transparent'}`}
+          style={searchMode === 'users' ? { borderBottomColor: SOCIAL_COLORS.primary } : undefined}
           onPress={() => setSearchMode('users')}
         >
-          <Text className={`font-bold ${searchMode === 'users' ? 'text-blue-500' : 'text-gray-500'}`}>Người dùng</Text>
+          <Text className={`font-bold ${searchMode === 'users' ? '' : 'text-gray-500'}`} style={searchMode === 'users' ? { color: SOCIAL_COLORS.primary } : undefined}>Người dùng</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          className={`flex-1 py-2 items-center border-b-2 ${searchMode === 'posts' ? 'border-blue-500' : 'border-transparent'}`}
+          className={`flex-1 py-2 items-center border-b-2 ${searchMode === 'posts' ? '' : 'border-transparent'}`}
+          style={searchMode === 'posts' ? { borderBottomColor: SOCIAL_COLORS.primary } : undefined}
           onPress={() => setSearchMode('posts')}
         >
-          <Text className={`font-bold ${searchMode === 'posts' ? 'text-blue-500' : 'text-gray-500'}`}>Bài viết</Text>
+          <Text className={`font-bold ${searchMode === 'posts' ? '' : 'text-gray-500'}`} style={searchMode === 'posts' ? { color: SOCIAL_COLORS.primary } : undefined}>Bài viết</Text>
         </TouchableOpacity>
       </View>
       </View>
