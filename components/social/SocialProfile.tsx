@@ -9,6 +9,7 @@ import {
   SocialConfirmModal,
   type SocialConfirmAction,
 } from "@/components/social";
+import { UserNotAvailable } from "@/components/social/UserNotAvailable";
 import { Avatar } from "@/components/social/SocialAvatar";
 import { MediaApi, type ApiUser, type Post } from "@/services/api/media.api";
 import { ChatApi } from "@/services/api/chat";
@@ -143,14 +144,14 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
     try {
       const [nextUser, nextPosts, reactions, friends, nextRelationship] =
         await Promise.all([
-          MediaApi.fetchUserById(userId),
-          MediaApi.fetchPostsByUser(userId, currentUserId),
+          MediaApi.fetchUserById(userId).catch(() => null),
+          MediaApi.fetchPostsByUser(userId, currentUserId).catch(() => []),
           currentUserId ?
-            MediaApi.fetchUserReactions(currentUserId)
+            MediaApi.fetchUserReactions(currentUserId).catch(() => [])
           : Promise.resolve([]),
-          MediaApi.fetchFriends(userId),
+          MediaApi.fetchFriends(userId).catch(() => []),
           currentUserId && currentUserId !== userId ?
-            MediaApi.fetchRelationshipOf(currentUserId, userId)
+            MediaApi.fetchRelationshipOf(currentUserId, userId).catch(() => null)
           : Promise.resolve(null),
         ]);
       setProfileUser(nextUser);
@@ -624,21 +625,7 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
   );
 
   if (!loading && relationshipStatus === "BLOCKED") {
-    return (
-      <View style={{ flex: 1, backgroundColor: SOCIAL_COLORS.page, alignItems: "center", justifyContent: "center" }}>
-        <StatusBar style="light" />
-        <Feather name="slash" size={64} color={SOCIAL_COLORS.textMuted} />
-        <Text style={{ marginTop: 16, color: SOCIAL_COLORS.text, fontSize: 18, fontWeight: "600" }}>
-          Trang cá nhân không khả dụng
-        </Text>
-        <TouchableOpacity
-          style={{ marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: SOCIAL_COLORS.primary, borderRadius: 8 }}
-          onPress={() => router.replace("/(main)/social" as any)}
-        >
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Trở về Bảng tin</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return <UserNotAvailable />;
   }
 
   const header = (
