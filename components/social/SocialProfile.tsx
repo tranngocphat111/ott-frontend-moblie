@@ -150,7 +150,7 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
           : Promise.resolve([]),
           MediaApi.fetchFriends(userId),
           currentUserId && currentUserId !== userId ?
-            MediaApi.fetchRelationshipStatusViaChat(currentUserId, userId)
+            MediaApi.fetchRelationshipOf(currentUserId, userId)
           : Promise.resolve(null),
         ]);
       setProfileUser(nextUser);
@@ -272,7 +272,7 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
 
   const refreshRelationship = useCallback(async () => {
     if (!currentUserId || !userId || currentUserId === userId) return;
-    const latest = await MediaApi.fetchRelationshipStatusViaChat(
+    const latest = await MediaApi.fetchRelationshipOf(
       currentUserId,
       userId,
     );
@@ -444,9 +444,8 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
               onPress: async () => {
                 setActionLoading(true);
                 try {
-                  const ok = await MediaApi.unfriendViaChat(
-                    currentUserId,
-                    userId,
+                  const ok = await MediaApi.unfriendRelationship(
+                    relationshipId,
                   );
                   if (ok) {
                     setRelationship(null);
@@ -463,9 +462,8 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
       }
 
       if (relationshipStatus === "PENDING" && isRequester && relationshipId) {
-        const ok = await MediaApi.cancelFriendRequestViaChat(
+        const ok = await MediaApi.cancelRelationship(
           relationshipId,
-          relationship,
         );
         if (ok) setRelationship(null);
         return;
@@ -483,9 +481,8 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
               onPress: async () => {
                 setActionLoading(true);
                 try {
-                  const ok = await MediaApi.acceptFriendRequestViaChat(
+                  const ok = await MediaApi.acceptFriendRequest(
                     relationshipId,
-                    relationship,
                   );
                   if (ok) {
                     await refreshRelationship();
@@ -502,9 +499,8 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
               onPress: async () => {
                 setActionLoading(true);
                 try {
-                  const ok = await MediaApi.rejectFriendRequestViaChat(
+                  const ok = await MediaApi.rejectFriendRequest(
                     relationshipId,
-                    relationship,
                   );
                   if (ok) setRelationship(null);
                 } finally {
@@ -518,7 +514,7 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
         return;
       }
 
-      const result = await MediaApi.sendFriendRequestViaChat(
+      const result = await MediaApi.sendFriendRequest(
         currentUserId,
         userId,
       );
@@ -551,11 +547,31 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
           onPress: async () => {
             setActionLoading(true);
             try {
-              const ok =
-                blocked ?
-                  await MediaApi.unblockUserViaChat(currentUserId, userId)
-                : await MediaApi.blockUserViaChat(currentUserId, userId);
-              if (ok) await refreshRelationship();
+              if (blocked) {
+                // Not reachable from UI, but left for completeness
+                await MediaApi.unblockUserViaChat(currentUserId, userId);
+                return;
+              }
+              
+              let ok = false;
+              if (relationshipId) {
+                ok = await MediaApi.blockRelationship(relationshipId, currentUserId);
+              } else {
+                ok = await MediaApi.blockUserDirectly(currentUserId, userId);
+              }
+              
+              if (ok) {
+                setRelationship((prev: any) => {
+                  const current = prev || {};
+                  return {
+                    ...current,
+                    requesterId: currentUserId,
+                    receiverId: userId,
+                    status: blocked ? "REMOVED" : "BLOCKED"
+                  };
+                });
+                void refreshFriendCount();
+              }
             } finally {
               setActionLoading(false);
             }
@@ -607,6 +623,24 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
     profileUser?.relationshipStatus ||
     (isMine && profileUser?.phoneNumber),
   );
+
+  if (!loading && relationshipStatus === "BLOCKED") {
+    return (
+      <View style={{ flex: 1, backgroundColor: SOCIAL_COLORS.page, alignItems: "center", justifyContent: "center" }}>
+        <StatusBar style="light" />
+        <Feather name="slash" size={64} color={SOCIAL_COLORS.textMuted} />
+        <Text style={{ marginTop: 16, color: SOCIAL_COLORS.text, fontSize: 18, fontWeight: "600" }}>
+          Trang cá nhân không khả dụng
+        </Text>
+        <TouchableOpacity
+          style={{ marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: SOCIAL_COLORS.primary, borderRadius: 8 }}
+          onPress={() => router.replace("/(main)/social" as any)}
+        >
+          <Text style={{ color: "#fff", fontWeight: "600" }}>Trở về Bảng tin</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const header = (
     <View style={{ backgroundColor: SOCIAL_COLORS.page }}>
