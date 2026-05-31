@@ -777,9 +777,10 @@ export const sharePost = async (
   accountId: string,
   caption?: string,
   visibility: Visibility | string = 'PUBLIC',
+  accessControls?: AccessControl[],
 ): Promise<{ post: Post | null; error?: string }> => {
   try {
-    const payload = await (apiClient.post as any)(mediaPath(`/posts/${postId}/share`), null, {
+    const payload = await (apiClient.post as any)(mediaPath(`/posts/${postId}/share`), accessControls ? accessControls : null, {
       params: {
         accountId,
         caption: caption?.trim() || undefined,
@@ -1098,6 +1099,24 @@ export const blockUserDirectly = async (requesterId: string, receiverId: string)
     await (apiClient.post as any)(mediaPath('/relationships/block'), null, {
       params: { requesterId, receiverId },
     });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const fetchBlockedUsers = async (userId: string): Promise<any[]> => {
+  try {
+    const payload = await (apiClient.get as any)(mediaPath(`/relationships/blocked/${userId}`));
+    return unwrapList<any>(payload);
+  } catch {
+    return [];
+  }
+};
+
+export const unblockRelationship = async (relationshipId: string): Promise<boolean> => {
+  try {
+    await (apiClient.delete as any)(mediaPath(`/relationships/${relationshipId}/unblock`));
     return true;
   } catch {
     return false;
@@ -1595,6 +1614,7 @@ export const clearViewHistory = async (): Promise<boolean> => {
 export const MediaApi = {
   acceptFriendRequest,
   acceptFriendRequestViaChat,
+  addComment,
   blockRelationship,
   blockUserDirectly,
   blockUserViaChat,
@@ -1607,6 +1627,7 @@ export const MediaApi = {
   deleteComment,
   deletePost,
   deleteStory,
+  fetchBlockedUsers,
   fetchComments,
   fetchFriends,
   fetchPendingRequests,
@@ -1642,6 +1663,7 @@ export const MediaApi = {
   sharePost,
   toggleSaveContent,
   toggleLike,
+  unblockRelationship,
   unblockUserViaChat,
   unfriendRelationship,
   unfriendViaChat,

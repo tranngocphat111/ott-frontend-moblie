@@ -140,7 +140,7 @@ export default function SocialSearchScreen() {
       if (!isTarget) return;
 
       setUsers((prevUsers) => prevUsers.map(u => {
-        const uId = (u as any)._id || u.user_id;
+        const uId = (u as any).id || (u as any)._id || u.user_id;
         if (uId === payload.requesterId || uId === payload.receiverId) {
           let newStatus = (u as any).relationshipStatus;
           if (payload.type === 'REQUEST_SENT') {
@@ -186,7 +186,7 @@ export default function SocialSearchScreen() {
     try {
       const res = await MediaApi.sendFriendRequest(currentUserId, targetId);
       if (res) {
-        setUsers(users.map(u => ((u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'PENDING_REQUEST_SENT' } : u));
+        setUsers(users.map(u => ((u as any).id || (u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'PENDING_REQUEST_SENT' } : u));
       }
     } catch (e) {
       console.error(e);
@@ -199,7 +199,7 @@ export default function SocialSearchScreen() {
       const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
       if (rel?.id) {
         await MediaApi.acceptFriendRequest(rel.id);
-        setUsers(users.map(u => ((u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'FRIEND' } : u));
+        setUsers(users.map(u => ((u as any).id || (u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'FRIEND' } : u));
       }
     } catch (e) {
       console.error(e);
@@ -212,7 +212,7 @@ export default function SocialSearchScreen() {
       const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
       if (rel?.id) {
         await MediaApi.rejectFriendRequest(rel.id);
-        setUsers(users.map(u => ((u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'NONE' } : u));
+        setUsers(users.map(u => ((u as any).id || (u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'NONE' } : u));
       }
     } catch (e) {
       console.error(e);

@@ -19,6 +19,7 @@ import {
   SOCIAL_COLORS,
   SOCIAL_SHADOW,
 } from "./socialTheme";
+import TextTagRenderer from "../common/TextTagRenderer";
 
 const isDeletedPost = (post: Post) =>
   String(post.status || "").toUpperCase() === "DELETED" ||
@@ -94,6 +95,7 @@ function MediaTile({
           source={{ uri: imageUri }}
           style={{ width: "100%", height: "100%" }}
           contentFit="cover"
+          contentPosition="center"
         />
       : <View
           className="flex-1 items-center justify-center"
@@ -239,7 +241,13 @@ function PostEngagementSummary({
   );
 }
 
-function SharedPostPreview({ post, onPress }: { post: Post; onPress?: () => void }) {
+function SharedPostPreview({
+  post,
+  onPress,
+}: {
+  post: Post;
+  onPress?: () => void;
+}) {
   const router = useRouter();
   const firstMedia = post.media[0];
   const imageUri =
@@ -254,12 +262,14 @@ function SharedPostPreview({ post, onPress }: { post: Post; onPress?: () => void
         backgroundColor: SOCIAL_COLORS.chipLight,
         borderColor: SOCIAL_COLORS.border,
       }}
-      onPress={onPress || (() =>
-        router.push({
-          pathname: "/(main)/social/profile/[userId]",
-          params: { userId: post.author.id },
-        })
-      )}>
+      onPress={
+        onPress ||
+        (() =>
+          router.push({
+            pathname: "/(main)/social/profile/[userId]",
+            params: { userId: post.author.id },
+          }))
+      }>
       <View className="flex-row items-center px-3 py-3">
         <Avatar
           uri={post.author.avatar}
@@ -282,12 +292,17 @@ function SharedPostPreview({ post, onPress }: { post: Post; onPress?: () => void
         </View>
       </View>
       {post.content.trim() ?
-        <Text
-          className="px-3 pb-3 text-[13px] leading-5"
-          style={{ color: SOCIAL_COLORS.text }}
-          numberOfLines={3}>
-          {post.content}
-        </Text>
+        <TextTagRenderer
+          content={post.content}
+          style={{
+            color: SOCIAL_COLORS.text,
+            paddingHorizontal: 12,
+            paddingBottom: 12,
+            fontSize: 13,
+            lineHeight: 20,
+          }}
+          numberOfLines={3}
+        />
       : null}
       {firstMedia ?
         <View
@@ -404,12 +419,14 @@ export function PostCard({
     }
   };
 
-  const hasVisibleSharedPost = Boolean(post.sharedPost && !isDeletedPost(post.sharedPost));
+  const hasVisibleSharedPost = Boolean(
+    post.sharedPost && !isDeletedPost(post.sharedPost),
+  );
   const shouldShowSharedFallback = Boolean(
     post.sharedPostDeleted ||
     post.sharedPostRestricted ||
     post.sharedPostCollapsed ||
-    (post.sharedPost && isDeletedPost(post.sharedPost))
+    (post.sharedPost && isDeletedPost(post.sharedPost)),
   );
 
   return (
@@ -497,11 +514,16 @@ export function PostCard({
           </Text>
         </View>
       : post.content.trim() ?
-        <Text
-          className="mt-3 px-4 text-[15px] leading-6"
-          style={{ color: SOCIAL_COLORS.text }}>
-          {post.content}
-        </Text>
+        <TextTagRenderer
+          content={post.content}
+          style={{
+            color: SOCIAL_COLORS.text,
+            marginTop: 12,
+            paddingHorizontal: 16,
+            fontSize: 15,
+            lineHeight: 24,
+          }}
+        />
       : null}
 
       {!deleted && (
@@ -509,7 +531,10 @@ export function PostCard({
       )}
 
       {!deleted && hasVisibleSharedPost && post.sharedPost ?
-        <SharedPostPreview post={post.sharedPost} onPress={() => onComment(post.sharedPost!)} />
+        <SharedPostPreview
+          post={post.sharedPost}
+          onPress={() => onComment(post.sharedPost!)}
+        />
       : null}
 
       {!deleted && shouldShowSharedFallback ?

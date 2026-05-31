@@ -3,11 +3,12 @@ import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TouchableOpacity, View, TextInput } from 'react-native';
 import { Avatar } from './SocialAvatar';
 import { FriendSelector } from './FriendSelector';
 import { VisibilityPills } from './VisibilityPills';
 import { buildCaptionWithFeeling, draftFromPickerAsset, draftFromPostMedia, FEELING_OPTIONS, type DraftMediaItem, type FeelingOption, SOCIAL_COLORS, useFullScreenModalPadding } from './socialTheme';
+import MentionInput, { SuggestionsDropdown } from '../common/MentionInput';
 
 export function CreatePostModal({
   visible,
@@ -40,6 +41,8 @@ export function CreatePostModal({
   const [friendSearch, setFriendSearch] = useState('');
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [customRuleType, setCustomRuleType] = useState<AccessControl['ruleType']>('INCLUDE');
+  const [mentionKeyword, setMentionKeyword] = useState<string | undefined>();
+  const [mentionOnPress, setMentionOnPress] = useState<any>();
   const [submitting, setSubmitting] = useState(false);
   const modalPadding = useFullScreenModalPadding();
   const isEditing = Boolean(initialPost);
@@ -195,9 +198,15 @@ export function CreatePostModal({
                 ) : null}
               </View>
 
-              <TextInput
+              {mentionKeyword != null && mentionOnPress != null && (
+                <View style={{ marginBottom: 4 }}>
+                  <SuggestionsDropdown keyword={mentionKeyword} onSuggestionPress={mentionOnPress} />
+                </View>
+              )}
+              <MentionInput
                 value={caption}
                 onChangeText={setCaption}
+                onMentionStateChange={(k, p) => { setMentionKeyword(k); setMentionOnPress(() => p); }}
                 multiline
                 placeholder="Bạn đang nghĩ gì?"
                 placeholderTextColor={SOCIAL_COLORS.textSoft}

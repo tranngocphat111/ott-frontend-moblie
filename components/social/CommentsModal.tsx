@@ -1,11 +1,14 @@
 import { THEME_COLORS } from '@/constants/theme';
-import { MediaApi, type Comment, type Post } from '@/services/api/media.api';
+import { MediaApi, type Comment, type Post, type ApiComment, mapComment } from '@/services/api/media.api';
 import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Avatar } from './SocialAvatar';
 import { SocialConfirmModal } from './SocialConfirmModal';
 import { SOCIAL_COLORS, useFullScreenModalPadding } from './socialTheme';
+import MentionInput, { SuggestionsDropdown } from '../common/MentionInput';
+import TextTagRenderer from '../common/TextTagRenderer';
+import { mediaSocket, type PostActivityPayload } from '@/services/socket/mediaSocket';
 
 export function CommentsModal({
   visible,
@@ -33,7 +36,10 @@ export function CommentsModal({
   const [repliesLoading, setRepliesLoading] = useState<Record<string, boolean>>({});
   const [sending, setSending] = useState(false);
   const [pendingDeleteComment, setPendingDeleteComment] = useState<Comment | null>(null);
+  const processedCommentIds = React.useRef<Set<string>>(new Set());
   const modalPadding = useFullScreenModalPadding();
+  const [mentionKeyword, setMentionKeyword] = useState<string | undefined>();
+  const [mentionOnPress, setMentionOnPress] = useState<any>();
 
   const loadFirst = useCallback(async () => {
     if (!post) return;
@@ -55,6 +61,79 @@ export function CommentsModal({
     setReplyingTo(null);
     void loadFirst();
   }, [loadFirst, visible]);
+
+  useEffect(() => {
+    if (!visible || !post?.id) return;
+
+    const handleActivity = (payload: PostActivityPayload) => {
+      if (payload.postId !== post.id) return;
+      if (payload.activityType !== 'COMMENT') return;
+
+      const data = payload.data as ApiComment | undefined;
+      if (!data) return;
+
+      // Skip current user because we already update optimistically
+      if (data.accountId === currentUserId) return;
+
+      if (payload.action === 'CREATE' || payload.action === 'ADD') {
+        if (processedCommentIds.current.has(data.id)) return;
+        processedCommentIds.current.add(data.id);
+
+        const newComment = mapComment(data);
+
+        if (newComment.parentId) {
+          setRepliesByParent((prev) => {
+            const existing = prev[newComment.parentId!];
+            if (!existing) return prev;
+            if (existing.some((r) => r.id === newComment.id)) return prev;
+            return {
+              ...prev,
+              [newComment.parentId!]: [...existing, newComment],
+            };
+          });
+          setComments((prev) =>
+            prev.map((c) =>
+              c.id === newComment.parentId ? { ...c, totalReplies: c.totalReplies + 1 } : c
+            )
+          );
+        } else {
+          setComments((prev) => {
+            if (prev.some((c) => c.id === newComment.id)) return prev;
+            return [newComment, ...prev];
+          });
+        }
+      } else if (payload.action === 'DELETE' || payload.action === 'REMOVE') {
+        if (processedCommentIds.current.has(data.id)) return;
+        processedCommentIds.current.add(data.id);
+
+        const deletedCommentId = data.id;
+        const parentId = data.parentCommentId;
+
+        if (parentId) {
+          setRepliesByParent((prev) => {
+            const existing = prev[parentId];
+            if (!existing) return prev;
+            return {
+              ...prev,
+              [parentId]: existing.filter((r) => r.id !== deletedCommentId),
+            };
+          });
+          setComments((prev) =>
+            prev.map((c) =>
+              c.id === parentId ? { ...c, totalReplies: Math.max(0, c.totalReplies - 1) } : c
+            )
+          );
+        } else {
+          setComments((prev) => prev.filter((c) => c.id !== deletedCommentId));
+        }
+      }
+    };
+
+    void mediaSocket.onPostActivity(handleActivity);
+    return () => {
+      mediaSocket.offPostActivity(handleActivity);
+    };
+  }, [post?.id, visible, currentUserId]);
 
   const loadMore = async () => {
     if (!post || loadingMore || !hasMore) return;
@@ -181,7 +260,10 @@ export function CommentsModal({
             <View className="ml-3 flex-1">
               <View className="rounded-xl px-3 py-2" style={{ backgroundColor: isRoot ? SOCIAL_COLORS.card : SOCIAL_COLORS.chipLight }}>
                 <Text className={`font-bold ${isRoot ? 'text-sm' : 'text-xs'}`} style={{ color: SOCIAL_COLORS.text }}>{comment.authorName}</Text>
-                <Text className={`mt-1 leading-5 ${isRoot ? 'text-[14px]' : 'text-[13px]'}`} style={{ color: SOCIAL_COLORS.text }}>{comment.text}</Text>
+                <TextTagRenderer 
+                  content={comment.text} 
+                  style={[{ color: SOCIAL_COLORS.text }, isRoot ? { fontSize: 14, lineHeight: 20, marginTop: 4 } : { fontSize: 13, lineHeight: 20, marginTop: 4 }]} 
+                />
               </View>
               <View className="ml-2 mt-1 flex-row items-center gap-4">
                 <Text className="text-xs" style={{ color: SOCIAL_COLORS.textSoft }}>{comment.time}</Text>
@@ -236,10 +318,10 @@ export function CommentsModal({
             className="flex-1"
             data={comments}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+            contentContainerStyle={{ paddingBottom: 24 }}
             onEndReached={loadMore}
             onEndReachedThreshold={0.3}
-            ListHeaderComponent={renderHeader && post ? () => <>{renderHeader(post)}</> : undefined}
+            ListHeaderComponent={renderHeader && post ? renderHeader(post) : undefined}
             ListEmptyComponent={
               loading ? (
                 <View className="py-10 items-center justify-center">
@@ -253,16 +335,25 @@ export function CommentsModal({
               )
             }
             ListFooterComponent={
-                loadingMore ? (
-                  <View className="py-3">
-                    <ActivityIndicator color={THEME_COLORS.primary[600]} />
-                  </View>
-                ) : null
-              }
-              renderItem={({ item }) => renderComment(item, 0)}
+              loadingMore ? (
+                <View className="py-3 items-center justify-center">
+                  <ActivityIndicator color={THEME_COLORS.primary[600]} />
+                </View>
+              ) : null
+            }
+            renderItem={({ item }) => (
+              <View className="px-4">
+                {renderComment(item, 0)}
+              </View>
+            )}
           />
 
-          <View className="border-t px-4 py-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+          <View className="border-t px-4 py-3 z-50" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border, overflow: 'visible' }}>
+            {mentionKeyword != null && mentionOnPress != null && (
+              <View style={{ marginBottom: 4 }}>
+                <SuggestionsDropdown keyword={mentionKeyword} onSuggestionPress={mentionOnPress} />
+              </View>
+            )}
             {replyingTo ? (
               <View className="mb-2 flex-row items-center rounded-xl px-3 py-2" style={{ backgroundColor: SOCIAL_COLORS.chipLight }}>
                 <Text className="flex-1 text-xs font-semibold" style={{ color: SOCIAL_COLORS.textMuted }} numberOfLines={1}>
@@ -273,10 +364,11 @@ export function CommentsModal({
                 </TouchableOpacity>
               </View>
             ) : null}
-            <View className="flex-row items-end rounded-xl px-3 py-2" style={{ backgroundColor: SOCIAL_COLORS.chipLight }}>
-              <TextInput
+            <View className="flex-row items-end rounded-xl px-3 py-2 z-50" style={{ backgroundColor: SOCIAL_COLORS.chipLight, overflow: 'visible' }}>
+              <MentionInput
                 value={text}
                 onChangeText={setText}
+                onMentionStateChange={(k, p) => { setMentionKeyword(k); setMentionOnPress(() => p); }}
                 multiline
                 placeholder="Viết bình luận..."
                 placeholderTextColor={SOCIAL_COLORS.textSoft}

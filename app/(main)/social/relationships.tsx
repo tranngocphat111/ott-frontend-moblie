@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type RelationshipTab = 'friends' | 'requests';
+type RelationshipTab = 'friends' | 'requests' | 'blocked';
 
 export default function SocialRelationshipsScreen() {
   const { user } = useAuth();
@@ -19,6 +19,7 @@ export default function SocialRelationshipsScreen() {
   const [tab, setTab] = useState<RelationshipTab>('friends');
   const [friends, setFriends] = useState<FriendOption[]>([]);
   const [requests, setRequests] = useState<FriendRequestOption[]>([]);
+  const [blocked, setBlocked] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -30,12 +31,14 @@ export default function SocialRelationshipsScreen() {
     }
     setLoading(true);
     try {
-      const [nextFriends, nextRequests] = await Promise.all([
+      const [nextFriends, nextRequests, nextBlocked] = await Promise.all([
         MediaApi.fetchFriends(currentUserId),
         MediaApi.fetchPendingRequests(currentUserId),
+        MediaApi.fetchBlockedUsers(currentUserId),
       ]);
       setFriends(nextFriends);
       setRequests(nextRequests);
+      setBlocked(nextBlocked);
     } finally {
       setLoading(false);
     }
@@ -96,6 +99,22 @@ export default function SocialRelationshipsScreen() {
     }
   };
 
+  const unblockUser = async (user: any) => {
+    if (busyId) return;
+    setBusyId(user.id);
+    const previousBlocked = blocked;
+    setBlocked((prev) => prev.filter((item) => item.id !== user.id));
+    try {
+      const ok = await MediaApi.unblockRelationship(user.id);
+      if (!ok) {
+        setBlocked(previousBlocked);
+        Alert.alert('Không thể bỏ chặn', 'Vui lòng thử lại sau.');
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const header = (
     <View className="px-4 pb-4" style={{ paddingTop: insets.top + 12, backgroundColor: SOCIAL_COLORS.page }}>
       <View className="rounded-2xl border p-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
@@ -117,6 +136,7 @@ export default function SocialRelationshipsScreen() {
         {([
           { value: 'friends', label: `Bạn bè ${friends.length}`, icon: 'people' },
           { value: 'requests', label: `Lời mời ${requests.length}`, icon: 'person-add' },
+          { value: 'blocked', label: `Đã chặn ${blocked.length}`, icon: 'person-remove' },
         ] as { value: RelationshipTab; label: string; icon: keyof typeof Ionicons.glyphMap }[]).map((item) => {
           const active = tab === item.value;
           return (
@@ -138,7 +158,7 @@ export default function SocialRelationshipsScreen() {
     </View>
   );
 
-  const data = tab === 'friends' ? friends : requests;
+  const data = tab === 'friends' ? friends : tab === 'requests' ? requests : blocked;
 
   return (
     <SafeAreaView className="flex-1" edges={['left', 'right']} style={{ backgroundColor: SOCIAL_COLORS.page }}>
@@ -159,18 +179,22 @@ export default function SocialRelationshipsScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={SOCIAL_COLORS.primary} />}
           ListEmptyComponent={
             <View className="mx-4 mt-8 items-center rounded-2xl border px-6 py-10" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
-              <Feather name={tab === 'friends' ? 'users' : 'inbox'} size={30} color={SOCIAL_COLORS.textSoft} />
+              <Feather name={tab === 'friends' ? 'users' : tab === 'requests' ? 'inbox' : 'user-x'} size={30} color={SOCIAL_COLORS.textSoft} />
               <Text className="mt-3 text-center text-base font-bold" style={{ color: SOCIAL_COLORS.text }}>
-                {tab === 'friends' ? 'Chưa có bạn bè' : 'Không có lời mời mới'}
+                {tab === 'friends' ? 'Chưa có bạn bè' : tab === 'requests' ? 'Không có lời mời mới' : 'Không có người bị chặn'}
               </Text>
             </View>
           }
           renderItem={({ item }) => {
             const isRequest = tab === 'requests';
+            const isBlocked = tab === 'blocked';
             const request = item as FriendRequestOption;
             const friend = item as FriendOption;
-            const targetId = isRequest ? request.userId : friend.id;
-            const busy = isRequest && busyId === request.id;
+            const blockedUser = item as any;
+            const targetId = isRequest ? request.userId : isBlocked ? blockedUser.receiverId : friend.id;
+            const busy = (isRequest || isBlocked) && busyId === item.id;
+            const itemName = isBlocked ? blockedUser.receiverDisplayName || blockedUser.receiverUsername || 'Người dùng' : item.name;
+            const itemAvatar = isBlocked ? blockedUser.receiverAvatarUrl : item.avatarUrl;
             return (
               <TouchableOpacity
                 className="mx-4 mb-3 rounded-2xl border p-3"
@@ -179,13 +203,13 @@ export default function SocialRelationshipsScreen() {
                 onPress={() => openProfile(targetId)}
               >
                 <View className="flex-row items-center">
-                  <Avatar uri={item.avatarUrl} name={item.name} size={52} color={SOCIAL_COLORS.primary} />
+                  <Avatar uri={itemAvatar} name={itemName} size={52} color={SOCIAL_COLORS.primary} />
                   <View className="ml-3 flex-1">
                     <Text className="text-[15px] font-black" style={{ color: SOCIAL_COLORS.text }} numberOfLines={1}>
-                      {item.name}
+                      {itemName}
                     </Text>
                     <Text className="mt-0.5 text-[12px] font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>
-                      {isRequest ? 'Đã gửi lời mời kết bạn' : friend.phone || 'Bạn bè trên Riff'}
+                      {isRequest ? 'Đã gửi lời mời kết bạn' : isBlocked ? 'Bị chặn' : friend.phone || 'Bạn bè trên Riff'}
                     </Text>
                   </View>
                   <Feather name="chevron-right" size={20} color={SOCIAL_COLORS.textSoft} />
@@ -211,6 +235,20 @@ export default function SocialRelationshipsScreen() {
                       <Feather name="x" size={17} color={SOCIAL_COLORS.primaryDark} />
                       <Text className="ml-2 text-[13px] font-black" style={{ color: SOCIAL_COLORS.text }}>
                         Từ chối
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : isBlocked ? (
+                  <View className="mt-3">
+                    <TouchableOpacity
+                      className="h-11 w-full flex-row items-center justify-center rounded-xl"
+                      style={{ backgroundColor: SOCIAL_COLORS.chipLight }}
+                      disabled={busy}
+                      onPress={() => unblockUser(blockedUser)}
+                    >
+                      {busy ? <ActivityIndicator color={SOCIAL_COLORS.primaryDark} size="small" /> : <Feather name="unlock" size={17} color={SOCIAL_COLORS.primaryDark} />}
+                      <Text className="ml-2 text-[13px] font-black" style={{ color: SOCIAL_COLORS.text }}>
+                        Bỏ chặn
                       </Text>
                     </TouchableOpacity>
                   </View>
