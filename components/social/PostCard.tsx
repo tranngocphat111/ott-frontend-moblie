@@ -21,7 +21,8 @@ import {
 } from "./socialTheme";
 
 const isDeletedPost = (post: Post) =>
-  String(post.status || "").toUpperCase() === "DELETED";
+  String(post.status || "").toUpperCase() === "DELETED" ||
+  String(post.visibility || "").toUpperCase() === "DELETED";
 
 function ReactionPickerBubble({
   post,
@@ -403,7 +404,6 @@ export function PostCard({
     }
   };
 
-  const isDeletedPost = (p: Post) => p.status === 'deleted' || p.status === 'DELETED' || p.visibility === 'DELETED' || p.visibility === 'deleted';
   const hasVisibleSharedPost = Boolean(post.sharedPost && !isDeletedPost(post.sharedPost));
   const shouldShowSharedFallback = Boolean(
     post.sharedPostDeleted ||
