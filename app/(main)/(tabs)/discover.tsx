@@ -82,6 +82,7 @@ export default function DiscoverScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [createPostVisible, setCreatePostVisible] = useState(false);
+  const [createPostFeeling, setCreatePostFeeling] = useState(false);
   const [createStoryVisible, setCreateStoryVisible] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [reactionPickerPost, setReactionPickerPost] = useState<Post | null>(
@@ -567,6 +568,12 @@ export default function DiscoverScreen() {
         storyLoadError={storyLoadError}
         onCreatePost={() => {
           setEditingPost(null);
+          setCreatePostFeeling(false);
+          setCreatePostVisible(true);
+        }}
+        onCreatePostWithFeeling={() => {
+          setEditingPost(null);
+          setCreatePostFeeling(true);
           setCreatePostVisible(true);
         }}
         onCreateStory={() => {
@@ -730,8 +737,10 @@ export default function DiscoverScreen() {
         avatarUrl={avatarUrl}
         userName={displayName}
         initialPost={editingPost}
+        openWithFeeling={createPostFeeling}
         onClose={() => {
           setCreatePostVisible(false);
+          setCreatePostFeeling(false);
           setEditingPost(null);
         }}
         onCreated={handleCreatedPost}

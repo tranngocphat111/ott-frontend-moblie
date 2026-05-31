@@ -181,7 +181,18 @@ export function CommentsModal({
   };
 
   const loadReplies = async (comment: Comment) => {
-    if (repliesByParent[comment.id]?.length || repliesLoading[comment.id]) return;
+    if (repliesLoading[comment.id]) return;
+    
+    // Toggle hide: if already loaded, remove from state to hide them
+    if (repliesByParent[comment.id]?.length > 0) {
+      setRepliesByParent((prev) => {
+        const next = { ...prev };
+        delete next[comment.id];
+        return next;
+      });
+      return;
+    }
+
     setRepliesLoading((prev) => ({ ...prev, [comment.id]: true }));
     try {
       const data = await MediaApi.fetchReplies(comment.id, 0, 10);

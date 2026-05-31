@@ -300,16 +300,7 @@ function CreatePostEntry({
       <View
         className="flex-row border-t pt-2"
         style={{ borderColor: SOCIAL_COLORS.border }}>
-        <TouchableOpacity
-          className="flex-1 flex-row items-center justify-center rounded-xl py-2"
-          onPress={onPress}>
-          <Feather name="video" size={18} color={SOCIAL_COLORS.primary} />
-          <Text
-            className="ml-2 text-sm font-semibold"
-            style={{ color: SOCIAL_COLORS.textMuted }}>
-            Live
-          </Text>
-        </TouchableOpacity>
+
         <TouchableOpacity
           className="flex-1 flex-row items-center justify-center rounded-xl py-2"
           onPress={onPress}>

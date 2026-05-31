@@ -382,27 +382,38 @@ export function StoryViewerModal({
                 const isText = item.type === "TEXT";
                 const itemUrl = resolveMediaUrl(item.url);
 
+                const posX = item.positionX ?? 0.5;
+                const posY = item.positionY ?? 0.5;
+
                 if (isImage && itemUrl) {
                   return (
                     <View
                       key={item.id || idx}
                       style={{
                         position: "absolute",
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        transform: [
-                          { scale: item.scale ?? 1 },
-                          { rotate: `${item.rotation ?? 0}deg` },
-                        ],
+                        left: `${(posX - 0.5) * 100}%`,
+                        right: `${-(posX - 0.5) * 100}%`,
+                        top: `${(posY - 0.5) * 100}%`,
+                        bottom: `${-(posY - 0.5) * 100}%`,
+                        justifyContent: "center",
+                        alignItems: "center",
                         zIndex: item.zIndex,
                       }}>
-                      <ExpoImage
-                        source={{ uri: itemUrl }}
-                        style={{ width: "100%", height: "100%" }}
-                        contentFit="cover"
-                      />
+                      <View
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          transform: [
+                            { scale: item.scale ?? 1 },
+                            { rotate: `${item.rotation ?? 0}deg` },
+                          ],
+                        }}>
+                        <ExpoImage
+                          source={{ uri: itemUrl }}
+                          style={{ width: "100%", height: "100%" }}
+                          contentFit="cover"
+                        />
+                      </View>
                     </View>
                   );
                 }
@@ -413,25 +424,37 @@ export function StoryViewerModal({
                       key={item.id || idx}
                       style={{
                         position: "absolute",
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
+                        left: `${(posX - 0.5) * 100}%`,
+                        right: `${-(posX - 0.5) * 100}%`,
+                        top: `${(posY - 0.5) * 100}%`,
+                        bottom: `${-(posY - 0.5) * 100}%`,
+                        justifyContent: "center",
+                        alignItems: "center",
                         zIndex: item.zIndex,
                       }}>
-                      <Video
-                        source={{ uri: itemUrl }}
-                        style={{ width: "100%", height: "100%" }}
-                        resizeMode={ResizeMode.COVER}
-                        shouldPlay={
-                          !isPaused &&
-                          !commentsVisible &&
-                          !reactionsVisible &&
-                          !viewersVisible
-                        }
-                        isMuted={isMuted}
-                        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-                      />
+                      <View
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          transform: [
+                            { scale: item.scale ?? 1 },
+                            { rotate: `${item.rotation ?? 0}deg` },
+                          ],
+                        }}>
+                        <Video
+                          source={{ uri: itemUrl }}
+                          style={{ width: "100%", height: "100%" }}
+                          resizeMode={ResizeMode.COVER}
+                          shouldPlay={
+                            !isPaused &&
+                            !commentsVisible &&
+                            !reactionsVisible &&
+                            !viewersVisible
+                          }
+                          isMuted={isMuted}
+                          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+                        />
+                      </View>
                     </View>
                   );
                 }
@@ -442,17 +465,13 @@ export function StoryViewerModal({
                       key={item.id || idx}
                       style={{
                         position: "absolute",
-                        left: 0,
-                        right: 0,
-                        top: `${item.positionY * 100}%`,
-                        transform: [
-                          { translateY: -20 },
-                          { scale: item.scale ?? 1 },
-                          { rotate: `${item.rotation ?? 0}deg` },
-                        ],
-                        zIndex: item.zIndex,
-                        alignItems: "center",
+                        left: `${(posX - 0.5) * 100}%`,
+                        right: `${-(posX - 0.5) * 100}%`,
+                        top: `${(posY - 0.5) * 100}%`,
+                        bottom: `${-(posY - 0.5) * 100}%`,
                         justifyContent: "center",
+                        alignItems: "center",
+                        zIndex: item.zIndex,
                         paddingHorizontal: 24,
                       }}>
                       <View
@@ -460,6 +479,10 @@ export function StoryViewerModal({
                         style={{
                           backgroundColor:
                             item.textBackgroundColor || "rgba(0,0,0,0.55)",
+                          transform: [
+                            { scale: item.scale ?? 1 },
+                            { rotate: `${item.rotation ?? 0}deg` },
+                          ],
                         }}>
                         <Text style={{ fontSize: 28, fontWeight: '900', lineHeight: 34, color: '#fff', textAlign: 'center' }}>
                           {item.textContent}
