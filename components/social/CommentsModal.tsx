@@ -6,7 +6,6 @@ import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platfo
 import { Avatar } from './SocialAvatar';
 import { SocialConfirmModal } from './SocialConfirmModal';
 import { SOCIAL_COLORS, useFullScreenModalPadding } from './socialTheme';
-import MentionInput, { SuggestionsDropdown } from '../common/MentionInput';
 import TextTagRenderer from '../common/TextTagRenderer';
 import { mediaSocket, type PostActivityPayload } from '@/services/socket/mediaSocket';
 
@@ -38,8 +37,6 @@ export function CommentsModal({
   const [pendingDeleteComment, setPendingDeleteComment] = useState<Comment | null>(null);
   const processedCommentIds = React.useRef<Set<string>>(new Set());
   const modalPadding = useFullScreenModalPadding();
-  const [mentionKeyword, setMentionKeyword] = useState<string | undefined>();
-  const [mentionOnPress, setMentionOnPress] = useState<any>();
 
   const loadFirst = useCallback(async () => {
     if (!post) return;
@@ -362,11 +359,6 @@ export function CommentsModal({
           />
 
           <View className="border-t px-4 py-3 z-50" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border, overflow: 'visible' }}>
-            {mentionKeyword != null && mentionOnPress != null && (
-              <View style={{ marginBottom: 4 }}>
-                <SuggestionsDropdown keyword={mentionKeyword} onSuggestionPress={mentionOnPress} />
-              </View>
-            )}
             {replyingTo ? (
               <View className="mb-2 flex-row items-center rounded-xl px-3 py-2" style={{ backgroundColor: SOCIAL_COLORS.chipLight }}>
                 <Text className="flex-1 text-xs font-semibold" style={{ color: SOCIAL_COLORS.textMuted }} numberOfLines={1}>
@@ -378,10 +370,9 @@ export function CommentsModal({
               </View>
             ) : null}
             <View className="flex-row items-end rounded-xl px-3 py-2 z-50" style={{ backgroundColor: SOCIAL_COLORS.chipLight, overflow: 'visible' }}>
-              <MentionInput
+              <TextInput
                 value={text}
                 onChangeText={setText}
-                onMentionStateChange={(k, p) => { setMentionKeyword(k); setMentionOnPress(() => p); }}
                 multiline
                 placeholder="Viết bình luận..."
                 placeholderTextColor={SOCIAL_COLORS.textSoft}

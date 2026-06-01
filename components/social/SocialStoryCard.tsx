@@ -70,13 +70,6 @@ export function SocialStoryCard({
             </View>
           </TouchableOpacity>
 
-          <View className="mt-3 flex-row items-center">
-            <Ionicons name="eye-outline" size={16} color={SOCIAL_COLORS.textSoft} />
-            <Text className="ml-1 text-xs font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>
-              {story.totalViews ?? 0} lượt xem
-            </Text>
-          </View>
-
           <View className="mt-auto flex-row items-center gap-2">
             <View className="h-9 flex-1 flex-row items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_COLORS.chipLight }}>
               <Feather name="maximize-2" size={15} color={SOCIAL_COLORS.primaryDark} />

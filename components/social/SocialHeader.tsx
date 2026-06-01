@@ -45,49 +45,7 @@ function StoryRail({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-        <TouchableOpacity
-          className="h-44 overflow-hidden rounded-[18px] border"
-          style={{
-            width: 108,
-            backgroundColor: SOCIAL_COLORS.card,
-            borderColor: SOCIAL_COLORS.border,
-            ...SOCIAL_SHADOW,
-          }}
-          activeOpacity={0.86}
-          onPress={onCreateStory}>
-          <View
-            className="h-[126px]"
-            style={{ backgroundColor: SOCIAL_COLORS.chip }}>
-            {currentUserAvatar ? (
-              <ExpoImage
-                source={{ uri: currentUserAvatar }}
-                style={{ width: "100%", height: "100%" }}
-                contentFit="cover"
-              />
-            ) : (
-              <View className="h-full w-full items-center justify-center">
-                <Avatar name={currentUserName} size={52} />
-              </View>
-            )}
-          </View>
-          <View
-            className="h-[50px] items-center justify-end px-2 pb-2.5"
-            style={{ backgroundColor: SOCIAL_COLORS.card }}>
-            <Text
-              className="text-center text-[12px] font-bold"
-              style={{ color: SOCIAL_COLORS.text }}
-              numberOfLines={2}>
-              Tạo tin
-            </Text>
-          </View>
-          <View className="absolute left-0 right-0 top-[112px] items-center">
-            <View
-              className="h-8 w-8 items-center justify-center rounded-full border-[3px] border-white"
-              style={{ backgroundColor: SOCIAL_COLORS.primaryDark }}>
-              <Feather name="plus" size={17} color="#fff" />
-            </View>
-          </View>
-        </TouchableOpacity>
+
 
         {storyGroups.map((group) => {
           const firstStory = group.stories[0];

@@ -31,6 +31,26 @@ type RelationshipSocketEventMap = {
 class RelationshipSocketService {
   private socket: Socket | null = null;
   private readonly endpoint = RELATIONSHIP_SOCKET_CONFIG.URL;
+  private userRoomId: string | null = null;
+  private joinedUserRoomKey: string | null = null;
+
+  private emitJoinUserRoom(socket: Socket, userId: string) {
+    const joinKey = `${socket.id || 'pending'}:${userId}`;
+    if (this.joinedUserRoomKey === joinKey) return;
+
+    socket.emit('tham_gia_user_room', userId);
+    this.joinedUserRoomKey = joinKey;
+    console.log(`[RelationshipSocket] joined user room: user:${userId}`);
+  }
+
+  async joinUserRoom(userId: string) {
+    const socket = await this.ensureSocket();
+    this.userRoomId = userId;
+
+    if (socket && socket.connected) {
+      this.emitJoinUserRoom(socket, userId);
+    }
+  }
 
   private async ensureSocket() {
     if (this.socket) return this.socket;
@@ -45,8 +65,17 @@ class RelationshipSocketService {
       auth: { token },
     });
 
-    socket.on('connect', () => console.log('[RelationshipSocket] connected', socket.id));
-    socket.on('disconnect', () => console.log('[RelationshipSocket] disconnected'));
+    socket.on('connect', () => {
+      console.log('[RelationshipSocket] connected', socket.id);
+      this.joinedUserRoomKey = null;
+      if (this.userRoomId) {
+        this.emitJoinUserRoom(socket, this.userRoomId);
+      }
+    });
+    socket.on('disconnect', () => {
+      console.log('[RelationshipSocket] disconnected');
+      this.joinedUserRoomKey = null;
+    });
     socket.on('connect_error', (error) => console.warn('[RelationshipSocket] connect_error', error?.message));
 
     this.socket = socket;
@@ -60,6 +89,8 @@ class RelationshipSocketService {
   disconnect() {
     this.socket?.disconnect();
     this.socket = null;
+    this.userRoomId = null;
+    this.joinedUserRoomKey = null;
   }
 
   async on<K extends keyof RelationshipSocketEventMap>(event: K, callback: RelationshipSocketEventMap[K]) {

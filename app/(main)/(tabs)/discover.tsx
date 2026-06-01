@@ -179,6 +179,7 @@ export default function DiscoverScreen() {
     setPendingMap({});
     pendingMapRef.current = {};
     void relationshipSocket.connect();
+    void relationshipSocket.joinUserRoom(currentUserId);
 
     const handleRelationshipUpdate = (payload: RelationshipRealtimePayload) => {
       if (!payload) return;

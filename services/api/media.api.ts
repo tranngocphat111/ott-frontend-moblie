@@ -1475,17 +1475,20 @@ export const updateStory = async (
   captions?: string[],
 ): Promise<ApiStory | null> => {
   try {
-    if (!files?.length) {
-      const payload = await (apiClient.put as any)(mediaPath(`/stories/${storyId}`), request, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 60000,
-      });
-      return unwrapApiResult<ApiStory>(payload);
-    }
-
     const form = new FormData();
-    form.append('request', JSON.stringify(request) as any);
-    appendUploadFiles(form, 'files', files, captions);
+    // In React Native, we can pass a custom object with type to force the content-type of the part
+    // However, some Axios versions expect a Blob or just the string.
+    // If the backend fails to parse the string, it might need type: 'application/json'
+    // Let's use the standard string approach first. If needed we can adjust.
+    // But actually, passing it as a Blob-like object is safer for Spring:
+    form.append('request', {
+      string: JSON.stringify(request),
+      type: 'application/json',
+    } as any);
+
+    if (files?.length) {
+      appendUploadFiles(form, 'files', files, captions);
+    }
 
     const payload = await (apiClient.put as any)(mediaPath(`/stories/${storyId}`), form, {
       headers: { 'Content-Type': 'multipart/form-data' },

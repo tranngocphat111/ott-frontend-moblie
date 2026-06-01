@@ -23,7 +23,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "./SocialAvatar";
-import { CommentsModal } from "./CommentsModal";
 import { ReactionsListModal } from "./ReactionsListModal";
 
 export function StoryViewerModal({
@@ -47,9 +46,6 @@ export function StoryViewerModal({
   const [index, setIndex] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
-  const [viewersVisible, setViewersVisible] = useState(false);
-  const [viewers, setViewers] = useState<any[]>([]);
-  const [viewersLoading, setViewersLoading] = useState(false);
   
   // New States for Playback and Progression
   const [isPaused, setIsPaused] = useState(false);
@@ -57,8 +53,7 @@ export function StoryViewerModal({
   const [storyProgress, setStoryProgress] = useState(0);
   const [pressStartTime, setPressStartTime] = useState(0);
 
-  // New States for Reactions and Comments
-  const [commentsVisible, setCommentsVisible] = useState(false);
+  // New States for Reactions
   const [reactionsVisible, setReactionsVisible] = useState(false);
   const [reactionMap, setReactionMap] = useState<Record<string, number>>({});
   const [userReaction, setUserReaction] = useState<string | null>(null);
@@ -86,9 +81,7 @@ export function StoryViewerModal({
       setIndex(0);
       setStoryProgress(0);
       setIsPaused(false);
-      setCommentsVisible(false);
       setReactionsVisible(false);
-      setViewersVisible(false);
     }
   }, [group]);
 
@@ -161,9 +154,7 @@ export function StoryViewerModal({
       !story ||
       isPaused ||
       storyKind === "VIDEO" ||
-      commentsVisible ||
-      reactionsVisible ||
-      viewersVisible
+      reactionsVisible
     )
       return;
 
@@ -190,9 +181,7 @@ export function StoryViewerModal({
     index,
     isPaused,
     storyKind,
-    commentsVisible,
     reactionsVisible,
-    viewersVisible,
   ]);
 
   const isOwner = Boolean(
@@ -211,17 +200,6 @@ export function StoryViewerModal({
     if (!ok) {
       setIsSaved(!nextSaved);
       Alert.alert("Không cập nhật được", "Vui lòng thử lại sau.");
-    }
-  };
-
-  const openViewers = async () => {
-    if (!story?.id) return;
-    setViewersVisible(true);
-    setViewersLoading(true);
-    try {
-      setViewers(await MediaApi.fetchStoryViewers(story.id));
-    } finally {
-      setViewersLoading(false);
     }
   };
 
@@ -246,7 +224,7 @@ export function StoryViewerModal({
     ]);
   };
 
-  const handleLike = async (key = "LIKE") => {
+  const handleLike = async (key = "LOVE") => {
     if (!story?.id || !currentUserId || submittingReaction) return;
     setSubmittingReaction(true);
 
@@ -288,8 +266,6 @@ export function StoryViewerModal({
     ) || undefined;
 
   const closeViewer = () => {
-    setViewersVisible(false);
-    setCommentsVisible(false);
     setReactionsVisible(false);
     onClose();
   };
@@ -447,9 +423,7 @@ export function StoryViewerModal({
                           resizeMode={ResizeMode.COVER}
                           shouldPlay={
                             !isPaused &&
-                            !commentsVisible &&
-                            !reactionsVisible &&
-                            !viewersVisible
+                            !reactionsVisible
                           }
                           isMuted={isMuted}
                           onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
@@ -508,9 +482,7 @@ export function StoryViewerModal({
                 resizeMode={ResizeMode.COVER}
                 shouldPlay={
                   !isPaused &&
-                  !commentsVisible &&
-                  !reactionsVisible &&
-                  !viewersVisible
+                  !reactionsVisible
                 }
                 isMuted={isMuted}
                 onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
@@ -610,19 +582,7 @@ export function StoryViewerModal({
                 />
               </TouchableOpacity>
 
-              {/* Edit Icon if Owner */}
-              {isOwner && onEditStory && (
-                <TouchableOpacity
-                  className="h-9 w-9 items-center justify-center rounded-full bg-blue-500/80"
-                  onPress={() => {
-                    if (story) {
-                      closeViewer();
-                      onEditStory(story);
-                    }
-                  }}>
-                  <Feather name="edit-2" size={16} color="#fff" />
-                </TouchableOpacity>
-              )}
+
 
               {/* Trash Icon if Owner */}
               {isOwner && (
@@ -643,47 +603,32 @@ export function StoryViewerModal({
           </View>
         </View>
 
-        {/* Bottom Interaction Bar (Comments, Likes, Views) */}
+        {/* Bottom Interaction Bar (Likes) */}
         <View
-          className="absolute left-0 right-0 px-4 z-30 flex-row items-center gap-3"
+          className="absolute left-0 right-0 px-4 z-30 flex-row items-center justify-end gap-3"
           style={{ bottom: insets.bottom + 12 }}>
-          <TouchableOpacity
-            className="flex-1 h-10 rounded-full border border-white/30 bg-black/30 px-4 justify-center"
-            onPress={() => setCommentsVisible(true)}>
-            <Text className="text-white/90 text-[13px] font-semibold">
-              Gửi bình luận...
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row items-center rounded-full bg-black/60 pl-1 pr-1 py-1">
+            {/* Reactions Count */}
+            {totalReactions > 0 && (
+              <TouchableOpacity
+                className="justify-center pl-3 pr-2"
+                onPress={() => setReactionsVisible(true)}>
+                <Text className="text-white text-[13px] font-bold">
+                  {totalReactions}
+                </Text>
+              </TouchableOpacity>
+            )}
 
-          {/* Heart Button */}
-          <TouchableOpacity
-            className="h-10 w-10 items-center justify-center rounded-full bg-black/30"
-            onPress={() => handleLike("LIKE")}>
-            {userReaction ?
-              <Text className="text-xl">❤️</Text>
-            : <Feather name="heart" size={22} color="#fff" />
-            }
-          </TouchableOpacity>
-
-          {/* Reactions Count */}
-          {totalReactions > 0 && (
+            {/* Heart Button */}
             <TouchableOpacity
-              className="justify-center px-1"
-              onPress={() => setReactionsVisible(true)}>
-              <Text className="text-white text-xs font-bold underline">
-                {totalReactions}
-              </Text>
+              className="h-9 w-9 items-center justify-center rounded-full"
+              onPress={() => handleLike("LOVE")}>
+              {userReaction ?
+                <Text className="text-[18px]">❤️</Text>
+              : <Feather name="heart" size={20} color="#fff" />
+              }
             </TouchableOpacity>
-          )}
-
-          {/* Owner Viewer Count */}
-          {isOwner && (
-            <TouchableOpacity
-              className="h-10 w-10 items-center justify-center rounded-full bg-black/30"
-              onPress={openViewers}>
-              <Feather name="eye" size={18} color="#fff" />
-            </TouchableOpacity>
-          )}
+          </View>
         </View>
 
         {/* Tap overlays to navigate & hold to pause */}
@@ -700,66 +645,7 @@ export function StoryViewerModal({
           onPressOut={handleRightPressOut}
         />
 
-        {/* Viewers modal */}
-        <Modal
-          visible={viewersVisible}
-          animationType="slide"
-          transparent
-          onRequestClose={() => setViewersVisible(false)}>
-          <View className="flex-1 justify-end bg-black/50">
-            <View className="max-h-[70%] rounded-t-[28px] bg-white px-4 pb-6 pt-4">
-              <View className="mb-3 flex-row items-center justify-between">
-                <Text className="text-lg font-black text-slate-900">
-                  Người đã xem
-                </Text>
-                <TouchableOpacity
-                  className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
-                  onPress={() => setViewersVisible(false)}>
-                  <Feather name="x" size={19} color="#0f172a" />
-                </TouchableOpacity>
-              </View>
-              {viewersLoading ?
-                <View className="items-center py-8">
-                  <ActivityIndicator color="#0f172a" />
-                </View>
-              : <ScrollView>
-                  {viewers.length ?
-                    viewers.map((viewer, viewerIndex) => (
-                      <View
-                        key={viewer?.id || viewer?.accountId || viewerIndex}
-                        className="flex-row items-center border-b border-slate-100 py-3">
-                        <Avatar
-                          uri={viewerAvatar(viewer)}
-                          name={viewerName(viewer)}
-                          size={42}
-                        />
-                        <Text
-                          className="ml-3 flex-1 text-[15px] font-bold text-slate-900"
-                          numberOfLines={1}>
-                          {viewerName(viewer)}
-                        </Text>
-                      </View>
-                    ))
-                  : <Text className="py-8 text-center text-sm font-semibold text-slate-500">
-                      Chưa có lượt xem
-                    </Text>
-                  }
-                </ScrollView>
-              }
-            </View>
-          </View>
-        </Modal>
 
-        {/* Comments Modal overlay */}
-        <CommentsModal
-          visible={commentsVisible}
-          post={{ id: story?.id } as Post}
-          currentUserId={currentUserId}
-          onClose={() => setCommentsVisible(false)}
-          onCountChange={(postId, delta) => {
-            // Callback placeholder
-          }}
-        />
 
         {/* Reactions List Modal overlay */}
         <ReactionsListModal
