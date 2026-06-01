@@ -34,7 +34,10 @@ function StoryRail({
   pendingMap?: Record<string, string>;
   hiddenIds?: Set<string>;
 }) {
-  const isEmpty = storyGroups.length === 0;
+  const visibleSuggestedUsers = suggestedUsers.filter(
+    (user) => !hiddenIds?.has(user.id),
+  );
+  const isEmpty = storyGroups.length === 0 && visibleSuggestedUsers.length === 0;
 
   return (
     <View className="pb-3" style={{ backgroundColor: SOCIAL_COLORS.page }}>
@@ -63,7 +66,7 @@ function StoryRail({
               />
             ) : (
               <View className="h-full w-full items-center justify-center">
-                <Avatar name={currentUserName} size={46} />
+                <Avatar name={currentUserName} size={52} />
               </View>
             )}
           </View>
@@ -143,7 +146,7 @@ function StoryRail({
           );
         })}
 
-        {loadError ?
+        {loadError ? (
           <View
             className="h-44 w-[224px] justify-center rounded-[18px] border px-4"
             style={{
@@ -162,7 +165,7 @@ function StoryRail({
               {loadError}
             </Text>
           </View>
-        : isEmpty ?
+        ) : isEmpty ? (
           <View
             className="h-44 w-[224px] justify-center rounded-[18px] border px-4"
             style={{
@@ -181,11 +184,9 @@ function StoryRail({
               Story mới sẽ xuất hiện ở đây.
             </Text>
           </View>
-        : null}
+        ) : null}
 
-        {suggestedUsers
-          .filter((user) => !hiddenIds?.has(user.id))
-          .map((user) => {
+        {visibleSuggestedUsers.map((user) => {
             const isPending = !!pendingMap?.[user.id];
             return (
               <TouchableOpacity

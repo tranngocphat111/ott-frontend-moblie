@@ -213,17 +213,19 @@ export function CommentsModal({
     const ok = await MediaApi.deleteComment(post.id, comment.id);
     if (!ok) return;
 
-    if (comment.parentId) {
+    const parentId = comment.parentId;
+    if (parentId) {
       setRepliesByParent((prev) => {
         const next = { ...prev };
-        if (next[comment.parentId]) {
-          next[comment.parentId] = next[comment.parentId].filter((item) => item.id !== comment.id);
+        const parentReplies = next[parentId];
+        if (parentReplies) {
+          next[parentId] = parentReplies.filter((item) => item.id !== comment.id);
         }
         return next;
       });
       setComments((prev) =>
         prev.map((item) =>
-          item.id === comment.parentId ? { ...item, totalReplies: Math.max(0, item.totalReplies - 1) } : item
+          item.id === parentId ? { ...item, totalReplies: Math.max(0, item.totalReplies - 1) } : item
         )
       );
     } else {
