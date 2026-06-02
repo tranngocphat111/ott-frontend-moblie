@@ -330,6 +330,7 @@ type Props = {
   footerComponent?: React.ReactNode;
   onDeleteConversation?: () => void;
   translatedMessages?: Record<string, string>;
+  translationUnavailableMessages?: Record<string, boolean>;
   onTranslateMessage?: (msgId: string) => void;
   translatingMessageId?: string | null;
 };
@@ -358,6 +359,7 @@ export const ChatMessagesList: React.FC<Props> = ({
   conversation,
   onDeleteConversation,
   translatedMessages = {},
+  translationUnavailableMessages = {},
   onTranslateMessage,
   translatingMessageId,
 }) => {
@@ -645,6 +647,7 @@ export const ChatMessagesList: React.FC<Props> = ({
                     translatedText={translatedMessages[getMessageKey(msg)]}
                     onTranslate={onTranslateMessage ? () => onTranslateMessage(getMessageKey(msg)) : undefined}
                     isTranslating={translatingMessageId === getMessageKey(msg)}
+                    translationUnavailable={Boolean(translationUnavailableMessages[getMessageKey(msg)])}
                   />
 
                   {deliverySummary && <DeliveryStatus summary={deliverySummary} />}

@@ -106,6 +106,14 @@ type ChatSocketEventMap = {
 		endedBy?: string | null;
 		reason?: string;
 	}) => void;
+	cuoc_goi_da_nhan_o_thiet_bi_khac: (payload: {
+		conversationId: string;
+		callId?: string;
+		userId: string;
+		acceptedSocketId?: string;
+		isGroup?: boolean;
+		reason?: string;
+	}) => void;
 	nguoi_dung_tu_choi_goi: (payload: { conversationId: string; callId?: string; userId: string }) => void;
 	nhan_offer: (payload: {
 		conversationId: string;

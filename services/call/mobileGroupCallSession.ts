@@ -214,6 +214,12 @@ const bindSocketListeners = () => {
     setSnapshot(emptySnapshot);
   }) as any);
 
+  chatSocket.on('cuoc_goi_da_nhan_o_thiet_bi_khac', ((payload: any) => {
+    if (!isCurrentConversation(payload?.conversationId)) return;
+    if (normalizeId(payload?.userId) !== normalizeId(snapshot.userId)) return;
+    setSnapshot(emptySnapshot);
+  }) as any);
+
   chatSocket.on('nguoi_dung_ban_goi', ((payload: any) => {
     if (!isCurrentConversation(payload?.conversationId)) return;
     setSnapshot({
@@ -264,6 +270,9 @@ const normalizeErrorMessage = (error: unknown) => {
   }
   if (/call_not_found|ended/i.test(reason)) {
     return 'Cuộc gọi này đã kết thúc hoặc không còn tồn tại.';
+  }
+  if (/already_joined_elsewhere|stale_device_ignored/i.test(reason)) {
+    return 'Cuộc gọi này đã được nhận trên thiết bị khác.';
   }
   if (/already_active/i.test(reason)) {
     return 'Cuộc gọi nhóm đang diễn ra. Hãy bấm tham gia lại.';

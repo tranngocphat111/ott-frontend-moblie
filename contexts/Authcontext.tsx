@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useRef, useState, useEffect, ReactNode } from 'react';
-import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { authApi, profileApi, userApi } from '../services/api';
+import { authTokenStore } from '../services/api/client';
 import { setLogoutHandler } from '../utils/logoutHandler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { UserProfileResponse } from '../types';
@@ -105,9 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const chatUserId = user?.id || null;
 
   const clearLocalSession = async () => {
-    await SecureStore.deleteItemAsync('accessToken');
-    await SecureStore.deleteItemAsync('refreshToken');
-    await SecureStore.deleteItemAsync('mockChatUserId');
+    await authTokenStore.clearTokens();
     await AsyncStorage.removeItem(CACHED_USER_PROFILE_KEY);
     setUser(null);
   };
@@ -143,7 +141,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const refreshStoredSession = async () => {
-    const refreshToken = await SecureStore.getItemAsync('refreshToken');
+    const refreshToken = await authTokenStore.getRefreshToken();
     if (!refreshToken) {
       throw new Error('No refresh token');
     }
@@ -160,14 +158,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw new Error('Invalid refresh response');
     }
 
-    await SecureStore.setItemAsync('accessToken', nextToken);
-    await SecureStore.setItemAsync('refreshToken', nextRefreshToken);
+    await authTokenStore.setTokens(nextToken, nextRefreshToken);
 
     return nextToken;
   };
 
   const ensureCurrentTokenActive = async () => {
-    const token = await SecureStore.getItemAsync('accessToken');
+    const token = await authTokenStore.getAccessToken();
     if (!token) {
       await refreshStoredSession();
       return;
@@ -214,7 +211,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await unregisterNativePushNotifications(logoutUserId);
 
-      const token = await SecureStore.getItemAsync('accessToken');
+      const token = await authTokenStore.getAccessToken();
       if (token) {
         await authApi.logout({
           token,
@@ -241,8 +238,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      const token = await SecureStore.getItemAsync('accessToken');
-      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      const token = await authTokenStore.getAccessToken();
+      const refreshToken = await authTokenStore.getRefreshToken();
       if (!token && !refreshToken) return;
 
       const cachedUser = await readCachedUserProfile();
@@ -450,8 +447,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (response.result.token && response.result.refreshToken) {
-        await SecureStore.setItemAsync('accessToken', response.result.token);
-        await SecureStore.setItemAsync('refreshToken', response.result.refreshToken);
+        await authTokenStore.setTokens(response.result.token, response.result.refreshToken);
         await fetchUser();
         return { authenticated: true };
       }
@@ -462,8 +458,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const verify2FA = async (tempToken: string, otpCode: string, isBackupCode: boolean = false) => {
     const response = await authApi.verify2FAOtp({ tempToken, otpCode, isBackupCode });
     if (response.result?.token && response.result?.refreshToken) {
-      await SecureStore.setItemAsync('accessToken', response.result.token);
-      await SecureStore.setItemAsync('refreshToken', response.result.refreshToken);
+      await authTokenStore.setTokens(response.result.token, response.result.refreshToken);
       await fetchUser();
       return { authenticated: true };
     }
@@ -476,8 +471,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const setTokens = async (accessToken: string, refreshToken: string) => {
-    await SecureStore.setItemAsync('accessToken', accessToken);
-    await SecureStore.setItemAsync('refreshToken', refreshToken);
+    await authTokenStore.setTokens(accessToken, refreshToken);
     await fetchUser();
   };
 

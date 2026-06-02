@@ -243,11 +243,13 @@ export const IncomingCallGate: React.FC = () => {
     chatSocket.on('cuoc_goi_den', onIncomingCall as any);
     chatSocket.on('ket_thuc_phong_goi', clearIncoming as any);
     chatSocket.on('nguoi_dung_tu_choi_goi', clearIncoming as any);
+    chatSocket.on('cuoc_goi_da_nhan_o_thiet_bi_khac', clearIncoming as any);
 
     return () => {
       chatSocket.off('cuoc_goi_den', onIncomingCall as any);
       chatSocket.off('ket_thuc_phong_goi', clearIncoming as any);
       chatSocket.off('nguoi_dung_tu_choi_goi', clearIncoming as any);
+      chatSocket.off('cuoc_goi_da_nhan_o_thiet_bi_khac', clearIncoming as any);
     };
   }, [declineIncomingCall, pathname, userId]);
 

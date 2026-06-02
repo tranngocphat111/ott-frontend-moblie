@@ -1,16 +1,21 @@
-import { MediaApi, type Post, type Visibility } from '@/services/api/media.api';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { MediaApi, type AccessControl, type FriendOption, type Post, type Visibility } from '@/services/api/media.api';
+import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Avatar } from './SocialAvatar';
+import { FriendSelector } from './FriendSelector';
+import { VisibilityPills } from './VisibilityPills';
 import { SOCIAL_COLORS, useFullScreenModalPadding } from './socialTheme';
-
-const SHARE_VISIBILITY_OPTIONS: { value: Visibility; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'PUBLIC', label: 'Công khai', icon: 'earth' },
-  { value: 'FRIENDS', label: 'Bạn bè', icon: 'people' },
-  { value: 'PRIVATE', label: 'Chỉ mình tôi', icon: 'lock-closed' },
-];
+const resolveRootPost = (input: Post): Post => {
+  const seen = new Set<string>();
+  let current = input;
+  while (current.sharedPost && !seen.has(current.id)) {
+    seen.add(current.id);
+    current = current.sharedPost;
+  }
+  return current;
+};
 
 export function SharePostModal({
   visible,
@@ -31,6 +36,11 @@ export function SharePostModal({
 }) {
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<Visibility>('PUBLIC');
+  const [friends, setFriends] = useState<FriendOption[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendSearch, setFriendSearch] = useState('');
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [customRuleType, setCustomRuleType] = useState<AccessControl['ruleType']>('INCLUDE');
   const [submitting, setSubmitting] = useState(false);
   const modalPadding = useFullScreenModalPadding();
 
@@ -38,13 +48,35 @@ export function SharePostModal({
     if (!visible) return;
     setCaption('');
     setVisibility('PUBLIC');
+    setFriendSearch('');
+    setSelectedFriendIds([]);
+    setCustomRuleType('INCLUDE');
   }, [visible, post?.id]);
+
+  useEffect(() => {
+    if (!visible || visibility !== 'CUSTOM' || !currentUserId || friends.length > 0) return;
+    setFriendsLoading(true);
+    MediaApi.fetchFriends(currentUserId)
+      .then(setFriends)
+      .finally(() => setFriendsLoading(false));
+  }, [friends.length, currentUserId, visibility, visible]);
+
+  const toggleFriend = (friendId: string) => {
+    setSelectedFriendIds((prev) =>
+      prev.includes(friendId) ? prev.filter((id) => id !== friendId) : [...prev, friendId],
+    );
+  };
+
+  const accessControls: AccessControl[] | undefined =
+    visibility === 'CUSTOM'
+      ? selectedFriendIds.map((accountId) => ({ accountId, ruleType: customRuleType }))
+      : undefined;
 
   const submit = async () => {
     if (!post || !currentUserId || submitting) return;
     setSubmitting(true);
     try {
-      const result = await MediaApi.sharePost(post.id, currentUserId, caption.trim() || undefined, visibility);
+      const result = await MediaApi.sharePost(post.id, currentUserId, caption.trim() || undefined, visibility, accessControls);
       if (!result.post) {
         Alert.alert('Không chia sẻ được', result.error || 'Vui lòng thử lại sau.');
         return;
@@ -56,7 +88,8 @@ export function SharePostModal({
     }
   };
 
-  const canSubmit = Boolean(post && currentUserId) && !submitting;
+  const canSubmit = Boolean(post && currentUserId) && (visibility !== 'CUSTOM' || selectedFriendIds.length > 0) && !submitting;
+  const previewPost = post ? (post.sharedPost ? resolveRootPost(post.sharedPost) : post) : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -88,28 +121,25 @@ export function SharePostModal({
                 <Text className="text-[15px] font-bold" style={{ color: SOCIAL_COLORS.text }}>
                   {currentUserName || 'Người dùng'}
                 </Text>
-                <View className="mt-2 flex-row flex-wrap gap-2">
-                  {SHARE_VISIBILITY_OPTIONS.map((item) => {
-                    const active = visibility === item.value;
-                    return (
-                      <TouchableOpacity
-                        key={item.value}
-                        className="h-8 flex-row items-center rounded-full border px-3"
-                        style={{
-                          backgroundColor: active ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.chipLight,
-                          borderColor: active ? SOCIAL_COLORS.primaryDark : SOCIAL_COLORS.border,
-                        }}
-                        onPress={() => setVisibility(item.value)}
-                      >
-                        <Ionicons name={item.icon} size={13} color={active ? '#fff' : SOCIAL_COLORS.primary} />
-                        <Text className="ml-1.5 text-[11px] font-bold" style={{ color: active ? '#fff' : SOCIAL_COLORS.textMuted }}>
-                          {item.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
               </View>
+            </View>
+
+            <View className="mt-4">
+              <VisibilityPills value={visibility} onChange={setVisibility} />
+              <FriendSelector
+                visible={visibility === 'CUSTOM'}
+                friends={friends}
+                loading={friendsLoading}
+                selectedIds={selectedFriendIds}
+                ruleType={customRuleType}
+                search={friendSearch}
+                onRuleTypeChange={setCustomRuleType}
+                onSearchChange={setFriendSearch}
+                onToggleFriend={toggleFriend}
+              />
+              {visibility === 'CUSTOM' && selectedFriendIds.length === 0 ? (
+                <Text className="mt-2 text-xs font-semibold text-red-500">Chọn ít nhất một người cho phạm vi tùy chỉnh.</Text>
+              ) : null}
             </View>
 
             <TextInput
@@ -123,28 +153,28 @@ export function SharePostModal({
               textAlignVertical="top"
             />
 
-            {post ? (
+            {previewPost ? (
               <View className="mt-4 rounded-2xl border p-3" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
                 <View className="flex-row items-center">
-                  <Avatar uri={post.author.avatar} name={post.author.name} color={post.author.color} size={36} />
+                  <Avatar uri={previewPost.author.avatar} name={previewPost.author.name} color={previewPost.author.color} size={36} />
                   <View className="ml-2 flex-1">
                     <Text className="text-[13px] font-black" style={{ color: SOCIAL_COLORS.text }} numberOfLines={1}>
-                      {post.author.name}
+                      {previewPost.author.name}
                     </Text>
                     <Text className="text-[11px]" style={{ color: SOCIAL_COLORS.textMuted }}>
-                      {post.time}
+                      {previewPost.time}
                     </Text>
                   </View>
                 </View>
-                {post.content.trim() ? (
+                {previewPost.content.trim() ? (
                   <Text className="mt-3 text-[13px] leading-5" style={{ color: SOCIAL_COLORS.text }} numberOfLines={4}>
-                    {post.content}
+                    {previewPost.content}
                   </Text>
                 ) : null}
-                {post.media.length ? (
+                {previewPost.media.length ? (
                   <View className="mt-3 flex-row overflow-hidden rounded-xl" style={{ height: 88, backgroundColor: SOCIAL_COLORS.primaryDark }}>
-                    {post.media.slice(0, 3).map((item, index) => (
-                      <View key={item.id || `${item.url}-${index}`} style={{ flex: 1, borderRightWidth: index < Math.min(post.media.length, 3) - 1 ? 1 : 0, borderColor: '#fff' }}>
+                    {previewPost.media.slice(0, 3).map((item, index) => (
+                      <View key={item.id || `${item.url}-${index}`} style={{ flex: 1, borderRightWidth: index < Math.min(previewPost.media.length, 3) - 1 ? 1 : 0, borderColor: '#fff' }}>
                         {(item.type === 'image' || item.thumbnailUrl) && (item.thumbnailUrl || item.url) ? (
                           <ExpoImage source={{ uri: item.thumbnailUrl || item.url }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                         ) : (

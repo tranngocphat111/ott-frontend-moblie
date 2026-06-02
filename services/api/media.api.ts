@@ -1,5 +1,6 @@
 import { MEDIA_CONFIG } from '@/configuration/api';
 import { apiClient, chatApiClient } from './client';
+import { getBackendDateTime, parseBackendDate } from '@/utils/time';
 
 export type MediaKind = 'image' | 'video';
 export type Visibility = 'PUBLIC' | 'FRIENDS' | 'PRIVATE' | 'CUSTOM';
@@ -46,11 +47,15 @@ export interface Post {
   likes: number;
   comments: number;
   shares: number;
+  status?: string;
   visibility?: string;
   relationship?: 'self' | 'friend' | 'friend-of-friend' | 'stranger';
   relationshipLabel?: string;
   accessControls?: AccessControl[];
   sharedPost?: Post;
+  sharedPostDeleted?: boolean;
+  sharedPostRestricted?: boolean;
+  sharedPostCollapsed?: boolean;
 }
 
 export interface StoryContentItem {
@@ -133,6 +138,10 @@ export interface ApiPost {
   hashTags: string[] | null;
   accessControls?: AccessControl[];
   sharedPost?: ApiPost | null;
+  status?: string;
+  sharedPostDeleted?: boolean;
+  sharedPostRestricted?: boolean;
+  sharedPostCollapsed?: boolean;
 }
 
 export interface PostsPage {
@@ -186,6 +195,7 @@ export interface Comment {
   parentId?: string;
   depth: number;
   isEdited: boolean;
+  isDeleted?: boolean;
   time: string;
   totalReplies: number;
 }
@@ -352,6 +362,12 @@ const AVATAR_COLORS = [
 const colorFor = (index: number) => AVATAR_COLORS[index % AVATAR_COLORS.length];
 const MEDIA_ROOT = `${MEDIA_CONFIG.BASE_URL.replace(/\/$/, '')}/`;
 
+const normalizeStatus = (value?: string | null) => String(value || '').trim().toUpperCase();
+
+const isDeletedStatus = (value?: string | null) => normalizeStatus(value) === 'DELETED';
+
+const filterActivePosts = (posts: ApiPost[]) => posts.filter((post) => !isDeletedStatus(post.status));
+
 const mediaPath = (path: string) => `/media${path.startsWith('/') ? path : `/${path}`}`;
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -404,8 +420,8 @@ export const resolveMediaUrl = (raw?: string | null): string | undefined => {
 
 export const relativeTime = (iso: string | null | undefined): string => {
   if (!iso) return 'Vừa xong';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return 'Vừa xong';
+  const date = parseBackendDate(iso);
+  if (!date) return 'Vừa xong';
 
   const diffMs = Date.now() - date.getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -455,10 +471,14 @@ export const mapPost = (post: ApiPost, colorIndex: number, currentUserId?: strin
     likes: post.totalReactions ?? 0,
     comments: post.totalComments ?? 0,
     shares: post.totalShares ?? 0,
+    status: post.status,
     visibility: post.visibility,
     relationship: post.accountId === currentUserId ? 'self' : undefined,
     accessControls: post.accessControls,
     sharedPost: post.sharedPost && depth < 3 ? mapPost(post.sharedPost, colorIndex + 1, currentUserId, depth + 1) : undefined,
+    sharedPostDeleted: post.sharedPostDeleted,
+    sharedPostRestricted: post.sharedPostRestricted,
+    sharedPostCollapsed: post.sharedPostCollapsed,
   };
 };
 
@@ -471,6 +491,7 @@ export const mapComment = (comment: ApiComment): Comment => ({
   parentId: comment.parentCommentId ?? undefined,
   depth: comment.depth,
   isEdited: comment.edited,
+  isDeleted: comment.deleted,
   time: relativeTime(comment.createdAt ?? new Date().toISOString()),
   totalReplies: comment.totalReplies ?? 0,
 });
@@ -514,14 +535,14 @@ const appendUploadFiles = (
 export const fetchPosts = async (currentUserId?: string): Promise<Post[] | null> => {
   try {
     const payload = await (apiClient.get as any)(mediaPath('/posts'));
-    const raw = unwrapList<ApiPost>(payload);
+    const raw = filterActivePosts(unwrapList<ApiPost>(payload));
     if (!raw.length) return null;
 
     const colorMap = new Map<string, number>();
     let colorIndex = 0;
 
     return raw
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => getBackendDateTime(b.createdAt) - getBackendDateTime(a.createdAt))
       .map((post) => {
         if (!colorMap.has(post.accountId)) colorMap.set(post.accountId, colorIndex++);
         return mapPost(post, colorMap.get(post.accountId)!, currentUserId);
@@ -545,7 +566,7 @@ export const fetchPostsWithPage = async (
 
     const colorMap = new Map<string, number>();
     let colorIndex = 0;
-    const content = unwrapList<ApiPost>(data.content ?? []);
+    const content = filterActivePosts(unwrapList<ApiPost>(data.content ?? []));
     const posts = content.map((post) => {
       if (!colorMap.has(post.accountId)) colorMap.set(post.accountId, colorIndex++);
       return mapPost(post, colorMap.get(post.accountId)!, currentUserId);
@@ -579,7 +600,7 @@ export const findPostsWithAuthorized = async (
 
     const colorMap = new Map<string, number>();
     let colorIndex = 0;
-    const content = unwrapList<ApiPost>(data.content ?? []);
+    const content = filterActivePosts(unwrapList<ApiPost>(data.content ?? []));
     const posts = content.map((post) => {
       if (!colorMap.has(post.accountId)) colorMap.set(post.accountId, colorIndex++);
       return mapPost(post, colorMap.get(post.accountId)!, currentUserId);
@@ -599,9 +620,11 @@ export const findPostsWithAuthorized = async (
 
 export const fetchPostsByUser = async (userId: string, currentUserId?: string): Promise<Post[]> => {
   try {
-    const payload = await (apiClient.get as any)(mediaPath(`/posts/user/${userId}`));
-    return unwrapList<ApiPost>(payload)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    const payload = await (apiClient.get as any)(mediaPath(`/posts/user/${userId}`), {
+      params: currentUserId ? { viewerId: currentUserId } : undefined,
+    });
+    return filterActivePosts(unwrapList<ApiPost>(payload))
+      .sort((a, b) => getBackendDateTime(b.createdAt) - getBackendDateTime(a.createdAt))
       .map((post, index) => mapPost(post, index, currentUserId));
   } catch {
     return [];
@@ -610,9 +633,12 @@ export const fetchPostsByUser = async (userId: string, currentUserId?: string): 
 
 export const fetchPostById = async (postId: string, currentUserId?: string): Promise<Post | null> => {
   try {
-    const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}`));
+    const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}`), {
+      params: currentUserId ? { viewerId: currentUserId } : undefined,
+    });
     const post = unwrapApiResult<ApiPost>(payload);
-    return post ? mapPost(post, 0, currentUserId) : null;
+    if (!post || isDeletedStatus(post.status)) return null;
+    return mapPost(post, 0, currentUserId);
   } catch {
     return null;
   }
@@ -633,7 +659,9 @@ export const searchPosts = async (
       params: { q: query.trim(), viewerId: currentUserId, page, size, sort: 'createdAt,desc' },
     });
     const data = unwrapApiResult<SpringPage<ApiPost>>(payload);
-    const content = data ? unwrapList<ApiPost>(data.content ?? []) : unwrapList<ApiPost>(payload);
+    const content = filterActivePosts(
+      data ? unwrapList<ApiPost>(data.content ?? []) : unwrapList<ApiPost>(payload),
+    );
     const posts = content.map((post, index) => mapPost(post, index, currentUserId));
 
     return {
@@ -726,7 +754,21 @@ export const deletePost = async (postId: string): Promise<boolean> => {
     await (apiClient.delete as any)(mediaPath(`/posts/${postId}`));
     return true;
   } catch (error: any) {
-    return error?.code === 404 || error?.response?.status === 404;
+    const status = error?.code ?? error?.response?.status;
+    if (status === 404) return true;
+
+    if (status === 500) {
+      try {
+        const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}`));
+        const post = unwrapApiResult<ApiPost>(payload);
+        return !post || isDeletedStatus(post.status);
+      } catch (probeError: any) {
+        const probeStatus = probeError?.code ?? probeError?.response?.status;
+        if (probeStatus === 404) return true;
+      }
+    }
+
+    return false;
   }
 };
 
@@ -735,9 +777,10 @@ export const sharePost = async (
   accountId: string,
   caption?: string,
   visibility: Visibility | string = 'PUBLIC',
+  accessControls?: AccessControl[],
 ): Promise<{ post: Post | null; error?: string }> => {
   try {
-    const payload = await (apiClient.post as any)(mediaPath(`/posts/${postId}/share`), null, {
+    const payload = await (apiClient.post as any)(mediaPath(`/posts/${postId}/share`), accessControls ? accessControls : null, {
       params: {
         accountId,
         caption: caption?.trim() || undefined,
@@ -833,7 +876,7 @@ const fetchRootCommentsFallback = async (postId: string, page: number, size: num
     const payload = await (apiClient.get as any)(mediaPath(`/posts/${postId}/comments`));
     const raw = unwrapList<ApiComment>(payload);
     const roots = raw
-      .filter((comment) => !comment.deleted && !comment.parentCommentId)
+      .filter((comment) => !comment.parentCommentId)
       .map(mapComment);
     const start = page * size;
     return {
@@ -856,7 +899,6 @@ export const fetchRootComments = async (postId: string, page = 0, size = 20): Pr
     const data = unwrapApiResult<SpringPage<ApiComment>>(payload);
     if (!data) return fetchRootCommentsFallback(postId, page, size);
     const comments = unwrapList<ApiComment>(data.content ?? [])
-      .filter((comment) => !comment.deleted)
       .map(mapComment);
     return {
       comments,
@@ -878,7 +920,6 @@ export const fetchReplies = async (commentId: string, page = 0, size = 10): Prom
     const data = unwrapApiResult<SpringPage<ApiComment>>(payload);
     if (!data) return emptyCommentPage(page);
     const comments = unwrapList<ApiComment>(data.content ?? [])
-      .filter((comment) => !comment.deleted)
       .map(mapComment);
     return {
       comments,
@@ -1047,6 +1088,35 @@ export const blockRelationship = async (relationshipId: string, blockerId: strin
     await (apiClient.patch as any)(mediaPath(`/relationships/${relationshipId}/block`), null, {
       params: { blockerId },
     });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const blockUserDirectly = async (requesterId: string, receiverId: string): Promise<boolean> => {
+  try {
+    await (apiClient.post as any)(mediaPath('/relationships/block'), null, {
+      params: { requesterId, receiverId },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const fetchBlockedUsers = async (userId: string): Promise<any[]> => {
+  try {
+    const payload = await (apiClient.get as any)(mediaPath(`/relationships/blocked/${userId}`));
+    return unwrapList<any>(payload);
+  } catch {
+    return [];
+  }
+};
+
+export const unblockRelationship = async (relationshipId: string): Promise<boolean> => {
+  try {
+    await (apiClient.delete as any)(mediaPath(`/relationships/${relationshipId}/unblock`));
     return true;
   } catch {
     return false;
@@ -1389,6 +1459,15 @@ export const fetchStoryViewers = async (storyId: string): Promise<any[]> => {
   }
 };
 
+export const fetchStoryById = async (storyId: string): Promise<Post | null> => {
+  try {
+    const payload = await (apiClient.get as any)(mediaPath(`/stories/${storyId}`));
+    return unwrap<Post>(payload);
+  } catch {
+    return null;
+  }
+};
+
 export const updateStory = async (
   storyId: string,
   request: StoryCreateRequest,
@@ -1533,10 +1612,11 @@ export const clearViewHistory = async (): Promise<boolean> => {
 };
 
 export const MediaApi = {
-  addComment,
   acceptFriendRequest,
   acceptFriendRequestViaChat,
+  addComment,
   blockRelationship,
+  blockUserDirectly,
   blockUserViaChat,
   cancelFriendRequestViaChat,
   cancelRelationship,
@@ -1547,6 +1627,7 @@ export const MediaApi = {
   deleteComment,
   deletePost,
   deleteStory,
+  fetchBlockedUsers,
   fetchComments,
   fetchFriends,
   fetchPendingRequests,
@@ -1563,6 +1644,7 @@ export const MediaApi = {
   fetchSavedContents,
   fetchSearchPosts: searchPosts,
   fetchStories,
+  fetchStoryById,
   fetchStoryGroups,
   fetchStoryViewers,
   fetchSuggestedUsers,
@@ -1581,6 +1663,7 @@ export const MediaApi = {
   sharePost,
   toggleSaveContent,
   toggleLike,
+  unblockRelationship,
   unblockUserViaChat,
   unfriendRelationship,
   unfriendViaChat,

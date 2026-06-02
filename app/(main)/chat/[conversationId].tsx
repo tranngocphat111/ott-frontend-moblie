@@ -70,6 +70,8 @@ import {
   getMessageSenderAvatar,
   resolveMediaUrl,
 } from "@/utils/chat";
+import { getMessageTranslationCandidate } from "@/utils/translationDetection";
+import { setConversationInfoSnapshot } from "@/utils/conversationInfoCache";
 import {
   ensureCameraPermission,
   ensureImageLibraryPermission,
@@ -893,6 +895,7 @@ export default function ChatDetailScreen() {
   const [isRecordingSTT, setIsRecordingSTT] = useState(false);
   const sttRecordingRef = useRef<Audio.Recording | null>(null);
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
+  const [translationUnavailableMessages, setTranslationUnavailableMessages] = useState<Record<string, boolean>>({});
   const [translatingMessageId, setTranslatingMessageId] = useState<string | null>(null);
   const lastSmartReplyMessageIdRef = useRef<string | null>(null);
 
@@ -901,6 +904,7 @@ export default function ChatDetailScreen() {
     setSmartReplies([]);
     setIsSmartReplyOpen(false);
     setTranslatedMessages({});
+    setTranslationUnavailableMessages({});
   }, [conversationId]);
 
   const fetchRelationship = useCallback(async () => {
@@ -1776,57 +1780,30 @@ export default function ChatDetailScreen() {
       }
 
       const payload = await MediaLibrary.getAssetsAsync({
-        first: 90,
+        first: 42,
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       });
 
-      const resolvedAssets = await Promise.all(
-        (payload.assets || []).map(async (asset) => {
-          try {
-            const detail = await MediaLibrary.getAssetInfoAsync(asset.id);
-            const uri = detail.localUri || asset.uri;
-            let thumbnailUri: string | undefined;
+      const resolvedAssets = (payload.assets || []).map((asset) => {
+        if (asset.mediaType === "video" && asset.uri) {
+          void VideoThumbnails.getThumbnailAsync(asset.uri, {
+            time: 50,
+            quality: 0.35,
+          }).then(res => {
+            setMediaAssets(prev => prev.map(a => a.id === asset.id ? { ...a, thumbnailUri: res.uri } : a));
+          }).catch(() => undefined);
+        }
 
-            if (asset.mediaType === "video") {
-              try {
-                // Ensure we have a renderable URI for VideoThumbnails
-                const thumbSource = detail.localUri || asset.uri;
-                if (thumbSource) {
-                  // Try to generate thumbnail with a very small offset for speed
-                  VideoThumbnails.getThumbnailAsync(thumbSource, {
-                    time: 50,
-                    quality: 0.4,
-                  }).then(res => {
-                    setMediaAssets(prev => prev.map(a => a.id === asset.id ? { ...a, thumbnailUri: res.uri } : a));
-                  }).catch(() => {
-                    // Fallback: use uri directly if thumbnail fails
-                  });
-                }
-              } catch (e) {
-                console.warn("Could not generate video thumbnail for asset:", asset.id, e);
-              }
-            }
-
-            return {
-              id: asset.id,
-              mediaType: asset.mediaType,
-              filename: asset.filename,
-              uri,
-              thumbnailUri,
-              width: asset.width,
-              height: asset.height,
-            };
-          } catch {
-            return {
-              id: asset.id,
-              mediaType: asset.mediaType,
-              filename: asset.filename,
-              uri: asset.uri,
-            };
-          }
-        }),
-      );
+        return {
+          id: asset.id,
+          mediaType: asset.mediaType,
+          filename: asset.filename,
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+        };
+      });
 
       setMediaAssets(resolvedAssets.filter((item) => !!item.uri));
     } catch (error) {
@@ -2558,7 +2535,6 @@ export default function ChatDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadConversation();
-      void loadRecentMedia(true);
 
       // Handle highlighting from search results
       if (searchHighlightedMessageId) {
@@ -2569,7 +2545,7 @@ export default function ChatDetailScreen() {
       }
 
       return cleanupHighlight;
-    }, [loadConversation, cleanupHighlight, loadRecentMedia, searchHighlightedMessageId, highlightMessage]),
+    }, [loadConversation, cleanupHighlight, searchHighlightedMessageId, highlightMessage]),
   );
 
   useEffect(() => {
@@ -3294,26 +3270,42 @@ export default function ChatDetailScreen() {
   }, []);
 
   const handleTranslateMessage = useCallback(async (msgId: string) => {
-    if (translatingMessageId === msgId) return;
+    if (translatingMessageId === msgId || translationUnavailableMessages[msgId]) return;
 
     const msg = messages.find(m => getMessageKey(m) === msgId);
     const text = msg ? getMessageBodyText(msg) : "";
     if (!text) return;
 
+    const candidate = getMessageTranslationCandidate(text);
+    if (!candidate.shouldOffer) {
+      setTranslationUnavailableMessages(prev => ({ ...prev, [msgId]: true }));
+      return;
+    }
+
     setTranslatingMessageId(msgId);
     try {
       const response = await ChatApi.translateText(text, 'vi');
-      setTranslatedMessages(prev => ({
-        ...prev,
-        [msgId]: response.translatedText
-      }));
+      const translatedText = response.translatedText?.trim() || "";
+
+      if (!translatedText || response.shouldTranslate === false || translatedText === text.trim()) {
+        setTranslationUnavailableMessages(prev => ({ ...prev, [msgId]: true }));
+        return;
+      }
+
+      setTranslatedMessages(prev => ({ ...prev, [msgId]: translatedText }));
+      setTranslationUnavailableMessages(prev => {
+        if (!prev[msgId]) return prev;
+        const next = { ...prev };
+        delete next[msgId];
+        return next;
+      });
     } catch (error) {
       console.error("Failed to translate message:", error);
-      Alert.alert("Lỗi", "Không thể dịch tin nhắn lúc này.");
+      setTranslationUnavailableMessages(prev => ({ ...prev, [msgId]: true }));
     } finally {
       setTranslatingMessageId(null);
     }
-  }, [translatingMessageId, messages]);
+  }, [translatingMessageId, translationUnavailableMessages, messages]);
   return (
     <SafeAreaView
       className="flex-1 bg-surface-sunken"
@@ -3335,22 +3327,29 @@ export default function ChatDetailScreen() {
           accentStart={CHAT_BROWN_DARK}
           accentEnd={CHAT_BROWN}
           topInset={insets.top}
-          onBack={() => {
-            if (router.canGoBack()) {
-              router.replace("/(main)/(tabs)/home");
-            } else {
-              router.replace("/(main)/(tabs)/home");
-            }
-          }}
+          onBack={handleBack}
           onPhone={isMyDocuments || isGroup ? undefined : () => void openMobileCall('voice')}
           onVideo={isMyDocuments ? undefined : () => void openMobileCall('video')}
           onSummarize={handleSummarizeChat}
-          onMenu={() =>
+          onMenu={() => {
+            const targetConversationId = String(conversationId || "");
+            if (targetConversationId) {
+              setConversationInfoSnapshot(targetConversationId, {
+                conversation: conversation ?? null,
+                participant: participant ?? null,
+                members: conversation?.participants,
+              });
+            }
+
             router.push({
               pathname: "/chat/info/[conversationId]",
-              params: { conversationId },
-            } as any)
-          }
+              params: {
+                conversationId: targetConversationId,
+                title,
+                avatar,
+              },
+            } as any);
+          }}
         />
 
         {conversation?.type === 'private' && !isMyDocuments && !conversation.is_self_conversation && (
@@ -3504,6 +3503,7 @@ export default function ChatDetailScreen() {
               }
               onDeleteConversation={handleDeleteConversationForMe}
               translatedMessages={translatedMessages}
+              translationUnavailableMessages={translationUnavailableMessages}
               onTranslateMessage={handleTranslateMessage}
               translatingMessageId={translatingMessageId}
             />

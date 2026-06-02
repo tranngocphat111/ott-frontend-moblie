@@ -11,12 +11,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
 import { NotificationApi, type InAppNotification } from '@/services/api/notification.api';
 import { THEME_COLORS } from '@/constants/theme';
 import { resolveMediaUrl } from '@/utils/chat';
+import { getBackendDateTime, parseBackendDate } from '@/utils/time';
 
 type Props = {
   includeTopInset?: boolean;
@@ -49,13 +51,13 @@ const getInitials = (name: string) => {
 
 const formatTime = (isoString: string) => {
   if (!isoString) return '';
-  const date = new Date(isoString);
+  const date = parseBackendDate(isoString);
+  if (!date) return '';
   const diffMs = Date.now() - date.getTime();
   const minute = 60 * 1000;
   const hour = 60 * minute;
   const day = 24 * hour;
 
-  if (Number.isNaN(date.getTime())) return '';
   if (diffMs < minute) return 'Vừa xong';
   if (diffMs < hour) return `${Math.floor(diffMs / minute)} phút trước`;
   if (diffMs < day) return `${Math.floor(diffMs / hour)} giờ trước`;
@@ -123,6 +125,7 @@ const NotificationAvatar = ({
 };
 
 export function NotificationsContent({ includeTopInset = true }: Props) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { chatUserId } = useAuth();
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
@@ -145,7 +148,7 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
     try {
       const data = await NotificationApi.getNotifications(chatUserId);
       const sorted = data.filter(isDisplayableNotification).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        (a, b) => getBackendDateTime(b.createdAt) - getBackendDateTime(a.createdAt),
       );
       setNotifications(sorted);
     } finally {
@@ -295,7 +298,16 @@ export function NotificationsContent({ includeTopInset = true }: Props) {
 
     return (
       <Pressable
-        onPress={() => unread && void markAsRead(item.id)}
+        onPress={() => {
+          if (unread) {
+            void markAsRead(item.id);
+          }
+          if (['NEW_POST', 'UPDATE_POST'].includes(item.type) && item.referenceId) {
+            router.push({ pathname: '/(main)/social/post/[postId]', params: { postId: item.referenceId } });
+          } else if (['NEW_STORY', 'UPDATE_STORY'].includes(item.type) && item.referenceId) {
+            router.push({ pathname: '/(main)/social/story/[storyId]', params: { storyId: item.referenceId } });
+          }
+        }}
         className="mx-4 mb-3 flex-row rounded-2xl border px-4 py-4"
         style={{
           backgroundColor: unread ? '#fff8f1' : '#ffffff',

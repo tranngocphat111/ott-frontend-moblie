@@ -1,22 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+import type { NotificationBehavior } from 'expo-notifications';
 import { Platform } from 'react-native';
 import { NotificationApi } from '@/services/api/notification.api';
 
 const PUSH_TOKEN_KEY = 'expoPushToken';
 const ANDROID_CHANNEL_ID = 'riff-notifications';
 const ANDROID_CHANNEL_NAME = 'Tin nhắn và thông báo Riff';
+const isRunningInExpoGo = Constants.appOwnership === 'expo';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-    shouldShowBanner: false,
-    shouldShowList: false,
-  } as Notifications.NotificationBehavior),
-});
+type NotificationsModule = typeof import('expo-notifications');
+let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+
+const getNotificationsModule = async () => {
+  if (isRunningInExpoGo) return null;
+
+  notificationsModulePromise ??= import('expo-notifications')
+    .then((Notifications) => {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldPlaySound: false,
+          shouldSetBadge: true,
+          shouldShowBanner: false,
+          shouldShowList: false,
+        } as NotificationBehavior),
+      });
+
+      return Notifications;
+    })
+    .catch((error) => {
+      console.warn('[Notifications] Native notifications unavailable:', error?.message || error);
+      return null;
+    });
+
+  return notificationsModulePromise;
+};
 
 const getProjectId = () => {
   const constants = Constants as typeof Constants & {
@@ -31,6 +50,12 @@ const getProjectId = () => {
 };
 
 export const registerNativePushNotifications = async (userId: string) => {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
+    console.log('[Notifications] Push notifications require a development build');
+    return null;
+  }
+
   if (!Device.isDevice) {
     console.log('[Notifications] Push notifications require a physical device');
     return null;

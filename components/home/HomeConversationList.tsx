@@ -9,6 +9,7 @@ import {
 } from '@/contexts/ConversationContextMenuContext';
 import { THEME_COLORS } from '@/constants/theme';
 import { formatConversationTime, getAvatarFallbackLabel, getConversationAvatar, getConversationTitle, getMessageBodyText, isSystemMessageType } from '@/utils/chat';
+import { parseBackendDate } from '@/utils/time';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type { ChatCategory } from '@/services/api/chat';
 
@@ -98,7 +99,7 @@ function HomeConversationListBody({
 
   const activeIsPinned = !!activeItem?.participant.settings?.is_pinned;
   const activeMuteUntil = activeItem?.participant.settings?.mute_until
-    ? new Date(activeItem.participant.settings.mute_until)
+    ? parseBackendDate(activeItem.participant.settings.mute_until)
     : null;
   const activeIsMuted =
     activeItem?.participant.settings?.notification_status === 'off' ||

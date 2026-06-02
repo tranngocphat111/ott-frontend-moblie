@@ -3,6 +3,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { THEME_COLORS } from '@/constants/theme';
 import { resolveMediaUrl } from '@/utils/chat';
+import { parseBackendDate } from '@/utils/time';
 import type {
   ChatSearchContactItem,
   ChatSearchFileItem,
@@ -17,7 +18,12 @@ interface HomeSearchPanelProps {
   searchTab: 'all' | 'contacts' | 'conversations' | 'messages' | 'files';
   senderFilter: string;
   searchVisibleCounts: Record<string, number>;
-  onOpenConversation: (conversationId: string, messageId?: string, contactId?: string) => void;
+  onOpenConversation: (
+    conversationId: string,
+    messageId?: string,
+    contactId?: string,
+    options?: { rememberSearchHistory?: boolean },
+  ) => void;
   onLoadMore: (section: 'conversations' | 'messages' | 'files' | 'media') => void;
   searchAvatarByUserId: Record<string, string>;
   searchAvatarByConversationId: Record<string, string>;
@@ -175,7 +181,11 @@ export function HomeSearchPanel({
               {mergedConversationResults.slice(0, searchVisibleCounts.conversations).map((item, index) => (
                 <Pressable
                   key={item.key}
-                  onPress={() => onOpenConversation(item.conversationId || '', undefined, item.contactId)}
+                  onPress={() =>
+                    onOpenConversation(item.conversationId || '', undefined, item.contactId, {
+                      rememberSearchHistory: true,
+                    })
+                  }
                   className={`flex-row items-center px-3 py-3 ${index < Math.min(mergedConversationResults.length, searchVisibleCounts.conversations) - 1 ? 'border-b border-slate-50' : ''}`}
                 >
                   <SearchAvatar label={item.label} avatar={item.avatar} icon={item.icon} />
@@ -202,7 +212,11 @@ export function HomeSearchPanel({
                 .map((item, index) => (
                   <Pressable
                     key={item._id}
-                    onPress={() => onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''))}
+                    onPress={() =>
+                      onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''), undefined, {
+                        rememberSearchHistory: true,
+                      })
+                    }
                     className={`flex-row items-start px-3 py-3 ${index < Math.min((searchResults.messages || []).length, searchVisibleCounts.messages) - 1 ? 'border-b border-slate-50' : ''}`}
                   >
                     <SearchAvatar 
@@ -213,7 +227,7 @@ export function HomeSearchPanel({
                       <View className="flex-row items-center justify-between">
                         <Text className="text-[14px] font-semibold text-slate-800">{item.sender_name || 'Người dùng'}</Text>
                         <Text className="text-[11px] text-slate-400">
-                          {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}
+                          {parseBackendDate(item.createdAt)?.toLocaleDateString('vi-VN') || ''}
                         </Text>
                       </View>
                       <Text className="mt-0.5 text-[13px] text-slate-600" numberOfLines={2}>{previewMessage(item)}</Text>
@@ -231,7 +245,11 @@ export function HomeSearchPanel({
               {(searchResults.files || []).slice(0, searchVisibleCounts.files).map((item, index) => (
                 <Pressable
                   key={item._id}
-                  onPress={() => onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''))}
+                  onPress={() =>
+                    onOpenConversation(String(item.conversation_id || ''), String(item.msg_id || ''), undefined, {
+                      rememberSearchHistory: true,
+                    })
+                  }
                   className="flex-row items-center px-3 py-3 border-b border-slate-50"
                 >
                   <SearchAvatar label="File" icon="file" />

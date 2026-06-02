@@ -7,8 +7,10 @@ export type RelationshipEventType =
   | 'REQUEST_ACCEPTED'
   | 'REQUEST_REJECTED'
   | 'REQUEST_CANCELED'
+  | 'REQUEST_CANCELLED'
   | 'UNFRIENDED'
-  | 'BLOCKED';
+  | 'BLOCKED'
+  | 'USER_BLOCKED';
 
 export type RelationshipRealtimePayload = {
   type: RelationshipEventType;
@@ -22,6 +24,7 @@ export type RelationshipRealtimePayload = {
 };
 
 type RelationshipSocketEventMap = {
+  cap_nhat_quan_he: (payload: RelationshipRealtimePayload) => void;
   relationship_updated: (payload: RelationshipRealtimePayload) => void;
 };
 
@@ -73,10 +76,12 @@ class RelationshipSocketService {
   }
 
   async onRelationshipUpdate(callback: (payload: RelationshipRealtimePayload) => void) {
+    await this.on('cap_nhat_quan_he', callback);
     await this.on('relationship_updated', callback);
   }
 
   offRelationshipUpdate(callback?: (payload: RelationshipRealtimePayload) => void) {
+    this.off('cap_nhat_quan_he', callback);
     this.off('relationship_updated', callback);
   }
 }

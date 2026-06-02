@@ -1,15 +1,56 @@
-import { THEME_COLORS } from '@/constants/theme';
-import { useAuth } from '@/contexts/Authcontext';
-import { MediaApi, type Post, type StoryItem, type StorySuggestedUser, type StoryUserGroup } from '@/services/api/media.api';
-import { mediaSocket, type MediaRealtimePayload, type PostActivityPayload } from '@/services/socket/mediaSocket';
-import { relationshipSocket, type RelationshipRealtimePayload } from '@/services/socket/relationshipSocket';
-import { CommentsModal, CreatePostModal, CreateStoryModal, DiscoverHeader, PostCard, ReactionsListModal, SharePostModal, SOCIAL_COLORS, SocialConfirmModal, StoryViewerModal } from '@/components/social';
-import { Feather } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, Text, View, type ViewToken } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { THEME_COLORS } from "@/constants/theme";
+import { useAuth } from "@/contexts/Authcontext";
+import {
+  MediaApi,
+  type Post,
+  type StoryItem,
+  type StorySuggestedUser,
+  type StoryUserGroup,
+} from "@/services/api/media.api";
+import {
+  mediaSocket,
+  type MediaRealtimePayload,
+  type PostActivityPayload,
+} from "@/services/socket/mediaSocket";
+import {
+  relationshipSocket,
+  type RelationshipRealtimePayload,
+} from "@/services/socket/relationshipSocket";
+import {
+  CommentsModal,
+  CreatePostModal,
+  CreateStoryModal,
+  DiscoverHeader,
+  PostCard,
+  ReactionsListModal,
+  SharePostModal,
+  SOCIAL_COLORS,
+  SocialConfirmModal,
+  StoryViewerModal,
+} from "@/components/social";
+import { Feather } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
+import { useRouter } from "expo-router";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  Text,
+  View,
+  type ViewToken,
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 const PAGE_SIZE = 8;
 
@@ -20,10 +61,18 @@ export default function DiscoverScreen() {
   const currentUserId = user?.id;
   const [posts, setPosts] = useState<Post[]>([]);
   const [storyGroups, setStoryGroups] = useState<StoryUserGroup[]>([]);
-  const [suggestedUsers, setSuggestedUsers] = useState<StorySuggestedUser[]>([]);
-  const [reactionByPost, setReactionByPost] = useState<Record<string, string>>({});
-  const [reactionCountsByPost, setReactionCountsByPost] = useState<Record<string, Record<string, number>>>({});
-  
+  const [suggestedUsers, setSuggestedUsers] = useState<StorySuggestedUser[]>(
+    [],
+  );
+  const [reactionByPost, setReactionByPost] = useState<Record<string, string>>(
+    {},
+  );
+  const [reactionCountsByPost, setReactionCountsByPost] = useState<
+    Record<string, Record<string, number>>
+  >({});
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [storyLoadError, setStoryLoadError] = useState<string | null>(null);
+
   const [pendingMap, setPendingMap] = useState<Record<string, string>>({});
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const pendingMapRef = useRef<Record<string, string>>({});
@@ -33,9 +82,12 @@ export default function DiscoverScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [createPostVisible, setCreatePostVisible] = useState(false);
+  const [createPostFeeling, setCreatePostFeeling] = useState(false);
   const [createStoryVisible, setCreateStoryVisible] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
-  const [reactionPickerPost, setReactionPickerPost] = useState<Post | null>(null);
+  const [reactionPickerPost, setReactionPickerPost] = useState<Post | null>(
+    null,
+  );
   const [reactionsListPost, setReactionsListPost] = useState<Post | null>(null);
   const [commentPost, setCommentPost] = useState<Post | null>(null);
   const [storyGroup, setStoryGroup] = useState<StoryUserGroup | null>(null);
@@ -45,21 +97,27 @@ export default function DiscoverScreen() {
   const recordedViewIdsRef = useRef(new Set<string>());
 
   const avatarUrl = user?.avatarUrl;
-  const displayName = user?.fullName || 'Người dùng';
-  
-  const refreshReactionCounts = useCallback(async (items: Post[], replace = false) => {
-    if (!items.length) {
-      if (replace) setReactionCountsByPost({});
-      return;
-    }
-    const entries = await Promise.all(
-      items.map(async (post) => [post.id, await MediaApi.fetchPostReactions(post.id)] as const),
-    );
-    setReactionCountsByPost((prev) => ({
-      ...(replace ? {} : prev),
-      ...Object.fromEntries(entries),
-    }));
-  }, []);
+  const displayName = user?.fullName || "Người dùng";
+
+  const refreshReactionCounts = useCallback(
+    async (items: Post[], replace = false) => {
+      if (!items.length) {
+        if (replace) setReactionCountsByPost({});
+        return;
+      }
+      const entries = await Promise.all(
+        items.map(
+          async (post) =>
+            [post.id, await MediaApi.fetchPostReactions(post.id)] as const,
+        ),
+      );
+      setReactionCountsByPost((prev) => ({
+        ...(replace ? {} : prev),
+        ...Object.fromEntries(entries),
+      }));
+    },
+    [],
+  );
 
   const loadInitial = useCallback(
     async (isRefresh = false) => {
@@ -69,6 +127,8 @@ export default function DiscoverScreen() {
       }
 
       if (!isRefresh) setLoading(true);
+      setFeedError(null);
+      setStoryLoadError(null);
       try {
         const [postsPage, stories, reactions, suggested] = await Promise.all([
           MediaApi.findPostsWithAuthorized(0, PAGE_SIZE, currentUserId),
@@ -86,10 +146,18 @@ export default function DiscoverScreen() {
 
         const nextReactions: Record<string, string> = {};
         reactions.forEach((reaction) => {
-          if (reaction.targetId) nextReactions[reaction.targetId] = reaction.reactionType;
+          if (reaction.targetId)
+            nextReactions[reaction.targetId] = reaction.reactionType;
         });
         setReactionByPost(nextReactions);
         void refreshReactionCounts(nextPosts, true);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message ?
+            error.message
+          : "Không tải được bài viết hoặc story. Vui lòng thử lại sau.";
+        setFeedError(message);
+        setStoryLoadError(message);
       } finally {
         setLoading(false);
       }
@@ -123,19 +191,27 @@ export default function DiscoverScreen() {
       const resolveTargetFromRelationship = (): string | null => {
         if (!payload.relationshipId) return null;
         const entries = Object.entries(pendingMapRef.current);
-        const match = entries.find(([, relId]) => relId === payload.relationshipId);
+        const match = entries.find(
+          ([, relId]) => relId === payload.relationshipId,
+        );
         return match ? match[0] : null;
       };
 
       const effectiveTarget = targetUserId ?? resolveTargetFromRelationship();
       if (!effectiveTarget) return;
 
-      if (payload.type === 'REQUEST_SENT' && payload.requesterId === currentUserId) {
-        setPendingMap((prev) => ({ ...prev, [effectiveTarget]: payload.relationshipId }));
+      if (
+        payload.type === "REQUEST_SENT" &&
+        payload.requesterId === currentUserId
+      ) {
+        setPendingMap((prev) => ({
+          ...prev,
+          [effectiveTarget]: payload.relationshipId,
+        }));
         return;
       }
 
-      if (payload.type === 'REQUEST_ACCEPTED') {
+      if (payload.type === "REQUEST_ACCEPTED") {
         setPendingMap((prev) => {
           if (!prev[effectiveTarget]) return prev;
           const next = { ...prev };
@@ -152,10 +228,12 @@ export default function DiscoverScreen() {
       }
 
       if (
-        payload.type === 'REQUEST_REJECTED' ||
-        payload.type === 'REQUEST_CANCELED' ||
-        payload.type === 'UNFRIENDED' ||
-        payload.type === 'BLOCKED'
+        payload.type === "REQUEST_REJECTED" ||
+        payload.type === "REQUEST_CANCELED" ||
+        payload.type === "REQUEST_CANCELLED" ||
+        payload.type === "UNFRIENDED" ||
+        payload.type === "BLOCKED" ||
+        payload.type === "USER_BLOCKED"
       ) {
         setPendingMap((prev) => {
           if (!prev[effectiveTarget]) return prev;
@@ -186,25 +264,32 @@ export default function DiscoverScreen() {
 
     void mediaSocket.connect();
 
-    const refreshPostStats = async (postId: string, includeReactions = false) => {
+    const refreshPostStats = async (
+      postId: string,
+      includeReactions = false,
+    ) => {
       const freshPost = await MediaApi.fetchPostById(postId, currentUserId);
       if (!freshPost) return;
-      setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, ...freshPost } : post)));
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.id === postId ? { ...post, ...freshPost } : post,
+        ),
+      );
       if (includeReactions) void refreshReactionCounts([freshPost]);
     };
 
     const handleMediaUpdate = async (payload: MediaRealtimePayload) => {
       if (!payload?.contentId) return;
 
-      if (payload.contentTargetType === 'STORY') {
+      if (payload.contentTargetType === "STORY") {
         void refreshStories();
         return;
       }
 
-      if (payload.contentTargetType !== 'POST') return;
+      if (payload.contentTargetType !== "POST") return;
       const postId = payload.contentId;
 
-      if (String(payload.operation || '').toUpperCase() === 'DELETE') {
+      if (String(payload.operation || "").toUpperCase() === "DELETE") {
         setPosts((prev) => prev.filter((post) => post.id !== postId));
         setReactionByPost((prev) => {
           const next = { ...prev };
@@ -223,7 +308,10 @@ export default function DiscoverScreen() {
       if (!freshPost) return;
       setPosts((prev) => {
         const exists = prev.some((post) => post.id === freshPost.id);
-        if (exists) return prev.map((post) => (post.id === freshPost.id ? freshPost : post));
+        if (exists)
+          return prev.map((post) =>
+            post.id === freshPost.id ? freshPost : post,
+          );
         return [freshPost, ...prev];
       });
       void refreshReactionCounts([freshPost]);
@@ -233,15 +321,18 @@ export default function DiscoverScreen() {
       if (!payload.postId) return;
 
       // Check if this activity belongs to a loaded post
-      const isPost = posts.some(p => p.id === payload.postId);
+      const isPost = posts.some((p) => p.id === payload.postId);
 
       if (isPost) {
-        if (payload.activityType === 'COMMENT') {
+        if (payload.activityType === "COMMENT") {
           void refreshPostStats(payload.postId);
           return;
         }
 
-        if (payload.activityType === 'REACTION' || payload.activityType === 'VIEW') {
+        if (
+          payload.activityType === "REACTION" ||
+          payload.activityType === "VIEW"
+        ) {
           void refreshPostStats(payload.postId, true);
         }
       } else {
@@ -260,24 +351,35 @@ export default function DiscoverScreen() {
 
   const refreshStories = useCallback(async () => {
     if (!currentUserId) return;
-    const [stories, suggested] = await Promise.all([
-      MediaApi.fetchStoryGroups(currentUserId),
-      MediaApi.fetchSuggestedUsers(currentUserId),
-    ]);
+    try {
+      setStoryLoadError(null);
+      const [stories, suggested] = await Promise.all([
+        MediaApi.fetchStoryGroups(currentUserId),
+        MediaApi.fetchSuggestedUsers(currentUserId),
+      ]);
 
-    // Deduplicate stories by ID to prevent duplicates after edit (like web frontend)
-    const seenIds = new Set<string>();
-    const dedupedStories = stories.map((group) => ({
-      ...group,
-      stories: group.stories.filter((s) => {
-        if (seenIds.has(s.id)) return false;
-        seenIds.add(s.id);
-        return true;
-      }),
-    })).filter((group) => group.stories.length > 0);
+      // Deduplicate stories by ID to prevent duplicates after edit (like web frontend)
+      const seenIds = new Set<string>();
+      const dedupedStories = stories
+        .map((group) => ({
+          ...group,
+          stories: group.stories.filter((s) => {
+            if (seenIds.has(s.id)) return false;
+            seenIds.add(s.id);
+            return true;
+          }),
+        }))
+        .filter((group) => group.stories.length > 0);
 
-    setStoryGroups(dedupedStories);
-    setSuggestedUsers(suggested);
+      setStoryGroups(dedupedStories);
+      setSuggestedUsers(suggested);
+    } catch (error) {
+      setStoryLoadError(
+        error instanceof Error && error.message ?
+          error.message
+        : "Không tải được story. Vui lòng thử lại sau.",
+      );
+    }
   }, [currentUserId]);
 
   const onRefresh = async () => {
@@ -294,9 +396,15 @@ export default function DiscoverScreen() {
     setLoadingMore(true);
     try {
       const nextPage = page + 1;
-      const data = await MediaApi.findPostsWithAuthorized(nextPage, PAGE_SIZE, currentUserId);
+      const data = await MediaApi.findPostsWithAuthorized(
+        nextPage,
+        PAGE_SIZE,
+        currentUserId,
+      );
       if (!data) return;
-      const newPosts = data.posts.filter((post) => !posts.some((item) => item.id === post.id));
+      const newPosts = data.posts.filter(
+        (post) => !posts.some((item) => item.id === post.id),
+      );
       setPosts((prev) => {
         const ids = new Set(prev.map((post) => post.id));
         return [...prev, ...data.posts.filter((post) => !ids.has(post.id))];
@@ -322,7 +430,11 @@ export default function DiscoverScreen() {
 
   const handleCommentCountChange = (postId: string, delta: number) => {
     setPosts((prev) =>
-      prev.map((post) => (post.id === postId ? { ...post, comments: Math.max(0, post.comments + delta) } : post)),
+      prev.map((post) =>
+        post.id === postId ?
+          { ...post, comments: Math.max(0, post.comments + delta) }
+        : post,
+      ),
     );
   };
 
@@ -335,7 +447,11 @@ export default function DiscoverScreen() {
       post,
       ...prev
         .filter((item) => item.id !== post.id)
-        .map((item) => (item.id === sharePost?.id ? { ...item, shares: item.shares + 1 } : item)),
+        .map((item) =>
+          item.id === sharePost?.id ?
+            { ...item, shares: item.shares + 1 }
+          : item,
+        ),
     ]);
     void refreshReactionCounts([post]);
   };
@@ -343,14 +459,20 @@ export default function DiscoverScreen() {
   const handleReact = async (post: Post, reactionType: string) => {
     if (!currentUserId) return;
     setReactionPickerPost(null);
-    const result = await MediaApi.toggleLike(post.id, currentUserId, reactionType);
+    const result = await MediaApi.toggleLike(
+      post.id,
+      currentUserId,
+      reactionType,
+    );
     if (!result) {
-      Alert.alert('Không thể bày tỏ cảm xúc', 'Vui lòng thử lại sau.');
+      Alert.alert("Không thể bày tỏ cảm xúc", "Vui lòng thử lại sau.");
       return;
     }
 
     setPosts((prev) =>
-      prev.map((item) => (item.id === post.id ? { ...item, likes: result.totalReactions } : item)),
+      prev.map((item) =>
+        item.id === post.id ? { ...item, likes: result.totalReactions } : item,
+      ),
     );
 
     setReactionByPost((prev) => {
@@ -365,31 +487,37 @@ export default function DiscoverScreen() {
     void refreshReactionCounts([post]);
   };
 
-  const handleAddFriend = useCallback(async (target: StorySuggestedUser) => {
-    if (!currentUserId) return;
-    const result = await MediaApi.sendFriendRequest(currentUserId, target.id);
-    const relationshipId = result?.id as string | undefined;
-    if (!relationshipId) {
-      Alert.alert('Không gửi được lời mời', 'Vui lòng thử lại sau.');
-      return;
-    }
-    setPendingMap((prev) => ({ ...prev, [target.id]: relationshipId }));
-  }, [currentUserId]);
+  const handleAddFriend = useCallback(
+    async (target: StorySuggestedUser) => {
+      if (!currentUserId) return;
+      const result = await MediaApi.sendFriendRequest(currentUserId, target.id);
+      const relationshipId = result?.id as string | undefined;
+      if (!relationshipId) {
+        Alert.alert("Không gửi được lời mời", "Vui lòng thử lại sau.");
+        return;
+      }
+      setPendingMap((prev) => ({ ...prev, [target.id]: relationshipId }));
+    },
+    [currentUserId],
+  );
 
-  const handleCancelFriend = useCallback(async (targetId: string) => {
-    const relationshipId = pendingMap[targetId];
-    if (!relationshipId) return;
-    const ok = await MediaApi.cancelRelationship(relationshipId);
-    if (!ok) {
-      Alert.alert('Không hủy được lời mời', 'Vui lòng thử lại sau.');
-      return;
-    }
-    setPendingMap((prev) => {
-      const next = { ...prev };
-      delete next[targetId];
-      return next;
-    });
-  }, [pendingMap]);
+  const handleCancelFriend = useCallback(
+    async (targetId: string) => {
+      const relationshipId = pendingMap[targetId];
+      if (!relationshipId) return;
+      const ok = await MediaApi.cancelRelationship(relationshipId);
+      if (!ok) {
+        Alert.alert("Không hủy được lời mời", "Vui lòng thử lại sau.");
+        return;
+      }
+      setPendingMap((prev) => {
+        const next = { ...prev };
+        delete next[targetId];
+        return next;
+      });
+    },
+    [pendingMap],
+  );
 
   const handleDeletePost = (post: Post) => {
     setPendingDeletePost(post);
@@ -410,19 +538,24 @@ export default function DiscoverScreen() {
     if (!ok) {
       setPosts(previous);
       setReactionCountsByPost(previousCounts);
-      Alert.alert('Không xóa được', 'Vui lòng thử lại sau.');
+      Alert.alert("Không xóa được", "Vui lòng thử lại sau.");
     }
   };
 
-  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<Post>[] }) => {
-    viewableItems.forEach(({ item }) => {
-      if (!item?.id || recordedViewIdsRef.current.has(item.id)) return;
-      recordedViewIdsRef.current.add(item.id);
-      void MediaApi.recordViewHistory(item.id);
-    });
-  }).current;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken<Post>[] }) => {
+      viewableItems.forEach(({ item }) => {
+        if (!item?.id || recordedViewIdsRef.current.has(item.id)) return;
+        recordedViewIdsRef.current.add(item.id);
+        void MediaApi.recordViewHistory(item.id);
+      });
+    },
+  ).current;
 
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 45, minimumViewTime: 600 }).current;
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 45,
+    minimumViewTime: 600,
+  }).current;
 
   const header = useMemo(
     () => (
@@ -432,8 +565,15 @@ export default function DiscoverScreen() {
         storyGroups={storyGroups}
         suggestedUsers={suggestedUsers}
         topInset={insets.top}
+        storyLoadError={storyLoadError}
         onCreatePost={() => {
           setEditingPost(null);
+          setCreatePostFeeling(false);
+          setCreatePostVisible(true);
+        }}
+        onCreatePostWithFeeling={() => {
+          setEditingPost(null);
+          setCreatePostFeeling(true);
           setCreatePostVisible(true);
         }}
         onCreateStory={() => {
@@ -448,35 +588,95 @@ export default function DiscoverScreen() {
         onOpenCurrentProfile={() => {
           if (!currentUserId) return;
           router.push({
-            pathname: '/(main)/social/profile/[userId]',
+            pathname: "/(main)/social/profile/[userId]",
             params: { userId: currentUserId },
           });
         }}
-        onOpenSearch={() => router.push('/(main)/social/search' as any)}
-        onOpenSaved={() => router.push('/(main)/social/saved' as any)}
-        onOpenHistory={() => router.push('/(main)/social/history' as any)}
-        onOpenRelationships={() => router.push('/(main)/social/relationships' as any)}
+        onOpenSearch={() => router.push("/(main)/social/search" as any)}
+        onOpenSaved={() => router.push("/(main)/social/saved" as any)}
+        onOpenHistory={() => router.push("/(main)/social/history" as any)}
+        onOpenRelationships={() =>
+          router.push("/(main)/social/relationships" as any)
+        }
       />
     ),
-    [avatarUrl, currentUserId, displayName, handleAddFriend, handleCancelFriend, pendingMap, hiddenIds, insets.top, router, storyGroups, suggestedUsers],
+    [
+      avatarUrl,
+      currentUserId,
+      displayName,
+      handleAddFriend,
+      handleCancelFriend,
+      pendingMap,
+      hiddenIds,
+      insets.top,
+      router,
+      storyGroups,
+      suggestedUsers,
+    ],
   );
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: SOCIAL_COLORS.page }} edges={['left', 'right']}>
-      <StatusBar style="dark" translucent backgroundColor={SOCIAL_COLORS.page} />
-      {loading ? (
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: SOCIAL_COLORS.page }}
+      edges={["left", "right"]}>
+      <StatusBar
+        style="dark"
+        translucent
+        backgroundColor={SOCIAL_COLORS.page}
+      />
+      {feedError && posts.length > 0 && !loading ?
+        <View
+          className="mx-4 mb-3 rounded-2xl border px-4 py-3"
+          style={{
+            backgroundColor: SOCIAL_COLORS.card,
+            borderColor: SOCIAL_COLORS.border,
+          }}>
+          <View className="flex-row items-start gap-3">
+            <View
+              className="mt-0.5 h-8 w-8 items-center justify-center rounded-full"
+              style={{ backgroundColor: SOCIAL_COLORS.chipLight }}>
+              <Feather
+                name="alert-triangle"
+                size={16}
+                color={SOCIAL_COLORS.primaryDark}
+              />
+            </View>
+            <View className="flex-1">
+              <Text
+                className="text-sm font-bold"
+                style={{ color: SOCIAL_COLORS.text }}>
+                Không tải được bài viết
+              </Text>
+              <Text
+                className="mt-1 text-xs"
+                style={{ color: SOCIAL_COLORS.textMuted }}>
+                {feedError}
+              </Text>
+            </View>
+          </View>
+        </View>
+      : null}
+      {loading ?
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={THEME_COLORS.primary[600]} size="large" />
-          <Text className="mt-3 text-sm font-semibold" style={{ color: SOCIAL_COLORS.textMuted }}>Đang tải bảng tin...</Text>
+          <Text
+            className="mt-3 text-sm font-semibold"
+            style={{ color: SOCIAL_COLORS.textMuted }}>
+            Đang tải bảng tin...
+          </Text>
         </View>
-      ) : (
-        <FlatList
+      : <FlatList
           data={posts}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={header}
           contentContainerStyle={{ paddingBottom: 32 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME_COLORS.primary[600]} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={THEME_COLORS.primary[600]}
+            />
           }
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
@@ -484,18 +684,33 @@ export default function DiscoverScreen() {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           ListEmptyComponent={
-            <View className="mx-4 mt-6 items-center rounded-[28px] border px-6 py-10" style={{ backgroundColor: SOCIAL_COLORS.card, borderColor: SOCIAL_COLORS.border }}>
+            <View
+              className="mx-4 mt-6 items-center rounded-[28px] border px-6 py-10"
+              style={{
+                backgroundColor: SOCIAL_COLORS.card,
+                borderColor: SOCIAL_COLORS.border,
+              }}>
               <Feather name="coffee" size={34} color={SOCIAL_COLORS.textSoft} />
-              <Text className="mt-3 text-center text-base font-bold" style={{ color: SOCIAL_COLORS.text }}>Chưa có bài viết</Text>
-              <Text className="mt-1 text-center text-sm" style={{ color: SOCIAL_COLORS.textMuted }}>Hãy tạo bài viết đầu tiên trên mobile.</Text>
+              <Text
+                className="mt-3 text-center text-base font-bold"
+                style={{ color: SOCIAL_COLORS.text }}>
+                {feedError ? "Không tải được bài viết" : "Chưa có bài viết"}
+              </Text>
+              <Text
+                className="mt-1 text-center text-sm"
+                style={{ color: SOCIAL_COLORS.textMuted }}>
+                {feedError ?
+                  feedError
+                : "Hãy tạo bài viết đầu tiên trên mobile."}
+              </Text>
             </View>
           }
           ListFooterComponent={
-            loadingMore ? (
+            loadingMore ?
               <View className="py-4">
                 <ActivityIndicator color={THEME_COLORS.primary[600]} />
               </View>
-            ) : null
+            : null
           }
           renderItem={({ item }) => (
             <PostCard
@@ -514,7 +729,7 @@ export default function DiscoverScreen() {
             />
           )}
         />
-      )}
+      }
 
       <CreatePostModal
         visible={createPostVisible || Boolean(editingPost)}
@@ -522,8 +737,10 @@ export default function DiscoverScreen() {
         avatarUrl={avatarUrl}
         userName={displayName}
         initialPost={editingPost}
+        openWithFeeling={createPostFeeling}
         onClose={() => {
           setCreatePostVisible(false);
+          setCreatePostFeeling(false);
           setEditingPost(null);
         }}
         onCreated={handleCreatedPost}
@@ -547,6 +764,22 @@ export default function DiscoverScreen() {
         currentUserId={currentUserId}
         onClose={() => setCommentPost(null)}
         onCountChange={handleCommentCountChange}
+        renderHeader={(p) => (
+          <PostCard
+            post={p}
+            currentUserId={currentUserId}
+            reaction={reactionByPost[p.id]}
+            reactionCounts={reactionCountsByPost[p.id]}
+            showReactionPicker={reactionPickerPost?.id === p.id}
+            onReact={handleReact}
+            onPickReaction={setReactionPickerPost}
+            onComment={setCommentPost}
+            onShowReactions={setReactionsListPost}
+            onEdit={setEditingPost}
+            onDelete={handleDeletePost}
+            onShare={handleSharePost}
+          />
+        )}
       />
 
       <ReactionsListModal
@@ -562,8 +795,12 @@ export default function DiscoverScreen() {
         icon="trash-2"
         onClose={() => setPendingDeletePost(null)}
         actions={[
-          { label: 'Giữ lại', variant: 'secondary' },
-          { label: 'Xóa bài viết', variant: 'danger', onPress: confirmDeletePost },
+          { label: "Giữ lại", variant: "secondary" },
+          {
+            label: "Xóa bài viết",
+            variant: "danger",
+            onPress: confirmDeletePost,
+          },
         ]}
       />
 

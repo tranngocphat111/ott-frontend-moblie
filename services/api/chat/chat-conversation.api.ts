@@ -22,6 +22,17 @@ export const chatConversationApi = {
     return await chatApiClient.post('/conversations', payload);
   },
 
+  async findPrivateConversation(
+    userId: string,
+    targetUserId: string,
+  ): Promise<ChatConversation | null> {
+    const params = new URLSearchParams({ userId, targetUserId });
+    const response = await chatApiClient.get<ChatConversation | null>(
+      `/conversations/private?${params.toString()}`,
+    );
+    return ((response as any)?.data ?? response ?? null) as ChatConversation | null;
+  },
+
   async updateConversation(
     conversationId: string,
     payload: {

@@ -387,7 +387,30 @@ export function SocialContentCollectionScreen({
         onCreated={(post) => setItems((prev) => [{ id: post.id, kind: 'post', post, raw: post } as SocialContentItem, ...prev])}
         onUpdated={handleUpdatedPost}
       />
-      <CommentsModal visible={!!commentPost} post={commentPost} currentUserId={currentUserId} onClose={() => setCommentPost(null)} onCountChange={handleCommentCountChange} />
+      <CommentsModal
+        visible={!!commentPost}
+        post={commentPost}
+        currentUserId={currentUserId}
+        onClose={() => setCommentPost(null)}
+        onCountChange={handleCommentCountChange}
+        renderHeader={(p) => (
+          <PostCard
+            post={p}
+            currentUserId={currentUserId}
+            reaction={reactionByPost[p.id]}
+            reactionCounts={reactionCountsByPost[p.id]}
+            showReactionPicker={reactionPickerPost?.id === p.id}
+            onReact={handleReact}
+            onPickReaction={setReactionPickerPost}
+            onComment={setCommentPost}
+            onShowReactions={setReactionsListPost}
+            onEdit={setEditingPost}
+            onDelete={setPendingDeletePost}
+            onShare={setSharePost}
+            onSaveChange={handlePostSaveChange}
+          />
+        )}
+      />
       <ReactionsListModal visible={!!reactionsListPost} post={reactionsListPost} onClose={() => setReactionsListPost(null)} />
       <SharePostModal visible={!!sharePost} post={sharePost} currentUserId={currentUserId} currentUserName={displayName} currentUserAvatar={user?.avatarUrl} onClose={() => setSharePost(null)} onShared={handleSharedPost} />
       <StoryViewerModal

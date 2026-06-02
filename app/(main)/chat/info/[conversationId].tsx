@@ -10,6 +10,7 @@ import {
   Alert,
   FlatList,
   Image,
+  InteractionManager,
   Linking,
   Modal,
   Pressable,
@@ -41,6 +42,7 @@ import {
   getOptimizedImageUrl,
   resolveMediaUrl,
 } from "@/utils/chat";
+import { getBackendDateTime, parseBackendDate } from "@/utils/time";
 import { ensureImageLibraryPermission } from "@/utils/appPermissions";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
@@ -124,8 +126,8 @@ const getFileTypeColor = (fileName: string) => {
 };
 
 const getDateGroupLabel = (value?: string | null) => {
-  const date = new Date(String(value || ""));
-  if (Number.isNaN(date.getTime())) return "Không rõ ngày";
+  const date = parseBackendDate(value);
+  if (!date) return "Không rõ ngày";
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -143,10 +145,8 @@ const sortByNewest = <T extends { createdAt?: string; created_at?: string }>(
   items: T[],
 ) => {
   return [...items].sort((left, right) => {
-    const leftTime = new Date(left.createdAt || left.created_at || 0).getTime();
-    const rightTime = new Date(
-      right.createdAt || right.created_at || 0,
-    ).getTime();
+    const leftTime = getBackendDateTime(left.createdAt || left.created_at || 0);
+    const rightTime = getBackendDateTime(right.createdAt || right.created_at || 0);
     return rightTime - leftTime;
   });
 };
@@ -163,8 +163,8 @@ const filterByPreset = <T extends { createdAt?: string; created_at?: string }>(
 
   return items.filter((item) => {
     const raw = item.createdAt || item.created_at;
-    const time = new Date(String(raw || "")).getTime();
-    if (Number.isNaN(time)) return false;
+    const time = getBackendDateTime(raw);
+    if (!time) return false;
     return time >= minTime;
   });
 };
@@ -189,7 +189,15 @@ const isImageMessage = (message: ChatMessage) => {
 export default function ChatInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const {
+    conversationId,
+    title: paramTitle,
+    avatar: paramAvatar,
+  } = useLocalSearchParams<{
+    conversationId: string;
+    title?: string;
+    avatar?: string;
+  }>();
   const { user, chatUserId } = useAuth();
 
   const userIdForChat = chatUserId || user?.id;
@@ -224,8 +232,12 @@ export default function ChatInfoScreen() {
   });
 
   // Derived state
-  const title = getConversationTitle(conversation, userIdForChat);
-  const avatar = getConversationAvatar(conversation, userIdForChat);
+  const title = conversation
+    ? getConversationTitle(conversation, userIdForChat)
+    : String(paramTitle || "Tin nhắn");
+  const avatar = conversation
+    ? getConversationAvatar(conversation, userIdForChat)
+    : String(paramAvatar || "");
   const isGroup = conversation?.type === "group";
   const isMyDocuments = Boolean(
     conversation?.is_self_conversation ||
@@ -707,7 +719,11 @@ export default function ChatInfoScreen() {
   // Setup focus
   useFocusEffect(
     useCallback(() => {
-      void loadInfo();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadInfo();
+      });
+
+      return () => task.cancel();
     }, [loadInfo]),
   );
 

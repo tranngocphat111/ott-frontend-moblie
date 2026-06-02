@@ -8,7 +8,9 @@ import {
   View,
 } from "react-native";
 import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
-import { getMessageBodyText, isCallMessageType, isSystemMessageType, isProbablyVietnamese } from "@/utils/chat";
+import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
+import { parseBackendDate } from "@/utils/time";
+import { getMessageTranslationCandidate } from "@/utils/translationDetection";
 import { THEME_COLORS } from "@/constants/theme";
 import {
   CornerUpLeft,
@@ -55,6 +57,7 @@ interface ChatMessageBubbleProps {
   translatedText?: string;
   onTranslate?: () => void;
   isTranslating?: boolean;
+  translationUnavailable?: boolean;
 }
 
 const getReactionSummary = (message: ChatMessage) => {
@@ -263,8 +266,8 @@ const getCallDisplayCopy = (message: ChatMessage, isGroupCall = false) => {
     normalizedType === "call_cancel" ||
     normalizedType === "call_no_answer";
 
-  const callDate = new Date(String(message.createdAt || message.created_at || ""));
-  const callTimeLabel = Number.isNaN(callDate.getTime())
+  const callDate = parseBackendDate(message.createdAt || message.created_at);
+  const callTimeLabel = !callDate
     ? ""
     : callDate.toLocaleTimeString("vi-VN", {
       hour: "2-digit",
@@ -333,8 +336,22 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   translatedText,
   onTranslate,
   isTranslating = false,
+  translationUnavailable = false,
 }) => {
   const contentText = getMessageBodyText(message);
+  const translationCandidate = useMemo(
+    () => getMessageTranslationCandidate(contentText),
+    [contentText],
+  );
+  const visibleTranslatedText =
+    translatedText?.trim() && translatedText.trim() !== contentText.trim()
+      ? translatedText.trim()
+      : "";
+  const shouldShowTranslation =
+    !isMine &&
+    !message.is_revoked &&
+    !translationUnavailable &&
+    Boolean(visibleTranslatedText || (onTranslate && translationCandidate.shouldOffer));
   const reactions = useMemo(() => getReactionSummary(message), [message]);
   const totalReactionCount = useMemo(
     () => reactions.reduce((sum, [, count]) => sum + count, 0),
@@ -561,16 +578,16 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
                 {contentText}
               </Text>
 
-              {((translatedText || onTranslate) && !isProbablyVietnamese(contentText) && !isMine) && !message.is_revoked && (
+              {shouldShowTranslation && (
                 <View className="mt-2 border-t border-slate-100 pt-2">
-                  {translatedText ? (
+                  {visibleTranslatedText ? (
                     <View className="bg-slate-50/50 rounded-lg p-2 border border-slate-100">
                       <View className="flex-row items-center gap-1.5 mb-1">
                         <Sparkles size={10} color={THEME_COLORS.primary[500]} />
                         <Text className="text-[10px] font-bold text-primary-600 uppercase tracking-wider">Dịch bởi AI</Text>
                       </View>
                       <Text className="text-[14px] leading-5 text-slate-700 italic">
-                        {translatedText}
+                        {visibleTranslatedText}
                       </Text>
                     </View>
                   ) : (

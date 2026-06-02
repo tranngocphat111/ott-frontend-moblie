@@ -3,6 +3,7 @@ import {
   Alert,
   AppState,
   Image,
+  InteractionManager,
   Keyboard,
   Modal,
   Pressable,
@@ -22,6 +23,8 @@ import { useAuth } from '@/context/Authcontext';
 import { ChatApi, chatSocket } from '@/services/api';
 import { THEME_COLORS } from '@/constants/theme';
 import { getConversationAvatar, getConversationTitle, resolveMediaUrl } from '@/utils/chat';
+import { setConversationInfoSnapshot } from '@/utils/conversationInfoCache';
+import { getBackendDateTime } from '@/utils/time';
 import type { ChatConversationWithParticipant } from '@/types/entities/chat';
 import type {
   ChatCategory,
@@ -60,6 +63,7 @@ type SearchHistoryContact = {
   name: string;
   avatar?: string;
   phone?: string;
+  source?: 'search';
 };
 
 const EMPTY_SEARCH: ChatSearchResult = {
@@ -80,12 +84,12 @@ const sortConversationItems = (items: ChatConversationWithParticipant[]) => {
       return rightPinned - leftPinned;
     }
 
-    const leftTime = new Date(
+    const leftTime = getBackendDateTime(
       left.conversation.last_message?.createdAt || left.conversation.updatedAt || 0,
-    ).getTime();
-    const rightTime = new Date(
+    );
+    const rightTime = getBackendDateTime(
       right.conversation.last_message?.createdAt || right.conversation.updatedAt || 0,
-    ).getTime();
+    );
 
     return rightTime - leftTime;
   });
@@ -173,6 +177,7 @@ export default function HomeScreen() {
   const lastConversationsLoadAtRef = useRef(0);
   const loadConversationsRef = useRef<(options?: { force?: boolean }) => Promise<void>>(async () => undefined);
   const suppressSocketRefreshUntilRef = useRef(0);
+  const socketRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
 
@@ -188,16 +193,25 @@ export default function HomeScreen() {
           const parsedHistory = JSON.parse(storedHistory);
           if (Array.isArray(parsedHistory)) {
             const normalized = parsedHistory
-              .filter((item) => item && typeof item === 'object' && typeof item.user_id === 'string')
+              .filter((item) =>
+                item &&
+                typeof item === 'object' &&
+                item.source === 'search' &&
+                typeof item.user_id === 'string',
+              )
               .map((item) => ({
                 user_id: String(item.user_id),
                 conversation_id: item.conversation_id ? String(item.conversation_id) : undefined,
                 name: String(item.name || item.user_id),
                 avatar: item.avatar ? String(item.avatar) : undefined,
                 phone: item.phone ? String(item.phone) : undefined,
+                source: 'search' as const,
               }))
               .slice(0, 12);
             setRecentContactHistory(normalized);
+            if (normalized.length !== parsedHistory.length) {
+              void AsyncStorage.setItem(SEARCH_CONTACT_HISTORY_KEY, JSON.stringify(normalized));
+            }
           }
         }
 
@@ -222,6 +236,7 @@ export default function HomeScreen() {
         name: String(contact.name || contact.user_id || 'Người dùng'),
         avatar: contact.avatar,
         phone: contact.phone,
+        source: 'search' as const,
       }));
 
     setRecentContactHistory((current) => {
@@ -250,7 +265,7 @@ export default function HomeScreen() {
     } finally {
       setLoadingUsers(false);
     }
-  }, [chatUserId, isFocused]);
+  }, [chatUserId]);
 
   useEffect(() => {
     void loadChatUsers();
@@ -265,11 +280,7 @@ export default function HomeScreen() {
 
     if (loadConversationsPromiseRef.current) {
       await loadConversationsPromiseRef.current;
-      // After waiting for a previous request, check the throttle again
-      const afterWaitNow = Date.now();
-      if (!force && afterWaitNow - lastConversationsLoadAtRef.current < 1500) {
-        return;
-      }
+      return;
     }
 
     const task = (async () => {
@@ -314,9 +325,107 @@ export default function HomeScreen() {
     loadConversationsRef.current = loadConversations;
   }, [loadConversations]);
 
+  const patchMyParticipantCursor = useCallback(
+    (payload: any) => {
+      const changedUserId = String(
+        payload?.userId ||
+        payload?.changedUserId ||
+        payload?.user_id ||
+        payload?.participant?.user_id ||
+        '',
+      ).trim();
+      if (changedUserId && changedUserId !== String(chatUserId)) return true;
+
+      const conversationId = String(
+        payload?.conversationId ||
+        payload?.conversation_id ||
+        payload?.participant?.conversation_id ||
+        '',
+      ).trim();
+      if (!conversationId || !chatUserId) return false;
+
+      const participantPatch =
+        payload?.participant && typeof payload.participant === 'object'
+          ? payload.participant
+          : {};
+      const msgId = String(
+        payload?.msgId ||
+        payload?.msg_id ||
+        payload?.last_read_message_id ||
+        participantPatch?.last_read_message_id ||
+        '',
+      ).trim();
+      const unreadCount = Number(
+        payload?.unreadCount ??
+        payload?.unread_count ??
+        participantPatch?.unread_count,
+      );
+      const shouldClearUnread =
+        payload?.receiptType === 'seen' ||
+        payload?.status === 'seen' ||
+        Boolean(
+          payload?.readAt ||
+          payload?.last_read_at ||
+          payload?.last_read_message_id ||
+          participantPatch?.last_read_at ||
+          participantPatch?.last_read_message_id,
+        );
+
+      let didPatch = false;
+      setItems((current) => {
+        let didChange = false;
+        const next = current.map((item) => {
+          if (String(item.conversation._id || '') !== conversationId) return item;
+
+          didPatch = true;
+          didChange = true;
+          const currentParticipant = item.participant || ({} as any);
+          const nextParticipant: any = {
+            ...currentParticipant,
+            ...participantPatch,
+            settings: {
+              ...(currentParticipant as any).settings,
+              ...(participantPatch as any).settings,
+            },
+          };
+
+          if (msgId && shouldClearUnread) {
+            nextParticipant.last_read_message_id = msgId;
+            nextParticipant.last_read_at =
+              participantPatch?.last_read_at ||
+              payload?.last_read_at ||
+              payload?.readAt ||
+              new Date().toISOString();
+          }
+
+          if (Number.isFinite(unreadCount)) {
+            nextParticipant.unread_count = Math.max(0, unreadCount);
+          } else if (shouldClearUnread) {
+            nextParticipant.unread_count = 0;
+          }
+
+          return {
+            ...item,
+            participant: nextParticipant,
+          };
+        });
+
+        return didChange ? next : current;
+      });
+
+      return didPatch;
+    },
+    [chatUserId],
+  );
+
   useFocusEffect(
     useCallback(() => {
-      void loadConversationsRef.current({ force: true });
+      suppressSocketRefreshUntilRef.current = Date.now() + 1800;
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadConversationsRef.current({ force: true });
+      });
+
+      return () => task.cancel();
     }, []),
   );
 
@@ -346,19 +455,21 @@ export default function HomeScreen() {
     chatSocket.joinUserRoom(chatUserId);
 
     const refreshInbox = () => {
-      // Only refresh if the home screen is active
       if (!isFocused) return;
-
       if (Date.now() < suppressSocketRefreshUntilRef.current) {
         return;
       }
-      void loadConversationsRef.current();
+      if (socketRefreshTimerRef.current) return;
+
+      socketRefreshTimerRef.current = setTimeout(() => {
+        socketRefreshTimerRef.current = null;
+        void loadConversationsRef.current();
+      }, 350);
     };
     const refreshMyReadState = (payload: any) => {
-      const changedUserId = String(
-        payload?.userId || payload?.changedUserId || payload?.participant?.user_id || '',
-      );
-      if (changedUserId && changedUserId !== String(chatUserId)) return;
+      const patched = patchMyParticipantCursor(payload);
+      if (patched) return;
+
       refreshInbox();
     };
 
@@ -378,6 +489,11 @@ export default function HomeScreen() {
     chatSocket.on('cap_nhat_quan_he', refreshInbox);
 
     return () => {
+      if (socketRefreshTimerRef.current) {
+        clearTimeout(socketRefreshTimerRef.current);
+        socketRefreshTimerRef.current = null;
+      }
+
       chatSocket.off('tin_nhan', refreshInbox);
       chatSocket.off('conversation_read_synced', refreshMyReadState);
       chatSocket.off('participant_cursor_changed', refreshMyReadState);
@@ -393,7 +509,7 @@ export default function HomeScreen() {
       chatSocket.off('giai_tan_nhom', refreshInbox);
       chatSocket.off('cap_nhat_quan_he', refreshInbox);
     };
-  }, [chatUserId, isFocused]);
+  }, [chatUserId, isFocused, patchMyParticipantCursor]);
 
   useEffect(() => {
     const keyword = searchText.trim();
@@ -667,7 +783,12 @@ export default function HomeScreen() {
   const hasSearchQuery = searchText.trim().length > 0;
 
   const openConversation = useCallback(
-    async (conversationId: string, messageId?: string, contactId?: string) => {
+    async (
+      conversationId: string,
+      messageId?: string,
+      contactId?: string,
+      options?: { rememberSearchHistory?: boolean },
+    ) => {
       let targetConvId = conversationId;
       if (!targetConvId && !contactId) return;
 
@@ -700,13 +821,7 @@ export default function HomeScreen() {
       // 3. If still not found and we have a contactId, try to find on server (for hidden/deleted chats)
       if (!targetConv && contactId && chatUserId) {
         try {
-          // This API call effectively acts as a findPrivateConversation
-          const response = await ChatApi.createConversation({
-            creatorId: chatUserId,
-            type: 'private',
-            memberIds: [contactId],
-          });
-          const fetchedConv = response?._id ? response : (response?.conversation || null);
+          const fetchedConv = await ChatApi.findPrivateConversation(chatUserId, contactId);
           
           if (fetchedConv && fetchedConv._id && !String(fetchedConv._id).startsWith(VIRTUAL_CONV_PREFIX)) {
             targetConv = {
@@ -785,22 +900,20 @@ export default function HomeScreen() {
         return;
       }
 
-      // Save to history
-      const historyItem = {
-        user_id: targetConv.conversation.type === 'private'
-          ? (targetConv.conversation.participants?.find(p => String(p.user_id) !== String(chatUserId))?.user_id || '')
-          : 'group',
-        name: getConversationTitle(targetConv.conversation, chatUserId),
-        avatar: getConversationAvatar(targetConv.conversation, chatUserId),
-        conversation_id: targetConvId
-      };
+      if (options?.rememberSearchHistory) {
+        const historyUserId = targetConv.conversation.type === 'private'
+          ? (targetConv.conversation.participants?.find(p => String(p.user_id) !== String(chatUserId))?.user_id || contactId || '')
+          : `conversation:${targetConvId}`;
 
-      void rememberSearchContacts([{
-        user_id: historyItem.user_id,
-        name: historyItem.name,
-        avatar: historyItem.avatar,
-        conversation_ids: [targetConvId]
-      } as any]);
+        if (historyUserId) {
+          void rememberSearchContacts([{
+            user_id: historyUserId,
+            name: getConversationTitle(targetConv.conversation, chatUserId),
+            avatar: getConversationAvatar(targetConv.conversation, chatUserId),
+            conversation_ids: [targetConvId],
+          } as any]);
+        }
+      }
 
       const params: any = {
         conversationId: targetConvId,
@@ -808,6 +921,12 @@ export default function HomeScreen() {
         avatar: getConversationAvatar(targetConv.conversation, chatUserId)
       };
       if (messageId) params.highlightedMessageId = messageId;
+
+      setConversationInfoSnapshot(targetConvId, {
+        conversation: targetConv.conversation,
+        participant: targetConv.participant,
+        members: targetConv.conversation.participants,
+      });
 
       router.push({
         pathname: '/chat/[conversationId]',

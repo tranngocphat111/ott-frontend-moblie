@@ -1,10 +1,25 @@
 import { GOOGLE_CONFIG } from '@/configuration/api';
 import { useAuth } from '@/contexts/Authcontext';
 import { authApi } from '@/services/api/auth.api';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
+
+const isRunningInExpoGo = Constants.appOwnership === 'expo';
+type GoogleSigninModule = typeof import('@react-native-google-signin/google-signin');
+let googleSigninModulePromise: Promise<GoogleSigninModule | null> | null = null;
+
+const getGoogleSigninModule = async () => {
+  if (isRunningInExpoGo) return null;
+
+  googleSigninModulePromise ??= import('@react-native-google-signin/google-signin').catch((error) => {
+    console.warn('[GoogleSignIn] Native module unavailable:', error?.message || error);
+    return null;
+  });
+
+  return googleSigninModulePromise;
+};
 
 export const useGoogleLogin = () => {
   const router = useRouter();
@@ -13,11 +28,18 @@ export const useGoogleLogin = () => {
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: GOOGLE_CONFIG.CLIENT_ID,
-      iosClientId: GOOGLE_CONFIG.IOS_CLIENT_ID || undefined,
-      scopes: ['openid', 'profile', 'email'],
-      offlineAccess: false,
+    if (isRunningInExpoGo) {
+      console.log('🔑 Google native sign-in skipped in Expo Go');
+      return;
+    }
+
+    void getGoogleSigninModule().then((googleModule) => {
+      googleModule?.GoogleSignin.configure({
+        webClientId: GOOGLE_CONFIG.CLIENT_ID,
+        iosClientId: GOOGLE_CONFIG.IOS_CLIENT_ID || undefined,
+        scopes: ['openid', 'profile', 'email'],
+        offlineAccess: false,
+      });
     });
 
     console.log('🔑 Google Web clientId:', GOOGLE_CONFIG.CLIENT_ID ? 'configured' : 'MISSING');
@@ -63,6 +85,7 @@ export const useGoogleLogin = () => {
   const loginWithGoogle = async () => {
     setError(undefined);
     setIsLoading(true);
+    let googleStatusCodes: GoogleSigninModule['statusCodes'] | undefined;
 
     try {
       if (!GOOGLE_CONFIG.CLIENT_ID) {
@@ -74,6 +97,15 @@ export const useGoogleLogin = () => {
         setError('Thiếu Google Android Client ID cho bản build Android');
         return;
       }
+
+      const googleModule = await getGoogleSigninModule();
+      if (!googleModule) {
+        setError('Đăng nhập Google native cần development build, không chạy trong Expo Go');
+        return;
+      }
+
+      const { GoogleSignin, statusCodes } = googleModule;
+      googleStatusCodes = statusCodes;
 
       console.log('🚀 Opening native Google sign-in...');
       if (Platform.OS === 'android') {
@@ -102,11 +134,14 @@ export const useGoogleLogin = () => {
     } catch (err: any) {
       console.error('❌ Cannot open Google login:', err);
 
-      if (err?.code === statusCodes.SIGN_IN_CANCELLED) {
+      if (err?.code === googleStatusCodes?.SIGN_IN_CANCELLED || err?.code === 'SIGN_IN_CANCELLED') {
         return;
       }
 
-      if (err?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      if (
+        err?.code === googleStatusCodes?.PLAY_SERVICES_NOT_AVAILABLE ||
+        err?.code === 'PLAY_SERVICES_NOT_AVAILABLE'
+      ) {
         setError('Google Play Services chưa sẵn sàng trên thiết bị này');
         return;
       }

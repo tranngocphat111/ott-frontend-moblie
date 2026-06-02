@@ -551,8 +551,13 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
           );
         }
 
-        if (!response?.ok && response?.reason === 'busy' && response.targetUserId) {
-          setBusyUserIds([response.targetUserId]);
+        const busyTargetUserId = response?.targetUserId;
+        if (
+          !response?.ok &&
+          /busy|caller_busy|target_busy/i.test(String(response?.reason || '')) &&
+          busyTargetUserId
+        ) {
+          setBusyUserIds([busyTargetUserId]);
           closeCallLocally();
           return;
         }
@@ -920,6 +925,17 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       );
     };
 
+    const handleCallAnsweredElsewhere = (payload: {
+      conversationId: string;
+      callId?: string;
+      userId: string;
+      reason?: string;
+    }) => {
+      if (String(payload.userId || '') !== String(userIdRef.current || '')) return;
+      if (!isPayloadForActiveCall(payload)) return;
+      closeCallLocally();
+    };
+
     const handleCallDeclined = (payload: {
       conversationId: string;
       callId?: string;
@@ -972,6 +988,7 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
     chatSocket.on('ket_thuc_phong_goi', handleCallEnded as any);
     chatSocket.on('nguoi_dung_tu_choi_goi', handleCallDeclined as any);
     chatSocket.on('nguoi_dung_ban_goi', handleCallBusy as any);
+    chatSocket.on('cuoc_goi_da_nhan_o_thiet_bi_khac', handleCallAnsweredElsewhere as any);
     chatSocket.on('thay_doi_trang_thai_camera', handleCameraStateChanged as any);
 
     return () => {
@@ -984,9 +1001,11 @@ export function useMobileCall({ conversationId, userId }: UseMobileCallOptions) 
       chatSocket.off('ket_thuc_phong_goi', handleCallEnded as any);
       chatSocket.off('nguoi_dung_tu_choi_goi', handleCallDeclined as any);
       chatSocket.off('nguoi_dung_ban_goi', handleCallBusy as any);
+      chatSocket.off('cuoc_goi_da_nhan_o_thiet_bi_khac', handleCallAnsweredElsewhere as any);
       chatSocket.off('thay_doi_trang_thai_camera', handleCameraStateChanged as any);
     };
   }, [
+    closeCallLocally,
     cleanupPeer,
     createOfferFor,
     endCall,
