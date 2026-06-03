@@ -2,6 +2,7 @@ import { Avatar } from '@/components/social/SocialAvatar';
 import { SOCIAL_COLORS, SOCIAL_SHADOW } from '@/components/social/socialTheme';
 import { useAuth } from '@/contexts/Authcontext';
 import { MediaApi, type FriendOption, type FriendRequestOption } from '@/services/api/media.api';
+import { relationshipSocket, type RelationshipRealtimePayload } from '@/services/socket/relationshipSocket';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -24,12 +25,12 @@ export default function SocialRelationshipsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!currentUserId) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [nextFriends, nextRequests, nextBlocked] = await Promise.all([
         MediaApi.fetchFriends(currentUserId),
@@ -40,7 +41,7 @@ export default function SocialRelationshipsScreen() {
       setRequests(nextRequests);
       setBlocked(nextBlocked);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [currentUserId]);
 
@@ -48,10 +49,27 @@ export default function SocialRelationshipsScreen() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const handleRelationshipUpdate = (payload: RelationshipRealtimePayload) => {
+      if (!payload) return;
+
+      const targetIds = payload.targetUserIds || [];
+      const isTarget = targetIds.includes(currentUserId) || payload.requesterId === currentUserId || payload.receiverId === currentUserId;
+      if (!isTarget) return;
+
+      void load(true); // Silent reload on relationship update
+    };
+
+    relationshipSocket.onRelationshipUpdate(handleRelationshipUpdate);
+    return () => relationshipSocket.offRelationshipUpdate(handleRelationshipUpdate);
+  }, [currentUserId, load]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await load();
+      await load(true);
     } finally {
       setRefreshing(false);
     }

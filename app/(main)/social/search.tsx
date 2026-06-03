@@ -104,7 +104,28 @@ export default function SocialSearchScreen() {
           } else if ((res as any).result) {
             userList = (res as any).result;
           }
-          userList = userList.filter((u: any) => u.relationshipStatus !== 'BLOCKED' && u.relationshipStatus !== 'USER_BLOCKED');
+          
+          if (currentUserId) {
+            userList = await Promise.all(
+              userList.map(async (u: any) => {
+                const targetId = u.id || u._id || u.user_id;
+                if (!targetId || targetId === currentUserId) return { ...u, relationshipStatus: 'NONE' };
+                try {
+                  const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
+                  if (rel && rel.id) {
+                    if (rel.status === 'ACCEPTED') return { ...u, relationshipStatus: 'FRIEND' };
+                    if (rel.status === 'PENDING') return { ...u, relationshipStatus: rel.requesterId === currentUserId ? 'PENDING_REQUEST_SENT' : 'PENDING_REQUEST_RECEIVED' };
+                    if (rel.status === 'BLOCKED') return { ...u, relationshipStatus: rel.requesterId === currentUserId ? 'BLOCKED' : 'USER_BLOCKED' };
+                  }
+                } catch (e) {
+                  // ignore
+                }
+                return { ...u, relationshipStatus: 'NONE' };
+              })
+            );
+          }
+
+          userList = userList.filter((u: any) => u.relationshipStatus !== 'BLOCKED' && u.relationshipStatus !== 'USER_BLOCKED' && (u.id || u._id || u.user_id) !== currentUserId);
           setUsers(userList);
           setHasMore(false);
         }
@@ -140,7 +161,7 @@ export default function SocialSearchScreen() {
       if (!isTarget) return;
 
       setUsers((prevUsers) => prevUsers.map(u => {
-        const uId = (u as any).id || (u as any)._id || u.user_id;
+        const uId = (u as any).id || (u as any)._id || (u as any).user_id;
         if (uId === payload.requesterId || uId === payload.receiverId) {
           let newStatus = (u as any).relationshipStatus;
           if (payload.type === 'REQUEST_SENT') {
@@ -186,7 +207,7 @@ export default function SocialSearchScreen() {
     try {
       const res = await MediaApi.sendFriendRequest(currentUserId, targetId);
       if (res) {
-        setUsers(users.map(u => ((u as any).id || (u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'PENDING_REQUEST_SENT' } : u));
+        setUsers(users.map(u => ((u as any).id || (u as any)._id || (u as any).user_id) === targetId ? { ...u, relationshipStatus: 'PENDING_REQUEST_SENT' } : u));
       }
     } catch (e) {
       console.error(e);
@@ -199,7 +220,7 @@ export default function SocialSearchScreen() {
       const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
       if (rel?.id) {
         await MediaApi.acceptFriendRequest(rel.id);
-        setUsers(users.map(u => ((u as any).id || (u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'FRIEND' } : u));
+        setUsers(users.map(u => ((u as any).id || (u as any)._id || (u as any).user_id) === targetId ? { ...u, relationshipStatus: 'FRIEND' } : u));
       }
     } catch (e) {
       console.error(e);
@@ -212,7 +233,20 @@ export default function SocialSearchScreen() {
       const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
       if (rel?.id) {
         await MediaApi.rejectFriendRequest(rel.id);
-        setUsers(users.map(u => ((u as any).id || (u as any)._id || u.user_id) === targetId ? { ...u, relationshipStatus: 'NONE' } : u));
+        setUsers(users.map(u => ((u as any).id || (u as any)._id || (u as any).user_id) === targetId ? { ...u, relationshipStatus: 'NONE' } : u));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRevokeFriendRequest = async (targetId: string) => {
+    if (!currentUserId) return;
+    try {
+      const rel = await MediaApi.fetchRelationshipOf(currentUserId, targetId);
+      if (rel?.id) {
+        await MediaApi.cancelRelationship(rel.id);
+        setUsers(users.map(u => ((u as any).id || (u as any)._id || (u as any).user_id) === targetId ? { ...u, relationshipStatus: 'NONE' } : u));
       }
     } catch (e) {
       console.error(e);
@@ -382,13 +416,14 @@ export default function SocialSearchScreen() {
                   {currentUserId !== targetId && (
                     <View className="mt-3 flex-row gap-2">
                       {relationshipStatus === 'FRIEND' ? (
-                        <View className="flex-1 items-center justify-center py-2 rounded-lg bg-gray-100">
-                          <Text className="text-gray-600 font-bold">Bạn bè</Text>
-                        </View>
+                        null
                       ) : relationshipStatus === 'PENDING_REQUEST_SENT' ? (
-                        <View className="flex-1 items-center justify-center py-2 rounded-lg bg-gray-100">
-                          <Text className="text-gray-600 font-bold">Đã gửi lời mời</Text>
-                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleRevokeFriendRequest(targetId)}
+                          className="flex-1 items-center justify-center py-2 rounded-lg bg-gray-100"
+                        >
+                          <Text className="text-gray-700 font-bold">Đã gửi lời mời kết bạn</Text>
+                        </TouchableOpacity>
                       ) : relationshipStatus === 'PENDING_REQUEST_RECEIVED' ? (
                         <>
                           <TouchableOpacity
