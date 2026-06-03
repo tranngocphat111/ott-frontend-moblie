@@ -588,12 +588,13 @@ export const findPostsWithAuthorized = async (
   page = 0,
   size = 10,
   currentUserId?: string,
+  sortBy: 'recent' | 'viral' = 'recent',
 ): Promise<PostsPage | null> => {
   if (!currentUserId) return fetchPostsWithPage(page, size, currentUserId);
 
   try {
     const payload = await (apiClient.get as any)(mediaPath(`/posts/page/${currentUserId}`), {
-      params: { page, size, sort: 'createdAt,desc' },
+      params: { page, size, sortBy },
     });
     const data = unwrapApiResult<SpringPage<ApiPost>>(payload);
     if (!data) return null;

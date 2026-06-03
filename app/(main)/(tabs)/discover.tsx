@@ -94,6 +94,7 @@ export default function DiscoverScreen() {
   const [sharePost, setSharePost] = useState<Post | null>(null);
   const [editingStory, setEditingStory] = useState<StoryItem | null>(null);
   const [pendingDeletePost, setPendingDeletePost] = useState<Post | null>(null);
+  const [sortMode, setSortMode] = useState<"recent" | "viral">("viral");
   const recordedViewIdsRef = useRef(new Set<string>());
 
   const avatarUrl = user?.avatarUrl;
@@ -131,7 +132,7 @@ export default function DiscoverScreen() {
       setStoryLoadError(null);
       try {
         const [postsPage, stories, reactions, suggested] = await Promise.all([
-          MediaApi.findPostsWithAuthorized(0, PAGE_SIZE, currentUserId),
+          MediaApi.findPostsWithAuthorized(0, PAGE_SIZE, currentUserId, sortMode),
           MediaApi.fetchStoryGroups(currentUserId),
           MediaApi.fetchUserReactions(currentUserId),
           MediaApi.fetchSuggestedUsers(currentUserId),
@@ -162,7 +163,7 @@ export default function DiscoverScreen() {
         setLoading(false);
       }
     },
-    [currentUserId, refreshReactionCounts],
+    [currentUserId, refreshReactionCounts, sortMode],
   );
 
   useEffect(() => {
@@ -400,6 +401,7 @@ export default function DiscoverScreen() {
         nextPage,
         PAGE_SIZE,
         currentUserId,
+        sortMode,
       );
       if (!data) return;
       const newPosts = data.posts.filter(
@@ -559,8 +561,9 @@ export default function DiscoverScreen() {
 
   const header = useMemo(
     () => (
-      <DiscoverHeader
-        userName={displayName}
+      <View>
+        <DiscoverHeader
+          userName={displayName}
         avatarUrl={avatarUrl}
         storyGroups={storyGroups}
         suggestedUsers={suggestedUsers}
@@ -594,11 +597,33 @@ export default function DiscoverScreen() {
         }}
         onOpenSearch={() => router.push("/(main)/social/search" as any)}
         onOpenSaved={() => router.push("/(main)/social/saved" as any)}
-        onOpenHistory={() => router.push("/(main)/social/history" as any)}
-        onOpenRelationships={() =>
-          router.push("/(main)/social/relationships" as any)
-        }
-      />
+          onOpenHistory={() => router.push("/(main)/social/history" as any)}
+          onOpenRelationships={() =>
+            router.push("/(main)/social/relationships" as any)
+          }
+        />
+        {/* Sorting Segmented Control */}
+        <View className="mx-4 mb-4 flex-row rounded-xl p-1 shadow-sm" style={{ backgroundColor: SOCIAL_COLORS.card }}>
+          <Text
+            onPress={() => setSortMode("viral")}
+            className={`flex-1 py-2 text-center font-semibold rounded-lg overflow-hidden ${
+              sortMode === "viral"
+                ? "bg-primary-50 text-primary-600"
+                : "text-gray-500"
+            }`}>
+            Thịnh hành
+          </Text>
+          <Text
+            onPress={() => setSortMode("recent")}
+            className={`flex-1 py-2 text-center font-semibold rounded-lg overflow-hidden ${
+              sortMode === "recent"
+                ? "bg-primary-50 text-primary-600"
+                : "text-gray-500"
+            }`}>
+            Mới nhất
+          </Text>
+        </View>
+      </View>
     ),
     [
       avatarUrl,
@@ -612,6 +637,7 @@ export default function DiscoverScreen() {
       router,
       storyGroups,
       suggestedUsers,
+      sortMode,
     ],
   );
 
