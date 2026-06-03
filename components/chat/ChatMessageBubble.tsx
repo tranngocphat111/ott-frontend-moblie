@@ -8,7 +8,12 @@ import {
   View,
 } from "react-native";
 import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
-import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
+import {
+  getMessageBodyText,
+  isCallMessageType,
+  isSystemMessageType,
+  isUserRevokedMessage,
+} from "@/utils/chat";
 import { parseBackendDate } from "@/utils/time";
 import { getMessageTranslationCandidate } from "@/utils/translationDetection";
 import {
@@ -344,6 +349,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
 }) => {
   const contentText = getMessageBodyText(message);
   const moderationRejected = isModerationRejected(message);
+  const userRevoked = isUserRevokedMessage(message);
   const translationCandidate = useMemo(
     () => getMessageTranslationCandidate(contentText),
     [contentText],
@@ -512,7 +518,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
         >
           {shouldRenderHiddenText ? (
             <Text className="text-[15px] italic leading-5 text-slate-500">
-              {message.is_revoked
+              {userRevoked
                 ? "Tin nhắn đã được thu hồi"
                 : moderationRejected
                 ? "Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng"
