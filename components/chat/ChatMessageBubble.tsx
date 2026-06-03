@@ -11,6 +11,7 @@ import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
 import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
 import { parseBackendDate } from "@/utils/time";
 import { getMessageTranslationCandidate } from "@/utils/translationDetection";
+import { isModerationRejected } from "@/utils/chatModeration";
 import { THEME_COLORS } from "@/constants/theme";
 import {
   CornerUpLeft,
@@ -339,6 +340,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   translationUnavailable = false,
 }) => {
   const contentText = getMessageBodyText(message);
+  const moderationRejected = isModerationRejected(message);
   const translationCandidate = useMemo(
     () => getMessageTranslationCandidate(contentText),
     [contentText],
@@ -350,6 +352,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
   const shouldShowTranslation =
     !isMine &&
     !message.is_revoked &&
+    !moderationRejected &&
     !translationUnavailable &&
     Boolean(visibleTranslatedText || (onTranslate && translationCandidate.shouldOffer));
   const reactions = useMemo(() => getReactionSummary(message), [message]);
@@ -422,7 +425,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
         </Text>
       )}
 
-      {message.reply_to && !message.is_revoked && !message.is_deleted && (
+      {message.reply_to && !message.is_revoked && !moderationRejected && !message.is_deleted && (
         <Pressable
           onPress={() => {
             if (isReplyTargetDeleted) {
@@ -497,9 +500,11 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               : undefined,
           ]}
         >
-          {message.is_revoked ? (
+          {message.is_revoked || moderationRejected ? (
             <Text className="text-[15px] italic leading-5 text-slate-500">
-              {contentText || (isMine ? "Bạn đã thu hồi một tin nhắn" : "Tin nhắn đã được thu hồi")}
+              {moderationRejected
+                ? "Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng"
+                : contentText || (isMine ? "Bạn đã thu hồi một tin nhắn" : "Tin nhắn đã được thu hồi")}
             </Text>
           ) : isCallMessage && callCopy ? (
             <View className="min-w-[190px] max-w-[280px] p-1">
@@ -608,7 +613,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
           )}
         </Pressable>
 
-        {!message.is_revoked && !!reactions.length && (
+        {!message.is_revoked && !moderationRejected && !!reactions.length && (
           <Pressable
             onPress={() => onReactionPress?.(message, reactions[0][0])}
             className={`absolute -bottom-2 ${isMine ? "right-2" : "left-2"} flex-row items-center rounded-full border border-slate-200 bg-white px-1.5 py-[2px] shadow-sm`}

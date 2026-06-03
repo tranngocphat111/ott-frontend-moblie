@@ -1,6 +1,7 @@
 import type { ChatConversation, ChatMessage } from '@/types';
 import { MEDIA_CONFIG } from '@/configuration/api';
 import { parseBackendDate } from '@/utils/time';
+import { isModerationRejected } from '@/utils/chatModeration';
 
 const CUSTOM_SHORTCODE_TO_EMOJI_MAP: Record<string, string> = {
   ':D': '😃',
@@ -173,6 +174,7 @@ export const isCallMessageType = (type?: string | null) => {
 
 export const getMessageBodyText = (message: ChatMessage) => {
   if (message.is_deleted) return 'Tin nhắn đã bị xóa';
+  if (isModerationRejected(message)) return 'Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng';
   if (message.is_revoked) return 'Tin nhắn đã được thu hồi';
 
   const firstContent = Array.isArray(message.content)

@@ -25,6 +25,9 @@ const isDeletedPost = (post: Post) =>
   String(post.status || "").toUpperCase() === "DELETED" ||
   String(post.visibility || "").toUpperCase() === "DELETED";
 
+const isFlaggedMedia = (media?: PostMediaItem | null) =>
+  String(media?.moderationStatus || "").toUpperCase() === "FLAGGED";
+
 function ReactionPickerBubble({
   post,
   selectedReaction,
@@ -81,6 +84,9 @@ function MediaTile({
 }) {
   const isVideo = media.type === "video";
   const imageUri = media.thumbnailUrl || (!isVideo ? media.url : undefined);
+  const flagged = isFlaggedMedia(media);
+  const [revealed, setRevealed] = useState(false);
+  const hiddenByModeration = flagged && !revealed;
 
   return (
     <View
@@ -96,6 +102,7 @@ function MediaTile({
           style={{ width: "100%", height: "100%" }}
           contentFit="cover"
           contentPosition="center"
+          blurRadius={hiddenByModeration ? 16 : 0}
         />
       : <View
           className="flex-1 items-center justify-center"
@@ -111,6 +118,25 @@ function MediaTile({
           </View>
         </View>
       )}
+      {hiddenByModeration ? (
+        <View className="absolute inset-0 items-center justify-center bg-black/40 px-3">
+          <View className="items-center rounded-2xl bg-black/60 px-3 py-2">
+            <Text className="text-center text-[12px] font-bold text-white">
+              {isVideo ? "Video nhạy cảm" : "Ảnh nhạy cảm"}
+            </Text>
+            <Pressable
+              className="mt-2 rounded-full bg-white px-3 py-1.5"
+              onPress={(event) => {
+                event.stopPropagation?.();
+                setRevealed(true);
+              }}>
+              <Text className="text-[12px] font-bold text-slate-900">
+                {isVideo ? "Xem video" : "Xem ảnh"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }

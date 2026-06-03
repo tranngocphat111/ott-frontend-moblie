@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { ChatMessage } from '@/types/entities/chat';
 import { getOptimizedImageUrl, resolveMediaUrl } from '@/utils/chat';
+import { isMessageMediaFlagged } from '@/utils/chatModeration';
 
 type Props = {
   message: ChatMessage;
@@ -37,6 +38,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
 
   // Nếu không có kích thước lúc gửi, ta set mặc định tỷ lệ là 1 (hình vuông) để giữ chỗ, tránh bị nhảy chiều cao
   const [aspectRatio, setAspectRatio] = useState<number>(initialAspectRatio || 1);
+  const [revealedIndexes, setRevealedIndexes] = useState<Set<number>>(() => new Set());
 
   const imageUrls = useMemo(() => {
     if (!Array.isArray(message.content)) return [];
@@ -65,16 +67,43 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
   const localStatus = message.local_status;
   const localProgress = Number(message.local_upload_progress || 0);
 
+  const renderFlaggedOverlay = useCallback((index: number) => (
+    <View className="absolute inset-0 items-center justify-center bg-black/35 px-3">
+      <View className="items-center rounded-2xl bg-black/55 px-3 py-2">
+        <Text className="text-center text-[12px] font-bold text-white">Ảnh nhạy cảm</Text>
+        <Pressable
+          className="mt-2 rounded-full bg-white px-3 py-1.5"
+          onPress={(event) => {
+            event.stopPropagation?.();
+            setRevealedIndexes((current) => {
+              const next = new Set(current);
+              next.add(index);
+              return next;
+            });
+          }}
+        >
+          <Text className="text-[12px] font-bold text-slate-900">Xem ảnh</Text>
+        </Pressable>
+      </View>
+    </View>
+  ), []);
+
   const renderImageTile = useCallback((
     index: number,
     className?: string,
     style?: any,
   ) => {
     const uri = optimizedUrls[index] || imageUrls[index];
+    const flagged = isMessageMediaFlagged(message, index);
+    const revealed = revealedIndexes.has(index);
+    const hiddenByModeration = flagged && !revealed;
 
     return (
       <Pressable
-        onPress={() => onImagePress?.(index)}
+        onPress={() => {
+          if (hiddenByModeration) return;
+          onImagePress?.(index);
+        }}
         onLongPress={onLongPress}
         className={`relative overflow-hidden ${className || ''}`}
         style={style}
@@ -87,9 +116,11 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
           cachePolicy={isLocalFile ? "none" : "memory-disk"}
           transition={0}
           placeholder={BLUR_HASH_PLACEHOLDER}
+          blurRadius={hiddenByModeration ? 16 : 0}
           onLoad={index === 0 ? markReady : undefined}
           onError={index === 0 ? markReady : undefined}
         />
+        {hiddenByModeration ? renderFlaggedOverlay(index) : null}
         {index === 5 && count > 6 && (
           <View className="absolute inset-0 bg-black/45 items-center justify-center pointer-events-none">
             <Text className="text-white font-bold text-lg">+{count - 6}</Text>
@@ -102,9 +133,12 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
     imageUrls,
     isLocalFile,
     markReady,
+    message,
     onImagePress,
     onLongPress,
     optimizedUrls,
+    renderFlaggedOverlay,
+    revealedIndexes,
   ]);
 
   if (!imageUrls.length) return null;
@@ -112,7 +146,13 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
   return (
     <View style={{ width: CLUSTER_WIDTH }} className="overflow-hidden rounded-2xl border border-black/5 bg-white/95">
       {count === 1 && (
-        <Pressable onPress={() => onImagePress?.(0)} onLongPress={onLongPress}>
+        <Pressable
+          onPress={() => {
+            if (isMessageMediaFlagged(message, 0) && !revealedIndexes.has(0)) return;
+            onImagePress?.(0);
+          }}
+          onLongPress={onLongPress}
+        >
           <Image
             source={{ uri: optimizedUrls[0] || imageUrls[0] }}
             recyclingKey={optimizedUrls[0] || imageUrls[0]}
@@ -126,6 +166,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
             cachePolicy={isLocalFile ? "none" : "memory-disk"}
             transition={0}
             placeholder={BLUR_HASH_PLACEHOLDER}
+            blurRadius={isMessageMediaFlagged(message, 0) && !revealedIndexes.has(0) ? 16 : 0}
             onLoad={(e) => {
               // Nếu ban đầu server/app không có truyền width/height vào message, cập nhật lại sau khi load xong
               if (!initialAspectRatio) {
@@ -138,6 +179,7 @@ const ChatImageMessageBase: React.FC<Props> = ({ message, onImagePress, onLongPr
             }}
             onError={markReady}
           />
+          {isMessageMediaFlagged(message, 0) && !revealedIndexes.has(0) ? renderFlaggedOverlay(0) : null}
         </Pressable>
       )}
       {count === 2 && (
