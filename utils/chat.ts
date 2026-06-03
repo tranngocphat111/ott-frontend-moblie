@@ -172,15 +172,38 @@ export const isCallMessageType = (type?: string | null) => {
   ].includes(normalizedType);
 };
 
+const getFirstContentText = (message: ChatMessage) => {
+  const firstContent = Array.isArray(message.content)
+    ? message.content[0]
+    : message.content;
+
+  return typeof firstContent === 'string'
+    ? firstContent
+    : firstContent && typeof firstContent === 'object'
+      ? firstContent.text || firstContent.url || firstContent.name || ''
+      : '';
+};
+
+const normalizePlaceholderText = (value: unknown) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+export const hasRevokedPlaceholderContent = (message: ChatMessage) =>
+  normalizePlaceholderText(getFirstContentText(message)).includes('tin nhan da duoc thu hoi');
+
+export const isUserRevokedMessage = (message: ChatMessage) =>
+  Boolean(message.is_revoked) &&
+  (!isModerationRejected(message) || hasRevokedPlaceholderContent(message));
+
 export const getMessageBodyText = (message: ChatMessage) => {
   if (message.is_deleted) return 'Tin nhắn đã bị xóa';
+  if (isUserRevokedMessage(message)) return 'Tin nhắn đã được thu hồi';
   if (isModerationRejected(message)) return 'Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng';
   if (message.is_revoked) return 'Tin nhắn đã được thu hồi';
 
-  const firstContent = Array.isArray(message.content)
-    ? message.content[0]
-    : undefined;
-
+  const firstContent = Array.isArray(message.content) ? message.content[0] : undefined;
   const rawValue =
     typeof firstContent === 'string'
       ? firstContent

@@ -7,6 +7,10 @@ import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/Authcontext';
 import { MediaApi, type Post } from '@/services/api/media.api';
 import {
+  mediaSocket,
+  type MediaRealtimePayload,
+} from '@/services/socket/mediaSocket';
+import {
   PostCard,
   SOCIAL_COLORS,
   CommentsModal,
@@ -70,6 +74,38 @@ export default function StandalonePostScreen() {
 
     void loadPost();
   }, [postId, currentUserId]);
+
+  useEffect(() => {
+    if (!postId || !currentUserId) return;
+
+    void mediaSocket.connect();
+
+    const handleMediaUpdate = async (payload: MediaRealtimePayload) => {
+      const targetType = String(payload?.contentTargetType || '').toUpperCase();
+      if (targetType !== 'POST' || payload.contentId !== postId) return;
+
+      const operation = String(payload.operation || '').toUpperCase();
+      if (operation === 'DELETE') {
+        setPost(null);
+        setError(true);
+        return;
+      }
+
+      const freshPost = await MediaApi.fetchPostById(postId, currentUserId);
+      if (!freshPost) {
+        setPost(null);
+        setError(true);
+        return;
+      }
+
+      setPost(freshPost);
+    };
+
+    void mediaSocket.onMediaUpdate(handleMediaUpdate);
+    return () => {
+      mediaSocket.offMediaUpdate(handleMediaUpdate);
+    };
+  }, [currentUserId, postId]);
 
   const handleReact = async (p: Post, reactionType: string) => {
     if (!currentUserId || !post) return;

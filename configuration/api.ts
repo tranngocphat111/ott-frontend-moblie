@@ -40,7 +40,7 @@ export const LIVEKIT_CONFIG = {
 };
 
 export const RELATIONSHIP_SOCKET_CONFIG = {
-  URL: process.env.EXPO_PUBLIC_RELATIONSHIP_SOCKET_URL || '',
+  URL: process.env.EXPO_PUBLIC_MEDIA_SOCKET_URL || '',
 };
 
 export const NOTIFICATION_API_CONFIG = {
