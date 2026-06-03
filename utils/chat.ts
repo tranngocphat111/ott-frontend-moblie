@@ -174,8 +174,8 @@ export const isCallMessageType = (type?: string | null) => {
 
 export const getMessageBodyText = (message: ChatMessage) => {
   if (message.is_deleted) return 'Tin nhắn đã bị xóa';
-  if (isModerationRejected(message)) return 'Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng';
   if (message.is_revoked) return 'Tin nhắn đã được thu hồi';
+  if (isModerationRejected(message)) return 'Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng';
 
   const firstContent = Array.isArray(message.content)
     ? message.content[0]

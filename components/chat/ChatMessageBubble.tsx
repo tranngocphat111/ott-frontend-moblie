@@ -359,7 +359,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
       Boolean(message.system_meta?.media_warnings?.length) ||
       isMessageMediaFlagged(message, 0));
   const shouldRenderHiddenText =
-    (message.is_revoked || moderationRejected) && !hasMediaModerationWarning;
+    Boolean(message.is_revoked) || (moderationRejected && !hasMediaModerationWarning);
   const shouldShowTranslation =
     !isMine &&
     !shouldRenderHiddenText &&
@@ -512,9 +512,11 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
         >
           {shouldRenderHiddenText ? (
             <Text className="text-[15px] italic leading-5 text-slate-500">
-              {moderationRejected
+              {message.is_revoked
+                ? "Tin nhắn đã được thu hồi"
+                : moderationRejected
                 ? "Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng"
-                : contentText || (isMine ? "Bạn đã thu hồi một tin nhắn" : "Tin nhắn đã được thu hồi")}
+                : contentText}
             </Text>
           ) : isCallMessage && callCopy ? (
             <View className="min-w-[190px] max-w-[280px] p-1">
