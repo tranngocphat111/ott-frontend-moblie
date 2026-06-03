@@ -780,6 +780,18 @@ export default function HomeScreen() {
     return obj;
   }, [items, chatUserId]);
 
+  const inboxNameByConversationId = useMemo(() => {
+    const obj: Record<string, string> = {};
+    items.forEach((item) => {
+      const conversationId = String(item.conversation._id || '');
+      const name = getConversationTitle(item.conversation, chatUserId);
+      if (conversationId && name) {
+        obj[conversationId] = name;
+      }
+    });
+    return obj;
+  }, [items, chatUserId]);
+
   const hasSearchQuery = searchText.trim().length > 0;
 
   const openConversation = useCallback(
@@ -1267,6 +1279,7 @@ export default function HomeScreen() {
               searchAvatarByConversationId={searchAvatarByConversationId}
               inboxAvatarByUserId={inboxAvatarByUserId}
               inboxAvatarByConversationId={inboxAvatarByConversationId}
+              inboxNameByConversationId={inboxNameByConversationId}
             />
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">

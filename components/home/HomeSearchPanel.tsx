@@ -29,6 +29,7 @@ interface HomeSearchPanelProps {
   searchAvatarByConversationId: Record<string, string>;
   inboxAvatarByUserId: Record<string, string>;
   inboxAvatarByConversationId: Record<string, string>;
+  inboxNameByConversationId: Record<string, string>;
 }
 
 interface SearchAvatarProps {
@@ -76,6 +77,31 @@ const previewMessage = (item: ChatSearchMessageItem) => {
 
 const previewFile = (item: ChatSearchFileItem) => String(item.file_name || item.key || '').trim() || '[Tệp]';
 
+const normalizePlainLabel = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+
+const GENERIC_CONVERSATION_LABELS = new Set([
+  'cuoc tro chuyen',
+  'hoi thoai',
+  'doan chat',
+]);
+
+const firstUsableSearchLabel = (...values: unknown[]) => {
+  for (const value of values) {
+    const label = String(value || '').trim();
+    if (!label) continue;
+    if (GENERIC_CONVERSATION_LABELS.has(normalizePlainLabel(label))) continue;
+    return label;
+  }
+
+  return '';
+};
+
 interface SearchResultRow {
   type: 'contact' | 'conversation';
   key: string;
@@ -99,24 +125,56 @@ export function HomeSearchPanel({
   searchAvatarByConversationId,
   inboxAvatarByUserId,
   inboxAvatarByConversationId,
+  inboxNameByConversationId,
 }: HomeSearchPanelProps) {
   
   const mergedConversationResults = useMemo<SearchResultRow[]>(() => {
     if (!searchResults) return [];
 
     const conversationIds = new Set<string>();
+    const contactByConversationId = new Map<string, ChatSearchContactItem>();
+
+    (searchResults.contacts || []).forEach((contact) => {
+      (contact.conversation_ids || []).forEach((conversationId) => {
+        const id = String(conversationId || '').trim();
+        if (id && !contactByConversationId.has(id)) {
+          contactByConversationId.set(id, contact);
+        }
+      });
+    });
 
     const conversationRows: SearchResultRow[] = (searchResults.conversations || []).map((item) => {
       const id = String(item.conversation_id || '');
-      conversationIds.add(id);
+      const matchedContact = contactByConversationId.get(id);
+      const contactId = String((item as any).contact_id || matchedContact?.user_id || '');
+      const label =
+        firstUsableSearchLabel(
+          inboxNameByConversationId[id],
+          item.type === 'group' ? item.name : '',
+          matchedContact?.name,
+          (item as any).display_name,
+          (item as any).nickname,
+          item.name,
+          matchedContact?.phone,
+        ) || (item.type === 'group' ? 'Nhóm trò chuyện' : 'Cuộc trò chuyện');
+
+      if (id) {
+        conversationIds.add(id);
+      }
+
       return {
         type: 'conversation' as const,
         key: `conv-${id}`,
-        label: item.name || 'Cuộc trò chuyện',
-        avatar: searchAvatarByConversationId[id] || inboxAvatarByConversationId[id] || item.avatar,
+        label,
+        avatar:
+          searchAvatarByConversationId[id] ||
+          inboxAvatarByConversationId[id] ||
+          item.avatar ||
+          matchedContact?.avatar ||
+          (contactId ? searchAvatarByUserId[contactId] || inboxAvatarByUserId[contactId] : ''),
         icon: item.type === 'group' ? 'users' : 'user',
         conversationId: id,
-        contactId: (item as any).contact_id,
+        contactId,
       };
     });
 
@@ -143,7 +201,7 @@ export function HomeSearchPanel({
     });
 
     return sorted;
-  }, [searchResults, searchText, searchAvatarByUserId, searchAvatarByConversationId, inboxAvatarByUserId, inboxAvatarByConversationId]);
+  }, [searchResults, searchText, searchAvatarByUserId, searchAvatarByConversationId, inboxAvatarByUserId, inboxAvatarByConversationId, inboxNameByConversationId]);
 
   if (searchLoading) {
     return (
