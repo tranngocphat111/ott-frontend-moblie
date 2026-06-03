@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { chatSocket } from '@/services/api';
 import type { ChatMessage } from '@/types/entities/chat';
+import { normalizeChatMessage } from '@/utils/chatModeration';
 
 interface UseMessageSocketProps {
   conversationId: string | undefined;
@@ -46,16 +47,28 @@ export function useMessageSocket({
   useEffect(() => {
     if (!conversationId || !userIdForChat) return;
 
+    const normalizeMessageHandler =
+      (handler: (payload: ChatMessage) => void) =>
+      (payload: ChatMessage) =>
+        handler(normalizeChatMessage(payload));
+
     chatSocket.connect();
     chatSocket.joinUserRoom(userIdForChat);
     chatSocket.joinConversation(conversationId);
 
-    chatSocket.on('tin_nhan', onIncomingMessage);
-    chatSocket.on('tin_nhan_reaction', onReactionChanged);
-    chatSocket.on('tin_nhan_pin', onMessagePinned);
-    chatSocket.on('tin_nhan_thu_hoi', onMessageRevoked);
-    chatSocket.on('tin_nhan_da_xoa', onMessageDeleted);
-    chatSocket.on('tin_nhan_cap_nhat', onMessageUpdated);
+    const handleIncomingMessage = normalizeMessageHandler(onIncomingMessage);
+    const handleReactionChanged = normalizeMessageHandler(onReactionChanged);
+    const handleMessagePinned = normalizeMessageHandler(onMessagePinned);
+    const handleMessageRevoked = normalizeMessageHandler(onMessageRevoked);
+    const handleMessageDeleted = normalizeMessageHandler(onMessageDeleted);
+    const handleMessageUpdated = normalizeMessageHandler(onMessageUpdated);
+
+    chatSocket.on('tin_nhan', handleIncomingMessage);
+    chatSocket.on('tin_nhan_reaction', handleReactionChanged);
+    chatSocket.on('tin_nhan_pin', handleMessagePinned);
+    chatSocket.on('tin_nhan_thu_hoi', handleMessageRevoked);
+    chatSocket.on('tin_nhan_da_xoa', handleMessageDeleted);
+    chatSocket.on('tin_nhan_cap_nhat', handleMessageUpdated);
 
     if (onTypingStart) {
       chatSocket.on('nguoi_dung_dang_soan_tin_nhan', onTypingStart as any);
@@ -100,12 +113,12 @@ export function useMessageSocket({
     return () => {
       chatSocket.leaveConversation(conversationId);
 
-      chatSocket.off('tin_nhan', onIncomingMessage);
-      chatSocket.off('tin_nhan_reaction', onReactionChanged);
-      chatSocket.off('tin_nhan_pin', onMessagePinned);
-      chatSocket.off('tin_nhan_thu_hoi', onMessageRevoked);
-      chatSocket.off('tin_nhan_da_xoa', onMessageDeleted);
-      chatSocket.off('tin_nhan_cap_nhat', onMessageUpdated);
+      chatSocket.off('tin_nhan', handleIncomingMessage);
+      chatSocket.off('tin_nhan_reaction', handleReactionChanged);
+      chatSocket.off('tin_nhan_pin', handleMessagePinned);
+      chatSocket.off('tin_nhan_thu_hoi', handleMessageRevoked);
+      chatSocket.off('tin_nhan_da_xoa', handleMessageDeleted);
+      chatSocket.off('tin_nhan_cap_nhat', handleMessageUpdated);
 
       if (onTypingStart) {
         chatSocket.off('nguoi_dung_dang_soan_tin_nhan', onTypingStart as any);

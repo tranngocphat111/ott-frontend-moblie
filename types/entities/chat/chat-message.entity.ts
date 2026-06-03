@@ -32,6 +32,41 @@ export interface ChatMessageReaction {
   type: string;
 }
 
+export type ChatModerationStatus = 'pending' | 'approved' | 'rejected' | string;
+export type ChatMediaPolicyStatus = 'pending' | 'clean' | 'flagged' | string;
+
+export interface ChatMessageMediaWarning {
+  index?: number;
+  key?: string;
+  source?: string;
+  reason?: string;
+  severity?: string;
+  violation_id?: string;
+  request_id?: string;
+  detected_at?: string;
+}
+
+export interface ChatMessageSystemMeta {
+  action?: 'group_dissolved' | 'removed_from_group' | 'member_removed' | string;
+  dissolved_by?: string;
+  removed_user_id?: string;
+  removed_by?: string;
+  added_by?: string;
+  added_user_ids?: string[];
+  show_delete_for_non_owner?: boolean;
+  show_delete_action?: boolean;
+  moderation_status?: ChatModerationStatus;
+  moderation_violation_id?: string;
+  moderation_request_id?: string;
+  moderation_severity?: string;
+  moderation_violation_type?: string;
+  moderation_matched_labels?: string[];
+  moderation_reason?: string | null;
+  moderation_detected_at?: string;
+  media_policy_status?: ChatMediaPolicyStatus;
+  media_warnings?: ChatMessageMediaWarning[];
+}
+
 export interface ChatMessageReplyPreview {
   msg_id?: string;
   sender_id: string;
@@ -77,22 +112,13 @@ export interface ChatMessage {
   is_pinned?: boolean;
   pinned_at?: string | null;
   pinned_by?: string | null;
-  system_meta?: {
-    action?: 'group_dissolved' | 'removed_from_group' | 'member_removed' | string;
-    dissolved_by?: string;
-    removed_user_id?: string;
-    removed_by?: string;
-    added_by?: string;
-    added_user_ids?: string[];
-    show_delete_for_non_owner?: boolean;
-    show_delete_action?: boolean;
-  } | null;
+  system_meta?: ChatMessageSystemMeta | null;
   poll_question?: string | null;
   poll_multiple_choice?: boolean;
   poll_options?: Array<{ id: string; name: string; voters: string[] }>;
   poll_locked?: boolean;
   local_temp_id?: string;
-  local_status?: 'uploading' | 'success' | 'error';
+  local_status?: 'uploading' | 'pending' | 'success' | 'error';
   local_upload_progress?: number;
   local_error?: string;
 }

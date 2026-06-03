@@ -5,6 +5,7 @@ import { getBackendDateTime, parseBackendDate } from '@/utils/time';
 export type MediaKind = 'image' | 'video';
 export type Visibility = 'PUBLIC' | 'FRIENDS' | 'PRIVATE' | 'CUSTOM';
 export type AccessRuleType = 'INCLUDE' | 'EXCLUDE';
+export type PostMediaModerationStatus = 'CLEAN' | 'FLAGGED' | string;
 
 export type AccessControl = {
   accountId: string;
@@ -28,6 +29,12 @@ export interface PostMediaItem {
   caption?: string | null;
   thumbnailUrl?: string | null;
   file?: MediaUploadAsset;
+  moderationStatus?: PostMediaModerationStatus | null;
+  moderationSeverity?: string | null;
+  moderationViolationType?: string | null;
+  moderationMatchedLabels?: string[];
+  moderationReason?: string | null;
+  moderationDetectedAt?: string | null;
 }
 
 export interface SocialUser {
@@ -119,6 +126,18 @@ export interface ApiMedia {
   orderIndex: number;
   caption: string | null;
   thumbnailUrl: string | null;
+  moderationStatus?: PostMediaModerationStatus | null;
+  moderation_status?: PostMediaModerationStatus | null;
+  moderationSeverity?: string | null;
+  moderation_severity?: string | null;
+  moderationViolationType?: string | null;
+  moderation_violation_type?: string | null;
+  moderationMatchedLabels?: string[] | null;
+  moderation_matched_labels?: string[] | null;
+  moderationReason?: string | null;
+  moderation_reason?: string | null;
+  moderationDetectedAt?: string | null;
+  moderation_detected_at?: string | null;
 }
 
 export interface ApiPost {
@@ -444,13 +463,23 @@ export const mapMedia = (medias: ApiMedia[] | null): PostMediaItem[] => {
 
   return list
     .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
-    .map((media) => ({
-      type: media.type === 'VIDEO_MEDIA' ? 'video' : 'image',
-      url: resolveMediaUrl(media.url) || media.url,
-      id: media.id,
-      caption: media.caption,
-      thumbnailUrl: resolveMediaUrl(media.thumbnailUrl),
-    }));
+    .map((media) => {
+      const matchedLabels = media.moderationMatchedLabels ?? media.moderation_matched_labels;
+
+      return {
+        type: media.type === 'VIDEO_MEDIA' ? 'video' : 'image',
+        url: resolveMediaUrl(media.url) || media.url,
+        id: media.id,
+        caption: media.caption,
+        thumbnailUrl: resolveMediaUrl(media.thumbnailUrl),
+        moderationStatus: media.moderationStatus ?? media.moderation_status ?? 'CLEAN',
+        moderationSeverity: media.moderationSeverity ?? media.moderation_severity ?? null,
+        moderationViolationType: media.moderationViolationType ?? media.moderation_violation_type ?? null,
+        moderationMatchedLabels: Array.isArray(matchedLabels) ? matchedLabels.map(String) : [],
+        moderationReason: media.moderationReason ?? media.moderation_reason ?? null,
+        moderationDetectedAt: media.moderationDetectedAt ?? media.moderation_detected_at ?? null,
+      };
+    });
 };
 
 export const mapPost = (post: ApiPost, colorIndex: number, currentUserId?: string, depth = 0): Post => {

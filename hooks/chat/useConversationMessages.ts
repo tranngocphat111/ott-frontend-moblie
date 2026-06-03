@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { ChatApi } from '@/services/api';
 import type { ChatConversation, ChatMessage } from '@/types/entities/chat';
 import { countVisualItems } from '@/utils/chat';
+import { normalizeChatMessage } from '@/utils/chatModeration';
 import { getBackendDateTime } from '@/utils/time';
 
 const PAGE_SIZE = 20;
@@ -25,7 +26,8 @@ export function useConversationMessages(conversationId: string | undefined, user
     const map = new Map<string, ChatMessage>();
     
     // Iterate to deduplicate, merging if necessary
-    messageList.forEach(item => {
+    messageList.forEach(rawItem => {
+      const item = normalizeChatMessage(rawItem);
       const id = item.msg_id || item._id;
       const key = id ? String(id) : String(item.local_temp_id || '');
       if (!key) return;
@@ -66,7 +68,8 @@ export function useConversationMessages(conversationId: string | undefined, user
   const normalizePinnedMessages = useCallback((messageList: ChatMessage[]) => {
     const map = new Map<string, ChatMessage>();
     
-    messageList.forEach(item => {
+    messageList.forEach(rawItem => {
+      const item = normalizeChatMessage(rawItem);
       if (!item?.is_pinned) return;
       const id = item.msg_id || item._id;
       const key = id ? String(id) : String(item.local_temp_id || '');

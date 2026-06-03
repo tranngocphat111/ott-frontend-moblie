@@ -72,6 +72,7 @@ import {
 } from "@/utils/chat";
 import { getMessageTranslationCandidate } from "@/utils/translationDetection";
 import { setConversationInfoSnapshot } from "@/utils/conversationInfoCache";
+import { patchChatMessageList } from "@/utils/chatModeration";
 import {
   ensureCameraPermission,
   ensureImageLibraryPermission,
@@ -145,6 +146,8 @@ const isSameMessageById = (left: ChatMessage, right: ChatMessage) => {
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const MAX_VIDEO_UPLOAD_SIZE = 100 * 1024 * 1024;
+const S3_MEDIA_VIOLATION_PATTERN =
+  /vi phạm|vi pham|policy|moderation|unsafe|malware|virus|accessdenied|access denied|explicit deny/i;
 const CHAT_BROWN_DARK = '#b78457';
 const CHAT_BROWN = '#d2a177';
 const CHAT_BROWN_SOFT = '#f5e8dc';
@@ -152,6 +155,30 @@ const CHAT_PANEL_HEIGHT = 260;
 const MAX_PINNED_MESSAGES = 3;
 const MAX_GROUP_CALL_PARTICIPANTS = 8;
 const MAX_GROUP_CALL_INVITEES = 7;
+
+const getUploadErrorMessage = (error: unknown, fallback: string) => {
+  const message = String(
+    (error as any)?.details?.message ||
+      (error as any)?.message ||
+      error ||
+      "",
+  ).trim();
+
+  return message || fallback;
+};
+
+const isMediaModerationUploadError = (message: string) =>
+  S3_MEDIA_VIOLATION_PATTERN.test(message);
+
+const showUploadErrorAlert = (error: unknown, fallback: string) => {
+  const message = getUploadErrorMessage(error, fallback);
+  if (isMediaModerationUploadError(message)) {
+    Alert.alert("Không tải được media", message);
+    return;
+  }
+
+  Alert.alert("Lỗi", fallback);
+};
 
 type GroupCallMemberOption = {
   id: string;
@@ -462,42 +489,7 @@ const patchMessageById = (
   options?: { remove?: boolean },
   normalizeMessages?: (messages: ChatMessage[]) => ChatMessage[],
 ) => {
-  const incomingMsgId = normalizeMessageId(incoming?.msg_id);
-  const incomingDbId = normalizeMessageId(incoming?._id);
-  const incomingLocalId = normalizeMessageId(incoming?.local_temp_id);
-  const hasIncomingId = Boolean(incomingMsgId || incomingDbId || incomingLocalId);
-  if (!hasIncomingId) return source;
-
-  const next = [...source];
-  const idx = next.findIndex((item) => {
-    const itemMsgId = normalizeMessageId(item?.msg_id);
-    const itemDbId = normalizeMessageId(item?._id);
-    const itemLocalId = normalizeMessageId(item?.local_temp_id);
-
-    return (
-      (incomingMsgId && itemMsgId === incomingMsgId) ||
-      (incomingDbId && itemDbId === incomingDbId) ||
-      (incomingMsgId && itemDbId === incomingMsgId) ||
-      (incomingDbId && itemMsgId === incomingDbId) ||
-      (incomingLocalId && itemLocalId === incomingLocalId)
-    );
-  });
-
-  if (options?.remove) {
-    if (idx >= 0) next.splice(idx, 1);
-    return normalizeMessages ? normalizeMessages(next) : next;
-  }
-
-  if (idx >= 0) {
-    next[idx] = {
-      ...next[idx],
-      ...incoming,
-    };
-  } else {
-    next.push(incoming);
-  }
-
-  return normalizeMessages ? normalizeMessages(next) : next;
+  return patchChatMessageList(source, incoming, options, normalizeMessages);
 };
 
 const mergeMessagesByKey = (
@@ -2048,13 +2040,14 @@ export default function ChatDetailScreen() {
         setPendingScrollToBottom();
         setUploadProgress(null);
       } catch (error) {
+        const localErrorMessage = getUploadErrorMessage(error, 'Không thể gửi ảnh');
         setMessages((current) =>
           current.map((item) =>
             (item._id === localTempId || item.local_temp_id === localTempId)
               ? {
                 ...item,
                 local_status: 'error',
-                local_error: 'Không thể gửi ảnh',
+                local_error: localErrorMessage,
               }
               : item,
           ),
@@ -2109,7 +2102,7 @@ export default function ChatDetailScreen() {
       closeImagePanel();
     } catch (error) {
       console.error("Failed to send images:", error);
-      Alert.alert("Lỗi", "Không thể gửi ảnh. Vui lòng thử lại.");
+      showUploadErrorAlert(error, "Không thể gửi ảnh. Vui lòng thử lại.");
     } finally {
       setUploadProgress(null);
       setIsSendingAttachment(false);
@@ -2150,7 +2143,7 @@ export default function ChatDetailScreen() {
       closeImagePanel();
     } catch (error) {
       console.error("Failed to send camera image:", error);
-      Alert.alert("Lỗi", "Không thể gửi ảnh từ camera.");
+      showUploadErrorAlert(error, "Không thể gửi ảnh từ camera.");
     } finally {
       setUploadProgress(null);
       setIsSendingAttachment(false);
@@ -2196,7 +2189,7 @@ export default function ChatDetailScreen() {
       closeImagePanel();
     } catch (error) {
       console.error("Failed to send camera video:", error);
-      Alert.alert("Lỗi", "Không thể gửi video từ camera.");
+      showUploadErrorAlert(error, "Không thể gửi video từ camera.");
     } finally {
       setUploadProgress(null);
       setIsSendingAttachment(false);
@@ -2267,7 +2260,7 @@ export default function ChatDetailScreen() {
       }
     } catch (error) {
       console.error("Failed to send file:", error);
-      Alert.alert("Lỗi", "Không thể gửi tệp. Vui lòng thử lại.");
+      showUploadErrorAlert(error, "Không thể gửi tệp. Vui lòng thử lại.");
     } finally {
       setUploadProgress(null);
       setIsSendingAttachment(false);
@@ -2364,7 +2357,7 @@ export default function ChatDetailScreen() {
       setPendingVoiceUri(null);
     } catch (error) {
       console.error("Failed to send voice:", error);
-      Alert.alert("Lỗi", "Không thể gửi ghi âm.");
+      showUploadErrorAlert(error, "Không thể gửi ghi âm.");
     } finally {
       setUploadProgress(null);
       setIsSendingAttachment(false);
@@ -2407,7 +2400,7 @@ export default function ChatDetailScreen() {
       closeImagePanel();
     } catch (error) {
       console.error('Failed to send selected media:', error);
-      Alert.alert('Lỗi', 'Không thể gửi ảnh/video đã chọn.');
+      showUploadErrorAlert(error, 'Không thể gửi ảnh/video đã chọn.');
     } finally {
       setUploadProgress(null);
       setIsSendingAttachment(false);
@@ -2835,14 +2828,10 @@ export default function ChatDetailScreen() {
       if (payloadConvId !== String(conversationId)) return;
 
       setMessages((prev) =>
-        prev.map((msg) =>
-          String(msg.msg_id || msg._id || "") === String(payload.msg_id || payload._id || "")
-            ? { ...msg, ...payload }
-            : msg
-        )
+        patchMessageById(prev, payload, undefined, normalizeMessages),
       );
     },
-    [conversationId, setMessages]
+    [conversationId, normalizeMessages, setMessages]
   );
 
   const handleGroupUpdated = useCallback(

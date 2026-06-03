@@ -1,10 +1,11 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Play } from 'lucide-react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import type { ChatMessage } from '@/types/entities/chat';
 import { resolveMediaUrl } from '@/utils/chat';
+import { isMessageMediaFlagged } from '@/utils/chatModeration';
 
 type Props = {
   message: ChatMessage;
@@ -49,6 +50,8 @@ const ChatVideoMessageBase: React.FC<Props> = ({ message, onPress, onLongPress, 
   const stableMessageId = String(message.msg_id || message._id || '');
   const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
   const [isGeneratingThumb, setIsGeneratingThumb] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const hiddenByModeration = isMessageMediaFlagged(message, 0) && !revealed;
 
   const markReady = useCallback(() => {
     if (readyRef.current) return;
@@ -93,6 +96,7 @@ const ChatVideoMessageBase: React.FC<Props> = ({ message, onPress, onLongPress, 
   return (
     <Pressable
       onPress={() => {
+        if (hiddenByModeration) return;
         onPress?.();
       }}
       onLongPress={onLongPress}
@@ -107,6 +111,7 @@ const ChatVideoMessageBase: React.FC<Props> = ({ message, onPress, onLongPress, 
           contentFit="cover"
           cachePolicy="memory-disk"
           transition={150}
+          blurRadius={hiddenByModeration ? 16 : 0}
           onLoad={markReady}
         />
       ) : (
@@ -120,6 +125,22 @@ const ChatVideoMessageBase: React.FC<Props> = ({ message, onPress, onLongPress, 
           <Play size={24} color="#fff" fill="#fff" />
         </View>
       </View>
+      {hiddenByModeration ? (
+        <View className="absolute inset-0 items-center justify-center bg-black/40 px-3">
+          <View className="items-center rounded-2xl bg-black/60 px-3 py-2">
+            <Text className="text-center text-[12px] font-bold text-white">Video nhạy cảm</Text>
+            <Pressable
+              className="mt-2 rounded-full bg-white px-3 py-1.5"
+              onPress={(event) => {
+                event.stopPropagation?.();
+                setRevealed(true);
+              }}
+            >
+              <Text className="text-[12px] font-bold text-slate-900">Xem video</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </Pressable>
   );
 };

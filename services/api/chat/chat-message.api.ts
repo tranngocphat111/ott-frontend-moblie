@@ -5,6 +5,7 @@ import type {
   ChatMessagesResponse,
   ChatOlderMessagesResponse,
 } from '@/types/entities/chat';
+import { normalizeChatMessage, normalizeChatMessages } from '@/utils/chatModeration';
 import type {
   ChatForwardMessageResponse,
   ChatLinkMessage,
@@ -22,6 +23,11 @@ export interface ChatTranslationResponse {
 }
 
 const S3_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
+const normalizeMessagesResponse = <T extends { messages?: ChatMessage[] }>(payload: T): T => ({
+  ...payload,
+  messages: Array.isArray(payload.messages) ? normalizeChatMessages(payload.messages) : payload.messages,
+});
 
 const sanitizeS3FileName = (fileName: string) => {
   const baseName =
@@ -50,7 +56,11 @@ export const chatMessageApi = {
     userId?: string,
   ): Promise<ChatMessagesResponse> {
     const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-    return await chatApiClient.get(`/conversations/${conversationId}/messages${query}`);
+    const payload = await chatApiClient.get<ChatMessagesResponse>(`/conversations/${conversationId}/messages${query}`);
+    if (Array.isArray(payload)) {
+      return normalizeChatMessages(payload as unknown as ChatMessage[]) as unknown as ChatMessagesResponse;
+    }
+    return normalizeMessagesResponse(payload);
   },
 
   async getMessagePresignedUrl(
@@ -93,7 +103,10 @@ export const chatMessageApi = {
     }
 
     if (result.status < 200 || result.status >= 300) {
-      throw new Error(`S3 upload failed: ${result.status}`);
+      const responseBody = String((result as any)?.body || '').trim();
+      throw new Error(
+        `S3 upload failed: ${result.status}${responseBody ? ` - ${responseBody.slice(0, 500)}` : ''}`,
+      );
     }
 
     onProgress?.(100);
@@ -110,9 +123,10 @@ export const chatMessageApi = {
     params.set('limit', String(limit));
     if (userId) params.set('userId', userId);
 
-    return await chatApiClient.get(
+    const payload = await chatApiClient.get<ChatOlderMessagesResponse>(
       `/conversations/${conversationId}/messages/older?${params.toString()}`,
     );
+    return normalizeMessagesResponse(payload);
   },
 
   async getMessageContext(
@@ -128,13 +142,19 @@ export const chatMessageApi = {
     params.set('after', String(after));
     if (userId) params.set('userId', userId);
 
-    return await chatApiClient.get(
+    const payload = await chatApiClient.get<ChatMessageContextResponse>(
       `/conversations/${conversationId}/messages/around?${params.toString()}`,
     );
+    return {
+      ...payload,
+      messages: normalizeChatMessages(payload.messages || []),
+      target: payload.target ? normalizeChatMessage(payload.target) : payload.target,
+    };
   },
 
   async getPinnedMessages(conversationId: string): Promise<ChatMessage[]> {
-    return await chatApiClient.get(`/messages/${conversationId}/pinned`);
+    const payload = await chatApiClient.get<ChatMessage[]>(`/messages/${conversationId}/pinned`);
+    return normalizeChatMessages(payload || []);
   },
 
   async getMediaMessages(
@@ -142,9 +162,10 @@ export const chatMessageApi = {
     limit = 50,
     skip = 0,
   ): Promise<ChatMessage[]> {
-    return await chatApiClient.get(
+    const payload = await chatApiClient.get<ChatMessage[]>(
       `/messages/${conversationId}/media?limit=${encodeURIComponent(String(limit))}&skip=${encodeURIComponent(String(skip))}`,
     );
+    return normalizeChatMessages(payload || []);
   },
 
   async getFileMessages(
@@ -152,9 +173,10 @@ export const chatMessageApi = {
     limit = 50,
     skip = 0,
   ): Promise<ChatMessage[]> {
-    return await chatApiClient.get(
+    const payload = await chatApiClient.get<ChatMessage[]>(
       `/messages/${conversationId}/files?limit=${encodeURIComponent(String(limit))}&skip=${encodeURIComponent(String(skip))}`,
     );
+    return normalizeChatMessages(payload || []);
   },
 
   async getLinkMessages(
@@ -168,7 +190,8 @@ export const chatMessageApi = {
   },
 
   async sendMessage(payload: SendMessagePayload): Promise<ChatMessage> {
-    return await chatApiClient.post('/messages', payload);
+    const response = await chatApiClient.post<ChatMessage>('/messages', payload);
+    return normalizeChatMessage(response);
   },
 
   async forwardMessage(
@@ -191,11 +214,12 @@ export const chatMessageApi = {
     userId: string,
     reactionType: string,
   ): Promise<ChatMessage> {
-    return await chatApiClient.put(`/messages/${msgId}/reaction`, {
+    const response = await chatApiClient.put<ChatMessage>(`/messages/${msgId}/reaction`, {
       conversationId,
       userId,
       reactionType,
     });
+    return normalizeChatMessage(response);
   },
 
   async revokeMessage(
@@ -203,10 +227,11 @@ export const chatMessageApi = {
     msgId: string,
     userId: string,
   ): Promise<ChatMessage> {
-    return await chatApiClient.put(`/messages/${msgId}/revoke`, {
+    const response = await chatApiClient.put<ChatMessage>(`/messages/${msgId}/revoke`, {
       conversationId,
       userId,
     });
+    return normalizeChatMessage(response);
   },
 
   async deleteMessage(
@@ -214,10 +239,11 @@ export const chatMessageApi = {
     msgId: string,
     userId: string,
   ): Promise<ChatMessage> {
-    return await chatApiClient.put(`/messages/${msgId}/delete`, {
+    const response = await chatApiClient.put<ChatMessage>(`/messages/${msgId}/delete`, {
       conversationId,
       userId,
     });
+    return normalizeChatMessage(response);
   },
 
   async pinMessage(
@@ -226,11 +252,12 @@ export const chatMessageApi = {
     userId: string,
     isPinned: boolean,
   ): Promise<ChatMessage> {
-    return await chatApiClient.put(`/messages/${msgId}/pin`, {
+    const response = await chatApiClient.put<ChatMessage>(`/messages/${msgId}/pin`, {
       conversationId,
       userId,
       isPinned,
     });
+    return normalizeChatMessage(response);
   },
  
   async votePoll(
@@ -239,11 +266,12 @@ export const chatMessageApi = {
     userId: string,
     optionIds: string[],
   ): Promise<ChatMessage> {
-    return await chatApiClient.put(`/messages/${msgId}/vote`, {
+    const response = await chatApiClient.put<ChatMessage>(`/messages/${msgId}/vote`, {
       conversationId,
       userId,
       optionIds,
     });
+    return normalizeChatMessage(response);
   },
 
   async lockPoll(
@@ -251,10 +279,11 @@ export const chatMessageApi = {
     msgId: string,
     userId: string,
   ): Promise<ChatMessage> {
-    return await chatApiClient.put(`/messages/${msgId}/poll-lock`, {
+    const response = await chatApiClient.put<ChatMessage>(`/messages/${msgId}/poll-lock`, {
       conversationId,
       userId,
     });
+    return normalizeChatMessage(response);
   },
 
   async transcribeAudio(formData: FormData): Promise<{ text: string }> {
