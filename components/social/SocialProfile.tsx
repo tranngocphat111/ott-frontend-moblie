@@ -17,6 +17,10 @@ import {
   relationshipSocket,
   type RelationshipRealtimePayload,
 } from "@/services/socket/relationshipSocket";
+import {
+  mediaSocket,
+  type MediaRealtimePayload,
+} from "@/services/socket/mediaSocket";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -108,6 +112,11 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
     icon?: keyof typeof Feather.glyphMap;
     actions: SocialConfirmAction[];
   } | null>(null);
+  const postsRef = useRef<Post[]>([]);
+
+  useEffect(() => {
+    postsRef.current = posts;
+  }, [posts]);
 
   const displayName =
     profileUser?.displayName || profileUser?.username || "Người dùng";
@@ -375,6 +384,62 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
       relationshipSocket.offRelationshipUpdate(handleRelationshipUpdate);
     };
   }, [currentUserId, updateFromRelationshipPayload, userId]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    void mediaSocket.connect();
+
+    const handleMediaUpdate = async (payload: MediaRealtimePayload) => {
+      const targetType = String(payload?.contentTargetType || "").toUpperCase();
+      if (targetType !== "POST" || !payload.contentId) return;
+
+      const postId = payload.contentId;
+      const loadedPosts = postsRef.current;
+      const matchesPost = loadedPosts.some((item) => item.id === postId);
+      const matchesSharedPost = loadedPosts.some(
+        (item) => item.sharedPost?.id === postId,
+      );
+      if (!matchesPost && !matchesSharedPost) return;
+
+      const operation = String(payload.operation || "").toUpperCase();
+      if (operation === "DELETE") {
+        setPosts((prev) =>
+          prev
+            .filter((item) => item.id !== postId)
+            .map((item) =>
+              item.sharedPost?.id === postId ?
+                {
+                  ...item,
+                  sharedPost: undefined,
+                  sharedPostDeleted: true,
+                }
+              : item,
+            ),
+        );
+        return;
+      }
+
+      const freshPost = await MediaApi.fetchPostById(postId, currentUserId);
+      if (!freshPost) return;
+
+      setPosts((prev) =>
+        prev.map((item) => {
+          if (item.id === postId) return freshPost;
+          if (item.sharedPost?.id === postId) {
+            return { ...item, sharedPost: freshPost };
+          }
+          return item;
+        }),
+      );
+      if (matchesPost) void refreshReactionCounts([freshPost]);
+    };
+
+    void mediaSocket.onMediaUpdate(handleMediaUpdate);
+    return () => {
+      mediaSocket.offMediaUpdate(handleMediaUpdate);
+    };
+  }, [currentUserId, refreshReactionCounts]);
 
   const handleOpenChat = async () => {
     if (!currentUserId || !userId || currentUserId === userId || actionLoading)

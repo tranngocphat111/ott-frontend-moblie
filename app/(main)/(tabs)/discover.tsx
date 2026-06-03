@@ -96,9 +96,14 @@ export default function DiscoverScreen() {
   const [pendingDeletePost, setPendingDeletePost] = useState<Post | null>(null);
   const [sortMode, setSortMode] = useState<"recent" | "viral">("viral");
   const recordedViewIdsRef = useRef(new Set<string>());
+  const postsRef = useRef<Post[]>([]);
 
   const avatarUrl = user?.avatarUrl;
   const displayName = user?.fullName || "Người dùng";
+
+  useEffect(() => {
+    postsRef.current = posts;
+  }, [posts]);
 
   const refreshReactionCounts = useCallback(
     async (items: Post[], replace = false) => {
@@ -282,16 +287,35 @@ export default function DiscoverScreen() {
     const handleMediaUpdate = async (payload: MediaRealtimePayload) => {
       if (!payload?.contentId) return;
 
-      if (payload.contentTargetType === "STORY") {
+      const targetType = String(payload.contentTargetType || "").toUpperCase();
+
+      if (targetType === "STORY") {
         void refreshStories();
         return;
       }
 
-      if (payload.contentTargetType !== "POST") return;
+      if (targetType !== "POST") return;
       const postId = payload.contentId;
+      const loadedPosts = postsRef.current;
+      const matchesPost = loadedPosts.some((post) => post.id === postId);
+      const matchesSharedPost = loadedPosts.some(
+        (post) => post.sharedPost?.id === postId,
+      );
 
       if (String(payload.operation || "").toUpperCase() === "DELETE") {
-        setPosts((prev) => prev.filter((post) => post.id !== postId));
+        setPosts((prev) =>
+          prev
+            .filter((post) => post.id !== postId)
+            .map((post) =>
+              post.sharedPost?.id === postId ?
+                {
+                  ...post,
+                  sharedPost: undefined,
+                  sharedPostDeleted: true,
+                }
+              : post,
+            ),
+        );
         setReactionByPost((prev) => {
           const next = { ...prev };
           delete next[postId];
@@ -308,21 +332,25 @@ export default function DiscoverScreen() {
       const freshPost = await MediaApi.fetchPostById(postId, currentUserId);
       if (!freshPost) return;
       setPosts((prev) => {
-        const exists = prev.some((post) => post.id === freshPost.id);
-        if (exists)
-          return prev.map((post) =>
-            post.id === freshPost.id ? freshPost : post,
-          );
+        if (matchesPost || matchesSharedPost) {
+          return prev.map((post) => {
+            if (post.id === freshPost.id) return freshPost;
+            if (post.sharedPost?.id === freshPost.id) {
+              return { ...post, sharedPost: freshPost };
+            }
+            return post;
+          });
+        }
         return [freshPost, ...prev];
       });
-      void refreshReactionCounts([freshPost]);
+      if (matchesPost || !matchesSharedPost) void refreshReactionCounts([freshPost]);
     };
 
     const handleActivity = (payload: PostActivityPayload) => {
       if (!payload.postId) return;
 
       // Check if this activity belongs to a loaded post
-      const isPost = posts.some((p) => p.id === payload.postId);
+      const isPost = postsRef.current.some((p) => p.id === payload.postId);
 
       if (isPost) {
         if (payload.activityType === "COMMENT") {

@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/Authcontext';
 import { MediaApi, type Post, type SocialContentItem, type StoryItem, type StoryUserGroup } from '@/services/api/media.api';
+import { mediaSocket, type MediaRealtimePayload } from '@/services/socket/mediaSocket';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -63,6 +64,11 @@ export function SocialContentCollectionScreen({
   const [storyGroup, setStoryGroup] = useState<StoryUserGroup | null>(null);
   const [clearConfirmVisible, setClearConfirmVisible] = useState(false);
   const recordedViewIdsRef = useRef(new Set<string>());
+  const itemsRef = useRef<SocialContentItem[]>([]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   const refreshReactionCounts = useCallback(async (posts: Post[], replace = false) => {
     if (!posts.length) {
@@ -139,6 +145,77 @@ export function SocialContentCollectionScreen({
   useEffect(() => {
     void load(0, true);
   }, [load]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    void mediaSocket.connect();
+
+    const handleMediaUpdate = async (payload: MediaRealtimePayload) => {
+      const targetType = String(payload?.contentTargetType || '').toUpperCase();
+      if (targetType !== 'POST' || !payload.contentId) return;
+
+      const postId = payload.contentId;
+      const loadedItems = itemsRef.current;
+      const matchesPost = loadedItems.some(
+        (item) => item.kind === 'post' && item.post.id === postId,
+      );
+      const matchesSharedPost = loadedItems.some(
+        (item) => item.kind === 'post' && item.post.sharedPost?.id === postId,
+      );
+      if (!matchesPost && !matchesSharedPost) return;
+
+      const operation = String(payload.operation || '').toUpperCase();
+      if (operation === 'DELETE') {
+        setItems((prev) =>
+          prev
+            .filter((item) => !(item.kind === 'post' && item.post.id === postId))
+            .map((item) =>
+              item.kind === 'post' && item.post.sharedPost?.id === postId
+                ? {
+                    ...item,
+                    post: {
+                      ...item.post,
+                      sharedPost: undefined,
+                      sharedPostDeleted: true,
+                    },
+                    raw: {
+                      ...(item.raw as any),
+                      sharedPost: undefined,
+                      sharedPostDeleted: true,
+                    },
+                  }
+                : item,
+            ),
+        );
+        return;
+      }
+
+      const freshPost = await MediaApi.fetchPostById(postId, currentUserId);
+      if (!freshPost) return;
+
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.kind !== 'post') return item;
+          if (item.post.id === postId) {
+            return { ...item, id: freshPost.id, post: freshPost, raw: freshPost };
+          }
+          if (item.post.sharedPost?.id === postId) {
+            return {
+              ...item,
+              post: { ...item.post, sharedPost: freshPost },
+              raw: { ...(item.raw as any), sharedPost: freshPost },
+            };
+          }
+          return item;
+        }),
+      );
+      if (matchesPost) void refreshReactionCounts([freshPost]);
+    };
+
+    void mediaSocket.onMediaUpdate(handleMediaUpdate);
+    return () => mediaSocket.offMediaUpdate(handleMediaUpdate);
+  }, [currentUserId, refreshReactionCounts]);
 
   const onRefresh = async () => {
     setRefreshing(true);

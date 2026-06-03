@@ -11,7 +11,10 @@ import type { ChatConversation, ChatMessage } from "@/types/entities/chat";
 import { getMessageBodyText, isCallMessageType, isSystemMessageType } from "@/utils/chat";
 import { parseBackendDate } from "@/utils/time";
 import { getMessageTranslationCandidate } from "@/utils/translationDetection";
-import { isModerationRejected } from "@/utils/chatModeration";
+import {
+  isMessageMediaFlagged,
+  isModerationRejected,
+} from "@/utils/chatModeration";
 import { THEME_COLORS } from "@/constants/theme";
 import {
   CornerUpLeft,
@@ -349,10 +352,17 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
     translatedText?.trim() && translatedText.trim() !== contentText.trim()
       ? translatedText.trim()
       : "";
+  const isMediaMessage = message.type === "image" || message.type === "video";
+  const hasMediaModerationWarning =
+    isMediaMessage &&
+    (String(message.system_meta?.media_policy_status || "").toLowerCase() === "flagged" ||
+      Boolean(message.system_meta?.media_warnings?.length) ||
+      isMessageMediaFlagged(message, 0));
+  const shouldRenderHiddenText =
+    (message.is_revoked || moderationRejected) && !hasMediaModerationWarning;
   const shouldShowTranslation =
     !isMine &&
-    !message.is_revoked &&
-    !moderationRejected &&
+    !shouldRenderHiddenText &&
     !translationUnavailable &&
     Boolean(visibleTranslatedText || (onTranslate && translationCandidate.shouldOffer));
   const reactions = useMemo(() => getReactionSummary(message), [message]);
@@ -388,7 +398,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
 
   const textStyle = isMine ? "text-slate-800" : "text-slate-900";
   const isMediaVisual =
-    !message.is_revoked &&
+    !shouldRenderHiddenText &&
     !isCallMessageType(message.type) &&
     (message.type === "image" ||
       message.type === "video" ||
@@ -425,7 +435,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
         </Text>
       )}
 
-      {message.reply_to && !message.is_revoked && !moderationRejected && !message.is_deleted && (
+      {message.reply_to && !shouldRenderHiddenText && !message.is_deleted && (
         <Pressable
           onPress={() => {
             if (isReplyTargetDeleted) {
@@ -500,7 +510,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
               : undefined,
           ]}
         >
-          {message.is_revoked || moderationRejected ? (
+          {shouldRenderHiddenText ? (
             <Text className="text-[15px] italic leading-5 text-slate-500">
               {moderationRejected
                 ? "Tin nhắn đã bị ẩn do vi phạm tiêu chuẩn cộng đồng"
@@ -613,7 +623,7 @@ const ChatMessageBubbleBase: React.FC<ChatMessageBubbleProps> = ({
           )}
         </Pressable>
 
-        {!message.is_revoked && !moderationRejected && !!reactions.length && (
+        {!shouldRenderHiddenText && !!reactions.length && (
           <Pressable
             onPress={() => onReactionPress?.(message, reactions[0][0])}
             className={`absolute -bottom-2 ${isMine ? "right-2" : "left-2"} flex-row items-center rounded-full border border-slate-200 bg-white px-1.5 py-[2px] shadow-sm`}

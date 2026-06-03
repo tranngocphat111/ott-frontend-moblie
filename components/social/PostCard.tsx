@@ -276,10 +276,6 @@ function SharedPostPreview({
 }) {
   const router = useRouter();
   const firstMedia = post.media[0];
-  const imageUri =
-    firstMedia?.type === "video" ?
-      firstMedia.thumbnailUrl
-    : firstMedia?.thumbnailUrl || firstMedia?.url;
 
   return (
     <Pressable
@@ -334,33 +330,7 @@ function SharedPostPreview({
         <View
           className="h-40"
           style={{ backgroundColor: SOCIAL_COLORS.primaryDark }}>
-          {imageUri && firstMedia.type === "image" ?
-            <ExpoImage
-              source={{ uri: imageUri }}
-              style={{ width: "100%", height: "100%" }}
-              contentFit="cover"
-            />
-          : imageUri && firstMedia.type === "video" ?
-            <>
-              <ExpoImage
-                source={{ uri: imageUri }}
-                style={{ width: "100%", height: "100%" }}
-                contentFit="cover"
-              />
-              <View className="absolute inset-0 items-center justify-center bg-black/20">
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-black/45">
-                  <Feather name="play" size={20} color="#fff" />
-                </View>
-              </View>
-            </>
-          : <View className="flex-1 items-center justify-center">
-              <Feather
-                name={firstMedia.type === "video" ? "video" : "image"}
-                size={28}
-                color="#fff"
-              />
-            </View>
-          }
+          <MediaTile media={firstMedia} compact />
           {post.media.length > 1 ?
             <View className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-1">
               <Text className="text-[11px] font-black text-white">
