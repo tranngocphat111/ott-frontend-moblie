@@ -104,6 +104,9 @@ export default function TabsLayout() {
     chatSocket.on('participant_cursor_changed', refreshMessageBadge);
     chatSocket.on('cap_nhat_thong_bao', refreshMessageBadge);
     chatSocket.on('cap_nhat_phan_loai', refreshMessageBadge);
+    chatSocket.on('cap_nhat_ghim', refreshMessageBadge);
+    chatSocket.on('cap_nhat_role', refreshMessageBadge);
+    chatSocket.on('chuyen_quyen_truong_nhom', refreshMessageBadge);
     chatSocket.on('thong_bao_moi', refreshNotificationBadge);
 
     return () => {
@@ -112,6 +115,9 @@ export default function TabsLayout() {
       chatSocket.off('participant_cursor_changed', refreshMessageBadge);
       chatSocket.off('cap_nhat_thong_bao', refreshMessageBadge);
       chatSocket.off('cap_nhat_phan_loai', refreshMessageBadge);
+      chatSocket.off('cap_nhat_ghim', refreshMessageBadge);
+      chatSocket.off('cap_nhat_role', refreshMessageBadge);
+      chatSocket.off('chuyen_quyen_truong_nhom', refreshMessageBadge);
       chatSocket.off('thong_bao_moi', refreshNotificationBadge);
     };
   }, [chatUserId, loadMessageBadge, loadNotificationBadge]);

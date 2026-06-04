@@ -39,6 +39,8 @@ type ChatSocketEventMap = {
 	cap_nhat_biet_danh: (payload: any) => void;
 	cap_nhat_phan_loai: (payload: any) => void;
 	cap_nhat_thong_bao: (payload: any) => void;
+	cap_nhat_ghim: (payload: any) => void;
+	chuyen_quyen_truong_nhom: (payload: any) => void;
 	xoa_thanh_vien: (payload: any) => void;
 	bi_xoa_khoi_nhom: (payload: any) => void;
 	bi_chan_khoi_nhom: (payload: any) => void;
@@ -148,6 +150,7 @@ const CALL_ACK_TIMEOUT_MS = 10000;
 class ChatSocketService {
 	private socket: Socket | null = null;
 	private userRoomId: string | null = null;
+	private joinedConversationIds = new Set<string>();
 
 	private getSocketBaseUrl() {
 		// Extract origin (protocol://host:port) to hit the gateway's socket.io proxy
@@ -161,6 +164,9 @@ class ChatSocketService {
 
 	private ensureSocket() {
 		if (this.socket) {
+			if (!this.socket.connected && this.socket.disconnected) {
+				this.socket.connect();
+			}
 			return this.socket;
 		}
 
@@ -173,6 +179,13 @@ class ChatSocketService {
 
 		socket.on('connect', () => {
 			console.log('[ChatSocket] connected', socket.id);
+			if (this.userRoomId) {
+				socket.emit('tham_gia_user_room', this.userRoomId);
+			}
+
+			this.joinedConversationIds.forEach((conversationId) => {
+				socket.emit('tham_gia_nhom', conversationId);
+			});
 		});
 
 		socket.on('disconnect', () => {
@@ -196,9 +209,15 @@ class ChatSocketService {
 	}
 
 	disconnect() {
-		if (!this.socket) return;
+		if (!this.socket) {
+			this.userRoomId = null;
+			this.joinedConversationIds.clear();
+			return;
+		}
 		this.socket.disconnect();
 		this.socket = null;
+		this.userRoomId = null;
+		this.joinedConversationIds.clear();
 	}
 
 	private emitWhenConnected(event: string, payload: unknown) {
@@ -288,6 +307,7 @@ class ChatSocketService {
 
 	joinConversation(conversationId: string) {
 		const socket = this.ensureSocket();
+		this.joinedConversationIds.add(conversationId);
 		const joinAction = () => socket.emit('tham_gia_nhom', conversationId);
 
 		if (socket.connected) {
@@ -298,6 +318,7 @@ class ChatSocketService {
 	}
 
 	leaveConversation(conversationId: string) {
+		this.joinedConversationIds.delete(conversationId);
 		if (!this.socket) return;
 		this.socket.emit('roi_nhom_chat', conversationId);
 	}
