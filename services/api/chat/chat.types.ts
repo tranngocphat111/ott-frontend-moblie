@@ -54,6 +54,9 @@ export interface ChatServiceUser {
   avatar?: string;
   phone?: string;
   is_online?: boolean;
+  last_active_at?: string;
+  category_id?: string | null;
+  categoryIds?: string[];
 }
 
 export interface ChatCategory {

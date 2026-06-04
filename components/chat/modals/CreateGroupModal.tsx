@@ -21,6 +21,7 @@ import { THEME_COLORS } from '@/constants/theme';
 import { MEDIA_CONFIG } from '@/configuration/api';
 import { useAuth } from '@/contexts/Authcontext';
 import { getBackendDateTime } from '@/utils/time';
+import type { ChatCategory } from '@/services/api/chat';
 
 const getFullUrl = (url?: string) => {
   if (!url) return "";
@@ -37,6 +38,8 @@ export interface CreateGroupUser {
   phone?: string;
   is_online?: boolean;
   last_active_at?: string;
+  category_id?: string | null;
+  categoryIds?: string[];
 }
 
 type Tab = 'recent' | 'contacts';
@@ -45,6 +48,7 @@ interface CreateGroupModalProps {
   visible: boolean;
   users: CreateGroupUser[];
   loadingUsers?: boolean;
+  categories?: ChatCategory[];
   preSelectedIds?: string[];
   onClose: () => void;
   onCreate: (name: string, memberIds: string[], avatarUri?: string) => void;
@@ -77,6 +81,7 @@ export function CreateGroupModal({
   visible,
   users,
   loadingUsers,
+  categories = [],
   preSelectedIds,
   onClose,
   onCreate,
@@ -88,6 +93,7 @@ export function CreateGroupModal({
   const [searchText, setSearchText] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>('recent');
+  const [activeCategoryId, setActiveCategoryId] = useState('all');
   const [isCreating, setIsCreating] = useState(false);
   const [selectedStrangers, setSelectedStrangers] = useState<CreateGroupUser[]>([]);
   const [searchResultByPhone, setSearchResultByPhone] = useState<CreateGroupUser | null>(null);
@@ -102,6 +108,7 @@ export function CreateGroupModal({
       setSelectedIds(new Set(preSelectedIds || []));
       setSelectedStrangers([]);
       setTab('recent');
+      setActiveCategoryId('all');
       setIsCreating(false);
     }
   }, [visible, preSelectedIds]);
@@ -242,6 +249,21 @@ export function CreateGroupModal({
       base.push(searchResultByPhone);
     }
 
+    if (activeCategoryId !== 'all') {
+      base = base.filter((u) => {
+        const categoryIds = Array.isArray(u.categoryIds)
+          ? u.categoryIds.map(String)
+          : [];
+        const categoryId = u.category_id ? String(u.category_id) : '';
+        return (
+          selectedIds.has(u.user_id) ||
+          searchResultByPhone?.user_id === u.user_id ||
+          categoryIds.includes(activeCategoryId) ||
+          categoryId === activeCategoryId
+        );
+      });
+    }
+
     if (!keyword) return base;
     return base.filter((u) => {
       const name = (u.name || '').toLowerCase();
@@ -252,7 +274,15 @@ export function CreateGroupModal({
 
       return name.includes(keyword) || phone.includes(keyword);
     });
-  }, [users, searchText, searchResultByPhone]);
+  }, [activeCategoryId, users, searchText, searchResultByPhone, selectedIds]);
+
+  const categoryOptions = useMemo(
+    () => [
+      { _id: 'all', name: 'Tất cả', color: THEME_COLORS.primary[500] },
+      ...categories.filter((category) => category?._id && category?.name),
+    ],
+    [categories],
+  );
 
   const recentUsers = useMemo(() => {
     // Sort by last_active_at descending
@@ -473,6 +503,48 @@ export function CreateGroupModal({
           </Pressable>
         </View>
 
+        {categoryOptions.length > 1 && (
+          <View style={styles.categoryFilterWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryFilterContent}
+            >
+              {categoryOptions.map((category) => {
+                const active = activeCategoryId === category._id;
+                return (
+                  <Pressable
+                    key={category._id}
+                    onPress={() => setActiveCategoryId(category._id)}
+                    style={[
+                      styles.categoryChip,
+                      active && styles.categoryChipActive,
+                    ]}
+                  >
+                    {category._id !== 'all' && (
+                      <View
+                        style={[
+                          styles.categoryDot,
+                          { backgroundColor: category.color || THEME_COLORS.neutral.slate400 },
+                        ]}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        active && styles.categoryChipTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {category.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* User list */}
         <View style={styles.listContainer}>
           {isSearchingPhone && (
@@ -688,6 +760,45 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   tabTextActive: {
+    color: THEME_COLORS.primary[700],
+  },
+  categoryFilterWrap: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: THEME_COLORS.neutral.slate300,
+  },
+  categoryFilterContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  categoryChip: {
+    minHeight: 34,
+    maxWidth: 150,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.neutral.slate300,
+    backgroundColor: '#fff',
+  },
+  categoryChipActive: {
+    borderColor: THEME_COLORS.primary[500],
+    backgroundColor: THEME_COLORS.primary[50],
+  },
+  categoryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  categoryChipText: {
+    maxWidth: 110,
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME_COLORS.neutral.slate600,
+  },
+  categoryChipTextActive: {
     color: THEME_COLORS.primary[700],
   },
   listContainer: {

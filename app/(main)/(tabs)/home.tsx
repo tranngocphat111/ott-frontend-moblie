@@ -472,6 +472,104 @@ export default function HomeScreen() {
 
       refreshInbox();
     };
+    const applyPinUpdated = (payload: any) => {
+      const conversationId = String(
+        payload?.conversationId ||
+          payload?.conversation_id ||
+          payload?.participant?.conversation_id ||
+          '',
+      ).trim();
+      if (!conversationId) return;
+
+      const participantPayload = payload?.participant || {};
+      const settingsPayload = participantPayload?.settings || {};
+      const hasPinnedValue =
+        payload?.isPinned !== undefined ||
+        payload?.is_pinned !== undefined ||
+        settingsPayload?.is_pinned !== undefined;
+      const nextPinned = Boolean(
+        payload?.isPinned ?? payload?.is_pinned ?? settingsPayload?.is_pinned,
+      );
+      const nextPinnedAt =
+        payload?.pinnedAt ?? payload?.pinned_at ?? settingsPayload?.pinned_at ?? null;
+
+      setItems((current) =>
+        sortConversationItems(
+          current.map((item) => {
+            if (String(item.conversation._id || '') !== conversationId) return item;
+
+            return {
+              ...item,
+              participant: {
+                ...item.participant,
+                ...participantPayload,
+                settings: {
+                  ...item.participant.settings,
+                  ...settingsPayload,
+                  ...(hasPinnedValue ? { is_pinned: nextPinned } : {}),
+                  pinned_at: nextPinnedAt,
+                },
+              },
+            };
+          }),
+        ),
+      );
+    };
+    const applyOwnershipTransferred = (payload: any) => {
+      const conversationId = String(
+        payload?.conversationId ||
+          payload?.conversation_id ||
+          payload?.conversation?._id ||
+          '',
+      ).trim();
+      const oldOwnerId = String(payload?.oldOwnerId || payload?.old_owner_id || '').trim();
+      const newOwnerId = String(
+        payload?.newOwnerId ||
+          payload?.new_owner_id ||
+          payload?.createdBy ||
+          payload?.conversation?.created_by ||
+          '',
+      ).trim();
+      if (!conversationId || !newOwnerId) return;
+
+      setItems((current) =>
+        current.map((item) => {
+          if (String(item.conversation._id || '') !== conversationId) return item;
+
+          const nextParticipants = (item.conversation.participants || []).map((participant) => {
+            const participantUserId = String(participant.user_id || participant._id || '');
+            if (participantUserId === newOwnerId) {
+              return { ...participant, role: 'admin' as const };
+            }
+            if (oldOwnerId && participantUserId === oldOwnerId) {
+              return { ...participant, role: 'member' as const };
+            }
+            return participant;
+          });
+
+          const selfUserId = String(item.participant.user_id || '');
+          const nextSelfRole: 'admin' | 'user' =
+            selfUserId === newOwnerId
+              ? 'admin'
+              : oldOwnerId && selfUserId === oldOwnerId
+                ? 'user'
+                : item.participant.roles;
+
+          return {
+            ...item,
+            conversation: {
+              ...item.conversation,
+              created_by: newOwnerId,
+              participants: nextParticipants,
+            },
+            participant: {
+              ...item.participant,
+              roles: nextSelfRole,
+            },
+          };
+        }),
+      );
+    };
 
     chatSocket.on('tin_nhan', refreshInbox);
     chatSocket.on('conversation_read_synced', refreshMyReadState);
@@ -480,6 +578,9 @@ export default function HomeScreen() {
     chatSocket.on('cap_nhat_nhom', refreshInbox);
     chatSocket.on('cap_nhat_phan_loai', refreshInbox);
     chatSocket.on('cap_nhat_thong_bao', refreshInbox);
+    chatSocket.on('cap_nhat_ghim', applyPinUpdated);
+    chatSocket.on('cap_nhat_role', refreshInbox);
+    chatSocket.on('chuyen_quyen_truong_nhom', applyOwnershipTransferred);
     chatSocket.on('roi_nhom', refreshInbox);
     chatSocket.on('xoa_thanh_vien', refreshInbox);
     chatSocket.on('bi_xoa_khoi_nhom', refreshInbox);
@@ -501,6 +602,9 @@ export default function HomeScreen() {
       chatSocket.off('cap_nhat_nhom', refreshInbox);
       chatSocket.off('cap_nhat_phan_loai', refreshInbox);
       chatSocket.off('cap_nhat_thong_bao', refreshInbox);
+      chatSocket.off('cap_nhat_ghim', applyPinUpdated);
+      chatSocket.off('cap_nhat_role', refreshInbox);
+      chatSocket.off('chuyen_quyen_truong_nhom', applyOwnershipTransferred);
       chatSocket.off('roi_nhom', refreshInbox);
       chatSocket.off('xoa_thanh_vien', refreshInbox);
       chatSocket.off('bi_xoa_khoi_nhom', refreshInbox);
@@ -706,6 +810,37 @@ export default function HomeScreen() {
     return new Map(categories.map((category) => [category._id, category]));
   }, [categories]);
 
+  const chatUsersForCreateGroup = useMemo(() => {
+    const categoryIdsByUserId = new Map<string, Set<string>>();
+
+    items.forEach((item) => {
+      if (item.conversation.type !== 'private') return;
+
+      const categoryId = item.participant.settings?.category_id;
+      if (!categoryId) return;
+
+      (item.conversation.participants || []).forEach((participant) => {
+        const participantUserId = String(participant.user_id || participant._id || '').trim();
+        if (!participantUserId || participantUserId === String(chatUserId || '')) return;
+
+        if (!categoryIdsByUserId.has(participantUserId)) {
+          categoryIdsByUserId.set(participantUserId, new Set());
+        }
+        categoryIdsByUserId.get(participantUserId)?.add(String(categoryId));
+      });
+    });
+
+    return chatUsers.map((chatUser) => {
+      const userId = String(chatUser.user_id || chatUser._id || '');
+      const categoryIds = Array.from(categoryIdsByUserId.get(userId) || []);
+      return {
+        ...chatUser,
+        category_id: categoryIds[0] || null,
+        categoryIds,
+      };
+    });
+  }, [chatUserId, chatUsers, items]);
+
   const isUnreadFilterActive = filterMode === 'unread';
   const isCategoryFilterActive = filterMode === 'category' && selectedCategoryIds.length > 0;
   const isFilterActive = isUnreadFilterActive || isCategoryFilterActive;
@@ -775,6 +910,18 @@ export default function HomeScreen() {
       const avatar = getConversationAvatar(item.conversation, chatUserId);
       if (conversationId && avatar) {
         obj[conversationId] = avatar;
+      }
+    });
+    return obj;
+  }, [items, chatUserId]);
+
+  const inboxNameByConversationId = useMemo(() => {
+    const obj: Record<string, string> = {};
+    items.forEach((item) => {
+      const conversationId = String(item.conversation._id || '');
+      const name = getConversationTitle(item.conversation, chatUserId);
+      if (conversationId && name) {
+        obj[conversationId] = name;
       }
     });
     return obj;
@@ -1003,14 +1150,37 @@ export default function HomeScreen() {
       const conversationId = String(item.conversation._id || '');
       if (!conversationId) return;
 
+      const nextPinned = !Boolean(item.participant.settings?.is_pinned);
       try {
         setActionConversationId(conversationId);
-        await ChatApi.updatePinStatus(
+        const updatedParticipant = await ChatApi.updatePinStatus(
           conversationId,
           chatUserId,
-          !Boolean(item.participant.settings?.is_pinned),
+          nextPinned,
         );
-        await loadConversations();
+        setItems((current) =>
+          sortConversationItems(
+            current.map((currentItem) => {
+              if (String(currentItem.conversation._id || '') !== conversationId) {
+                return currentItem;
+              }
+
+              return {
+                ...currentItem,
+                participant: {
+                  ...currentItem.participant,
+                  ...updatedParticipant,
+                  settings: {
+                    ...currentItem.participant.settings,
+                    ...updatedParticipant.settings,
+                    is_pinned: nextPinned,
+                    pinned_at: updatedParticipant.settings?.pinned_at || (nextPinned ? new Date().toISOString() : null),
+                  },
+                },
+              };
+            }),
+          ),
+        );
       } catch (error) {
         console.error('Failed to toggle pin status:', error);
         Alert.alert('Lỗi', 'Không thể cập nhật trạng thái ghim.');
@@ -1018,7 +1188,7 @@ export default function HomeScreen() {
         setActionConversationId(null);
       }
     },
-    [chatUserId, loadConversations],
+    [chatUserId],
   );
 
   const handleToggleMuteConversation = useCallback(
@@ -1267,6 +1437,7 @@ export default function HomeScreen() {
               searchAvatarByConversationId={searchAvatarByConversationId}
               inboxAvatarByUserId={inboxAvatarByUserId}
               inboxAvatarByConversationId={inboxAvatarByConversationId}
+              inboxNameByConversationId={inboxNameByConversationId}
             />
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
@@ -1429,7 +1600,8 @@ export default function HomeScreen() {
 
       <CreateGroupModal
         visible={createGroupVisible}
-        users={chatUsers.filter((u) => u.user_id !== chatUserId)}
+        users={chatUsersForCreateGroup.filter((u) => u.user_id !== chatUserId)}
+        categories={categories}
         loadingUsers={loadingUsers}
         onClose={() => setCreateGroupVisible(false)}
         onCreate={async (name, memberIds, avatarUri) => {

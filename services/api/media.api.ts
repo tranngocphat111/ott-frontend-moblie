@@ -1113,35 +1113,147 @@ export const unfriendRelationship = async (relationshipId: string): Promise<bool
   }
 };
 
-export const blockRelationship = async (relationshipId: string, blockerId: string): Promise<boolean> => {
+export const blockRelationship = async (
+  relationshipId: string,
+  blockerId: string,
+  targetId?: string,
+): Promise<boolean> => {
+  let mediaOk = false;
   try {
     await (apiClient.patch as any)(mediaPath(`/relationships/${relationshipId}/block`), null, {
       params: { blockerId },
     });
-    return true;
+    mediaOk = true;
   } catch {
-    return false;
+    mediaOk = false;
   }
+
+  let chatOk = false;
+  if (targetId) {
+    try {
+      await (chatApiClient.post as any)('/relationships/block', {
+        userId: blockerId,
+        targetId,
+      });
+      chatOk = true;
+    } catch {
+      chatOk = false;
+    }
+  }
+
+  return mediaOk || chatOk;
 };
 
 export const blockUserDirectly = async (requesterId: string, receiverId: string): Promise<boolean> => {
+  let mediaOk = false;
   try {
     await (apiClient.post as any)(mediaPath('/relationships/block'), null, {
       params: { requesterId, receiverId },
     });
-    return true;
+    mediaOk = true;
   } catch {
-    return false;
+    mediaOk = false;
   }
+
+  let chatOk = false;
+  try {
+    await (chatApiClient.post as any)('/relationships/block', {
+      userId: requesterId,
+      targetId: receiverId,
+    });
+    chatOk = true;
+  } catch {
+    chatOk = false;
+  }
+
+  return mediaOk || chatOk;
+};
+
+const normalizeBlockedRelationship = (
+  relationship: any,
+  userId: string,
+  source: 'media' | 'chat',
+) => {
+  const requesterId = String(relationship.requesterId || relationship.requester_id || '').trim();
+  const receiverId = String(relationship.receiverId || relationship.receiver_id || '').trim();
+  const targetIsRequester = requesterId && requesterId !== String(userId);
+  const targetId = targetIsRequester ? requesterId : receiverId;
+  const targetDisplayName = targetIsRequester
+    ? relationship.requesterDisplayName || relationship.requesterUsername
+    : relationship.receiverDisplayName || relationship.receiverUsername;
+  const targetUsername = targetIsRequester
+    ? relationship.requesterUsername
+    : relationship.receiverUsername;
+  const targetAvatar = targetIsRequester
+    ? relationship.requesterAvatarUrl
+    : relationship.receiverAvatarUrl;
+  const relationshipId =
+    relationship.id || relationship._id || relationship.relationshipId || relationship.relationship_id;
+
+  if (!relationshipId || !targetId) return null;
+
+  return {
+    ...relationship,
+    id: String(relationshipId),
+    relationshipId: String(relationshipId),
+    receiverId: targetId,
+    receiverDisplayName: targetDisplayName || targetUsername || 'Người dùng',
+    receiverUsername: targetUsername || targetDisplayName || 'Người dùng',
+    receiverAvatarUrl: resolveMediaUrl(targetAvatar),
+    source,
+    mediaRelationshipId: source === 'media' ? String(relationshipId) : undefined,
+    chatRelationshipId: source === 'chat' ? String(relationshipId) : undefined,
+  };
 };
 
 export const fetchBlockedUsers = async (userId: string): Promise<any[]> => {
-  try {
-    const payload = await (apiClient.get as any)(mediaPath(`/relationships/blocked/${userId}`));
-    return unwrapList<any>(payload);
-  } catch {
-    return [];
-  }
+  const [mediaBlocked, chatBlocked] = await Promise.all([
+    (async () => {
+      try {
+        const payload = await (apiClient.get as any)(mediaPath(`/relationships/blocked/${userId}`));
+        return unwrapList<any>(payload)
+          .map((relationship) => normalizeBlockedRelationship(relationship, userId, 'media'))
+          .filter(Boolean);
+      } catch {
+        return [];
+      }
+    })(),
+    (async () => {
+      try {
+        const payload = await (chatApiClient.get as any)(`/relationships/${userId}/blocked`);
+        return unwrapList<any>(payload)
+          .map((relationship) => normalizeBlockedRelationship(relationship, userId, 'chat'))
+          .filter(Boolean);
+      } catch {
+        return [];
+      }
+    })(),
+  ]);
+
+  const merged = new Map<string, any>();
+  [...mediaBlocked, ...chatBlocked].forEach((item: any) => {
+    const key = String(item.receiverId || '');
+    if (!key) return;
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, item);
+      return;
+    }
+
+    merged.set(key, {
+      ...current,
+      ...item,
+      id: current.mediaRelationshipId || item.mediaRelationshipId || current.id || item.id,
+      source: current.source === item.source ? current.source : 'both',
+      mediaRelationshipId: current.mediaRelationshipId || item.mediaRelationshipId,
+      chatRelationshipId: current.chatRelationshipId || item.chatRelationshipId,
+      receiverDisplayName: current.receiverDisplayName || item.receiverDisplayName,
+      receiverUsername: current.receiverUsername || item.receiverUsername,
+      receiverAvatarUrl: current.receiverAvatarUrl || item.receiverAvatarUrl,
+    });
+  });
+
+  return Array.from(merged.values());
 };
 
 export const unblockRelationship = async (relationshipId: string): Promise<boolean> => {
@@ -1279,21 +1391,43 @@ export const unfriendViaChat = async (userId: string, friendId: string): Promise
 };
 
 export const blockUserViaChat = async (userId: string, targetId: string): Promise<boolean> => {
+  let chatOk = false;
   try {
     await (chatApiClient.post as any)('/relationships/block', { userId, targetId });
-    return true;
+    chatOk = true;
   } catch {
-    return false;
+    chatOk = false;
   }
+
+  let mediaOk = false;
+  try {
+    await (apiClient.post as any)(mediaPath('/relationships/block'), null, {
+      params: { requesterId: userId, receiverId: targetId },
+    });
+    mediaOk = true;
+  } catch {
+    mediaOk = false;
+  }
+
+  return chatOk || mediaOk;
 };
 
 export const unblockUserViaChat = async (userId: string, targetId: string): Promise<boolean> => {
+  let chatOk = false;
   try {
     await (chatApiClient.post as any)('/relationships/unblock', { userId, targetId });
-    return true;
+    chatOk = true;
   } catch {
-    return false;
+    chatOk = false;
   }
+
+  let mediaOk = false;
+  const mediaRelationship = await fetchRelationshipOf(userId, targetId);
+  if (mediaRelationship?.id && normalizeStatus(mediaRelationship.status) === 'BLOCKED') {
+    mediaOk = await unblockRelationship(mediaRelationship.id);
+  }
+
+  return chatOk || mediaOk;
 };
 
 export const mapStory = (story: ApiStory): StoryItem => {
@@ -1492,7 +1626,7 @@ export const fetchStoryViewers = async (storyId: string): Promise<any[]> => {
 export const fetchStoryById = async (storyId: string): Promise<Post | null> => {
   try {
     const payload = await (apiClient.get as any)(mediaPath(`/stories/${storyId}`));
-    return unwrap<Post>(payload);
+    return unwrapApiResult<Post>(payload);
   } catch {
     return null;
   }

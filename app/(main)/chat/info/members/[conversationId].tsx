@@ -1,9 +1,8 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   Modal,
   Pressable,
   Text,
@@ -18,12 +17,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/Authcontext";
 import { THEME_COLORS } from "@/constants/theme";
-import { ChatApi } from "@/services/api";
-import { resolveMediaUrl } from "@/utils/chat";
+import { ChatApi, chatSocket } from "@/services/api";
 import { useConversationInfo, useNicknameEditor } from "@/hooks/chat";
 import { SenderAvatar } from "@/components/chat";
 import { AddMemberModal } from "@/components/chat/modals/AddMemberModal";
-import { CHAT_API_CONFIG } from "@/configuration/api";
 
 const normalize = (value: unknown) => String(value || "").trim();
 
@@ -62,6 +59,7 @@ export default function GroupMembersScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [removeConfirmationVisible, setRemoveConfirmationVisible] = useState(false);
   const [isRemovingMember, setIsRemovingMember] = useState(false);
+  const [ownerOverrideId, setOwnerOverrideId] = useState("");
   
   const [activeTab, setActiveTab] = useState<'members' | 'blocked'>(
     viewBlocked === 'true' ? 'blocked' : 'members'
@@ -89,7 +87,50 @@ export default function GroupMembersScreen() {
     }, [loadInfo, loadBlockedMembers, activeTab]),
   );
 
-  const ownerId = normalize(conversation?.created_by);
+  useEffect(() => {
+    if (!conversationId) return;
+
+    chatSocket.connect();
+    if (userIdForChat) {
+      chatSocket.joinUserRoom(userIdForChat);
+    }
+    chatSocket.joinConversation(conversationId);
+
+    const reloadCurrentConversation = (payload: any) => {
+      const payloadConversationId = normalize(
+        payload?.conversationId ||
+          payload?.conversation_id ||
+          payload?.conversation?._id,
+      );
+      if (payloadConversationId !== normalize(conversationId)) return;
+      const nextOwnerId = normalize(
+        payload?.newOwnerId ||
+          payload?.new_owner_id ||
+          payload?.createdBy ||
+          payload?.conversation?.created_by,
+      );
+      if (nextOwnerId) {
+        setOwnerOverrideId(nextOwnerId);
+      }
+      void loadInfo();
+    };
+
+    chatSocket.on('cap_nhat_role', reloadCurrentConversation);
+    chatSocket.on('chuyen_quyen_truong_nhom', reloadCurrentConversation);
+
+    return () => {
+      chatSocket.off('cap_nhat_role', reloadCurrentConversation);
+      chatSocket.off('chuyen_quyen_truong_nhom', reloadCurrentConversation);
+    };
+  }, [conversationId, loadInfo, userIdForChat]);
+
+  const ownerId = normalize(ownerOverrideId || conversation?.created_by);
+
+  useEffect(() => {
+    if (conversation?.created_by) {
+      setOwnerOverrideId("");
+    }
+  }, [conversation?.created_by]);
 
   const myMember = useMemo(
     () =>
@@ -101,22 +142,6 @@ export default function GroupMembersScreen() {
 
   const isOwner = normalize(userIdForChat) === ownerId;
   const isAdmin = normalize(myMember?.roles) === "admin";
-
-  const memberNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    members.forEach((member) => {
-      const id = normalize(member?.user_id);
-      if (!id) return;
-      map.set(
-        id,
-        normalize(member?.nickname) ||
-        normalize(member?.user?.name) ||
-        normalize(member?.name) ||
-        id,
-      );
-    });
-    return map;
-  }, [members]);
 
   const visibleMembers = useMemo(() => {
     const keyword = normalize(searchValue).toLowerCase();
@@ -202,7 +227,8 @@ export default function GroupMembersScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await ChatApi.transferOwnership(conversationId, userIdForChat, memberUserId);
+              const result = await ChatApi.transferOwnership(conversationId, userIdForChat, memberUserId);
+              setOwnerOverrideId(normalize(result?.newOwnerId || result?.new_owner_id || memberUserId));
               setActionModalVisible(false);
               await loadInfo();
             } catch (error: any) {

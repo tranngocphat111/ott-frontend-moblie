@@ -613,15 +613,11 @@ export function SocialProfile({ userId: explicitUserId, isTabScreen }: { userId?
           onPress: async () => {
             setActionLoading(true);
             try {
-              if (blocked) {
-                // Not reachable from UI, but left for completeness
-                await MediaApi.unblockUserViaChat(currentUserId, userId);
-                return;
-              }
-              
               let ok = false;
-              if (relationshipId) {
-                ok = await MediaApi.blockRelationship(relationshipId, currentUserId);
+              if (blocked) {
+                ok = await MediaApi.unblockUserViaChat(currentUserId, userId);
+              } else if (relationshipId) {
+                ok = await MediaApi.blockRelationship(relationshipId, currentUserId, userId);
               } else {
                 ok = await MediaApi.blockUserDirectly(currentUserId, userId);
               }

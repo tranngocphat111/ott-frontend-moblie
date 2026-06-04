@@ -7,13 +7,14 @@ import { SOCIAL_COLORS } from "./socialTheme";
 
 export const UserNotAvailable: React.FC = () => {
   const router = useRouter();
+  const socialHomeRoute = "/(main)/(tabs)/discover" as const;
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace("/(main)/(tabs)/discover" as any);
+      router.replace(socialHomeRoute as any);
     }, 1500);
     return () => clearTimeout(timer);
-  }, [router]);
+  }, [router, socialHomeRoute]);
 
   return (
     <View
@@ -73,7 +74,7 @@ export const UserNotAvailable: React.FC = () => {
           alignItems: "center",
         }}
         activeOpacity={0.8}
-        onPress={() => router.replace("/(main)/social" as any)}>
+        onPress={() => router.replace(socialHomeRoute as any)}>
         <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
           Trở về Bảng tin
         </Text>

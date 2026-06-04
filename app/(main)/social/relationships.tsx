@@ -119,11 +119,32 @@ export default function SocialRelationshipsScreen() {
 
   const unblockUser = async (user: any) => {
     if (busyId) return;
-    setBusyId(user.id);
+    const relationshipId = String(
+      user?.mediaRelationshipId || user?.relationshipId || user?.relationship_id || user?.id || '',
+    );
+    const targetId = String(user?.receiverId || user?.receiver_id || '');
+    if (!relationshipId && !targetId) {
+      Alert.alert('Không thể bỏ chặn', 'Không tìm thấy mã quan hệ.');
+      return;
+    }
+
+    setBusyId(String(user?.id || relationshipId || targetId));
     const previousBlocked = blocked;
-    setBlocked((prev) => prev.filter((item) => item.id !== user.id));
+    setBlocked((prev) =>
+      prev.filter((item) => {
+        const itemRelationshipId = String(item.id || item.relationshipId || item.relationship_id || '');
+        const itemTargetId = String(item.receiverId || item.receiver_id || '');
+        return itemRelationshipId !== String(user?.id || relationshipId) && itemTargetId !== targetId;
+      }),
+    );
     try {
-      const ok = await MediaApi.unblockRelationship(user.id);
+      const shouldTryMedia = user?.source !== 'chat' && Boolean(relationshipId);
+      const shouldTryChat = Boolean(currentUserId && targetId);
+      const [mediaOk, chatOk] = await Promise.all([
+        shouldTryMedia ? MediaApi.unblockRelationship(relationshipId) : Promise.resolve(false),
+        shouldTryChat ? MediaApi.unblockUserViaChat(currentUserId!, targetId) : Promise.resolve(false),
+      ]);
+      const ok = mediaOk || chatOk;
       if (!ok) {
         setBlocked(previousBlocked);
         Alert.alert('Không thể bỏ chặn', 'Vui lòng thử lại sau.');
